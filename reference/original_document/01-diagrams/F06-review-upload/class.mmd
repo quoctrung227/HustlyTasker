@@ -1,0 +1,198 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class TeamBrowser {
+        <<UI src-components-review-TeamBrowser.tsx>>
+        useFolderUploads()
+        enqueueFolderTree()
+    }
+    class TaskReviewUploadSection {
+        <<UI src-components-review-TaskReviewUploadSection.tsx>>
+        useTaskUploads(taskId)
+        refetch()
+    }
+    class UploadEngine {
+        <<client singleton upload-engine.ts>>
+        enqueue(file, target)
+        pause(id)
+        resume(id)
+        cancel(id)
+        retry(id)
+        doInitiate(id)
+        runPartAttempt(id, part)
+        doComplete(id)
+        pollOnce(id)
+    }
+
+    class UploadsInitiateRoute {
+        <<POST api-review-uploads-initiate>>
+        POST(req)
+    }
+    class TaskUploadInitiateRoute {
+        <<POST api-review-task-upload-initiate>>
+        POST(req)
+    }
+    class UploadsCompleteRoute {
+        <<POST api-review-uploads-id-complete>>
+        POST(req, params)
+    }
+    class UploadsAbortRoute {
+        <<POST api-review-uploads-id-abort>>
+        POST(req, params)
+    }
+    class UploadsStatusRoute {
+        <<GET api-review-uploads-id>>
+        GET(req, params)
+    }
+    class MuxWebhookRoute {
+        <<POST api-webhooks-mux>>
+        verifyMuxSignature(rawBody, header)
+        POST(req)
+    }
+
+    class RouteAuth {
+        <<lib review route-auth.ts>>
+        withReviewRoute(handler)
+    }
+    class ReviewAccess {
+        <<lib review access.ts>>
+        requireReviewAccess(workspaceId)
+    }
+
+    class UploadService {
+        <<lib review upload-service.ts>>
+        initiateUpload(input)
+        initiateTaskUpload(input)
+        completeUpload(sessionId, parts)
+        abortUpload(sessionId)
+        getUploadStatus(sessionId)
+        driveCompletion(versionId)
+        expireInflightUpload(sessionId)
+        reconcileStuckUploadedVersion(versionId)
+    }
+
+    class R2Storage {
+        <<Cloudflare R2 lib r2.ts>>
+        createMultipart(key, mime)
+        presignUploadPart(key, uploadId, n)
+        presignPutObject(key, mime)
+        completeMultipart(key, uploadId, parts)
+        abortMultipart(key, uploadId)
+        headObject(key)
+        presignGetObject(key)
+    }
+    class MuxService {
+        <<Mux lib mux.ts>>
+        createMuxAsset(inputUrl, passthrough)
+        getMuxAsset(id)
+        extractReadyMeta(asset)
+    }
+    class InngestReview {
+        <<lib review inngest.ts>>
+        reviewProcessUpload
+        reviewMuxWebhook
+        applyMuxReady(versionId, asset)
+        applyMuxErrored(versionId, msg)
+    }
+
+    class ReviewFolder {
+        <<Prisma>>
+        String id
+        String workspaceId
+        String parentId
+        String name
+        String path
+        String systemKey
+        String taskId
+    }
+    class ReviewAsset {
+        <<Prisma>>
+        String id
+        String folderId
+        String workspaceId
+        String taskId
+        ReviewMediaKind mediaKind
+        String currentVersionId
+    }
+    class ReviewVersion {
+        <<Prisma>>
+        String id
+        String assetId
+        Int versionNumber
+        ReviewPipelineStatus pipelineStatus
+        ReviewState reviewState
+        String r2Key
+        String muxAssetId
+        String muxPlaybackId
+    }
+    class UploadSession {
+        <<Prisma>>
+        String id
+        String versionId
+        String idempotencyKey
+        String r2Key
+        String r2UploadId
+        Int partsTotal
+        DateTime expiresAt
+        DateTime completedAt
+        DateTime abortedAt
+    }
+    class WebhookEvent {
+        <<Prisma>>
+        String id
+        String provider
+        String type
+        Json payload
+        DateTime processedAt
+    }
+
+    TeamBrowser ..> UploadEngine : enqueue
+    TaskReviewUploadSection ..> UploadEngine : enqueue
+    UploadEngine ..> UploadsInitiateRoute : POST initiate
+    UploadEngine ..> TaskUploadInitiateRoute : POST task initiate
+    UploadEngine ..> UploadsCompleteRoute : POST complete
+    UploadEngine ..> UploadsAbortRoute : POST abort khi cancel
+    UploadEngine ..> UploadsStatusRoute : GET poll 3s
+    UploadEngine ..> R2Storage : XHR PUT part qua presigned URL
+
+    UploadsInitiateRoute ..> RouteAuth : bọc withReviewRoute
+    UploadsInitiateRoute ..> UploadService : initiateUpload
+    TaskUploadInitiateRoute ..> UploadService : initiateTaskUpload
+    UploadsCompleteRoute ..> UploadService : completeUpload
+    UploadsAbortRoute ..> UploadService : abortUpload
+    UploadsStatusRoute ..> UploadService : getUploadStatus
+
+    UploadService ..> ReviewAccess : requireReviewAccess
+    UploadService ..> R2Storage : multipart lifecycle
+    UploadService ..> InngestReview : send review-upload.completed
+    UploadService ..> ReviewFolder : ensureRootFolder + ensureTaskFolderPath
+    UploadService ..> ReviewAsset : create
+    UploadService ..> ReviewVersion : createVersionWithRetry
+    UploadService ..> UploadSession : create + completedAt
+
+    MuxService ..> MuxWebhookRoute : webhook video.asset.ready hoặc errored
+    MuxWebhookRoute ..> WebhookEvent : ledger insert-or-ignore
+    MuxWebhookRoute ..> InngestReview : send review-mux.event.received
+    InngestReview ..> MuxService : createMuxAsset + getMuxAsset
+    InngestReview ..> R2Storage : presignGetObject + getObjectRange
+    InngestReview ..> ReviewVersion : flip PROCESSING sang READY hoặc FAILED
+    InngestReview ..> WebhookEvent : mark processedAt
+
+    ReviewFolder "1" o-- "n" ReviewAsset : assets
+    ReviewAsset "1" *-- "n" ReviewVersion : versions
+    ReviewVersion "1" o-- "n" UploadSession : uploadSessions
+    ReviewAsset --> ReviewVersion : currentVersionId
+
+%% Nguồn (file:line):
+%% - TeamBrowser: src/components/review/TeamBrowser.tsx:60 (uploadEngine)
+%% - TaskReviewUploadSection: src/components/review/TaskReviewUploadSection.tsx:32
+%% - UploadEngine: src/lib/review/upload-engine.ts:46,259,1056 (createUploadEngine, uploadEngine singleton)
+%% - Routes: src/app/api/review/uploads/initiate/route.ts:28 · .../[uploadSessionId]/complete/route.ts:22 · abort/route.ts:15 · [uploadSessionId]/route.ts:16 (GET) · task-upload/initiate/route.ts:22
+%% - withReviewRoute: src/lib/review/route-auth.ts:21 · requireReviewAccess: src/lib/review/access.ts:32
+%% - UploadService: src/lib/review/upload-service.ts:127,463,551,600,649,378,752,801
+%% - Mux webhook: src/app/api/webhooks/mux/route.ts:50 · Inngest fns: src/lib/review/inngest.ts:259 (reviewMuxWebhook), :341 (reviewProcessUpload), :64 (applyMuxReady), :213 (applyMuxErrored)
+%% - Models: prisma/schema.prisma:1640 ReviewFolder, :1684 ReviewAsset, :1721 ReviewVersion, :2016 UploadSession, :2040 WebhookEvent

@@ -1,0 +1,43 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Bình luận sống (isDeleted=false, chưa giao việc)" as Song
+    state "Action item mở (actionAssignedToId set, actionResolvedAt=null)" as ActionMo
+    state "Action item đã xử lý (actionResolvedAt set)" as DaXuLy
+    state "Đã xoá mềm (isDeleted=true)" as DaXoa
+
+    [*] --> Song : createTaskComment (STAFF, visibility INTERNAL hoặc CLIENT)
+    [*] --> Song : postCommentViaToken (CLIENT, visibility ép = CLIENT)
+
+    Song --> Song : editTaskComment (set editedAt, chỉ tác giả STAFF)
+    Song --> ActionMo : assignTaskComment(assigneeUserId thuộc workspace)
+    ActionMo --> DaXuLy : resolveTaskComment (set actionResolvedById)
+    DaXuLy --> ActionMo : reopenTaskComment (xoá actionResolvedAt)
+    DaXuLy --> ActionMo : assignTaskComment giao lại (xoá resolution)
+    ActionMo --> Song : assignTaskComment(null) bỏ giao việc
+    DaXuLy --> Song : assignTaskComment(null) bỏ giao việc + resolution
+
+    Song --> DaXoa : deleteTaskComment (tác giả hoặc admin)
+    ActionMo --> DaXoa : deleteTaskComment
+    DaXuLy --> DaXoa : deleteTaskComment
+    DaXoa --> [*]
+
+    note right of Song
+        visibility là enum CommentVisibility = INTERNAL hoặc CLIENT
+        (bất biến sau khi tạo, không có action nào đổi visibility)
+        INTERNAL không bao giờ trả về portal token
+    end note
+    note right of DaXoa
+        Xoá mềm — row vẫn còn trong DB,
+        mọi query feed lọc isDeleted=false
+    end note
+
+%% Nguồn (status THẬT trong code):
+%% prisma/schema.prisma:1519-1522 enum CommentVisibility { INTERNAL, CLIENT }
+%% prisma/schema.prisma:1534 authorType "STAFF" | "CLIENT", :1542 isDeleted default false, :1541 editedAt
+%% prisma/schema.prisma:1551-1559 action item fields — comment "assignedToId set + resolvedAt null là open"
+%% src/actions/task-comment-actions.ts:262-265 create STAFF, :312 editedAt, :326 isDeleted=true (soft delete)
+%% src/actions/task-comment-actions.ts:380-391 assignTaskComment(null) clear, :398-404 assign + reopen, :437-440 resolve, :470 reopen
+%% src/actions/share-portal-actions.ts:1730-1742 create CLIENT visibility ép CLIENT (dòng 1734)

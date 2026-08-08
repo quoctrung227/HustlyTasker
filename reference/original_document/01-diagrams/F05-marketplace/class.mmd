@@ -1,0 +1,108 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class Workspace {
+        +String id
+        +String name
+        +Boolean marketplaceOpen
+        +String profileId
+    }
+
+    class Task {
+        +String id
+        +String title
+        +String status
+        +String assigneeId
+        +Decimal value
+        +Decimal wageVND
+        +DateTime deadline
+        +ClaimSource claimSource
+        +DateTime claimedAt
+        +Boolean isPenalized
+        +Int version
+        +Boolean isArchived
+    }
+
+    class ClaimSource {
+        <<enumeration>>
+        ADMIN
+        MARKET
+    }
+
+    class User {
+        +String id
+        +String name
+    }
+
+    class ClaimActions {
+        <<server actions src actions claim-actions.ts>>
+        +getMarketplaceStatus(workspaceId)
+        +toggleMarketplace(workspaceId)
+        +getMarketplaceTasks(workspaceId)
+        +claimTask(taskId, workspaceId)
+        +returnTask(taskId, workspaceId)
+    }
+
+    class SecurityLib {
+        <<lib src lib security.ts>>
+        +verifyWorkspaceAccess(workspaceId, requiredRole)
+    }
+
+    class PrismaWorkspace {
+        <<lib src lib prisma-workspace.ts>>
+        +getWorkspacePrisma(workspaceId)
+    }
+
+    class MarketplaceProvider {
+        <<client component>>
+        +workspaceId
+        +triggerMode floating or event
+        +handleCountChange(count)
+    }
+
+    class TaskMarketplace {
+        <<client component panel>>
+        +fetchTasks()
+        +handleClaim(taskId)
+        +onDragStart()
+        +onDragEnd()
+    }
+
+    class FloatingMarketButton {
+        <<client component>>
+        +onClick()
+    }
+
+    class MarketplaceToggle {
+        <<client component admin>>
+        +handleToggle()
+    }
+
+    class TaskWorkflowTabs {
+        <<client component editor task list>>
+        +returnTask button 10 phút
+    }
+
+    MarketplaceProvider *-- TaskMarketplace : render modal
+    MarketplaceProvider *-- FloatingMarketButton : triggerMode floating
+    TaskMarketplace ..> ClaimActions : getMarketplaceTasks + claimTask
+    MarketplaceToggle ..> ClaimActions : toggleMarketplace
+    TaskWorkflowTabs ..> ClaimActions : returnTask
+    ClaimActions ..> SecurityLib : verifyWorkspaceAccess MEMBER hoặc ADMIN
+    ClaimActions ..> PrismaWorkspace : getWorkspacePrisma
+    ClaimActions ..> Task : updateMany claim + update return
+    ClaimActions ..> Workspace : đọc và toggle marketplaceOpen
+    Task --> Workspace : workspaceId
+    Task --> User : assigneeId
+    Task --> ClaimSource : claimSource
+
+%% Nguồn: src/actions/claim-actions.ts:16,34,67,128,213
+%% src/lib/security.ts:38 (verifyWorkspaceAccess), src/lib/prisma-workspace.ts (getWorkspacePrisma)
+%% src/components/marketplace/MarketplaceProvider.tsx:20, TaskMarketplace.tsx:155,209,216
+%% src/components/marketplace/MarketplaceToggle.tsx:14, FloatingMarketButton.tsx
+%% src/components/TaskWorkflowTabs.tsx:909 (returnTask call), mount: src/app/[workspaceId]/layout.tsx:183
+%% prisma/schema.prisma: Workspace.marketplaceOpen:61, Task.claimSource:388, claimedAt:389, isPenalized:347, enum ClaimSource:1165

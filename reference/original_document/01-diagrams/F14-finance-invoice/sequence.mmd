@@ -1,0 +1,121 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin tài chính
+    participant UI as InvoiceModal.tsx
+    participant PM as RecordPaymentModal.tsx
+    participant IA as invoice-actions.ts
+    participant PA as payment-actions.ts
+    participant SEC as security.ts
+    participant GEN as POST /api/invoices/generate
+    participant PDF as invoice-generator.ts
+    participant DB as Prisma / Neon Postgres
+    participant MAIL as Resend sendEmail
+
+    Note over Admin,UI: Bước 1 - Gom task chưa bill
+    Admin->>UI: Mở modal invoice cho client
+    UI->>IA: getUnbilledTasks(clientId, workspaceId)
+    IA->>SEC: verifyFinanceAccess(workspaceId)
+    alt Không có quyền finance
+        SEC-->>IA: throw SECURITY_VIOLATION
+        IA-->>UI: error Forbidden
+    else Có quyền
+        SEC-->>IA: session + userId
+        IA->>DB: client.findMany(parentId, status ACTIVE) lấy sub-client
+        IA->>DB: task.findMany(clientId in family, invoiceStatus UNBILLED)
+        DB-->>IA: danh sách task + jobPriceUSD
+        IA-->>UI: success, safeTasks
+    end
+    UI->>IA: getBillingProfiles(workspaceId)
+    IA->>SEC: verifyFinanceAccess(workspaceId)
+    IA-->>UI: billing profiles (bank details)
+
+    Note over Admin,MAIL: Bước 2 - Tạo invoice record
+    Admin->>UI: Chọn task, bấm handleGenerate()
+    UI->>IA: createInvoiceRecord(dbPayload, workspaceId)
+    IA->>SEC: verifyFinanceAccess(workspaceId)
+    alt Không có quyền
+        SEC-->>IA: throw SECURITY_VIOLATION
+        IA-->>UI: error Unauthorized
+    else Có quyền
+        IA->>DB: task.count(id in taskIds, invoiceStatus INVOICED)
+        alt billedCount lớn hơn 0
+            IA-->>UI: error Some tasks have already been invoiced
+        else Task còn UNBILLED
+            IA->>DB: $transaction bắt đầu
+            DB->>DB: invoice.create(status SENT, billingSnapshot, clientSnapshot)
+            DB->>DB: task.updateMany(where invoiceStatus UNBILLED, set invoiceId + INVOICED)
+            alt claimed.count khác taskIds.length (race 2 invoice song song)
+                DB-->>IA: throw CONCURRENT_INVOICE, rollback transaction
+                IA-->>UI: error Some tasks have already been invoiced
+            else Claim đủ hết task
+                DB->>DB: client.update(depositBalance decrement, clamp theo số dư)
+                DB->>DB: invoice.update(clientDepositDeducted = số thực trừ)
+                DB-->>IA: commit, trả invoice
+                IA--)MAIL: sendEmail invoiceCreated (fire and forget)
+                IA-->>UI: success, safeResult
+            end
+        end
+    end
+
+    Note over UI,PDF: Bước 3 - Render PDF tiếng Anh
+    UI->>GEN: fetch POST pdfPayload + workspaceId
+    GEN->>SEC: verifyFinanceAccess(workspaceId)
+    alt SECURITY_VIOLATION
+        GEN-->>UI: 403 Forbidden
+    else Thiếu invoiceNumber / items / totalDue
+        GEN-->>UI: 400 Missing required fields
+    else Payload hợp lệ
+        GEN->>PDF: generateInvoicePDF(data)
+        alt Lỗi render PDF
+            PDF-->>GEN: throw error
+            GEN-->>UI: 500 PDF Generation Failed
+        else Render OK
+            PDF-->>GEN: pdfBuffer
+            GEN-->>UI: 200 application/pdf
+            UI-->>Admin: Tải file Invoice-INVxxxx.pdf
+        end
+    end
+
+    Note over Admin,DB: Bước 4 - Ghi nhận payment (sổ thu tiền)
+    Admin->>PM: Mở RecordPaymentModal, bấm submit()
+    PM->>PA: recordPayment(clientId, amount, invoiceId?, workspaceId)
+    PA->>SEC: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt Không phải ADMIN workspace
+        SEC-->>PA: throw SECURITY_VIOLATION
+        PA-->>PM: error Không thể ghi nhận thanh toán
+    else Là ADMIN
+        alt amount không hợp lệ (không lớn hơn 0)
+            PA-->>PM: error Số tiền phải lớn hơn 0
+        else amount hợp lệ
+            PA->>DB: client.findFirst(id, status ACTIVE, profileId của workspace)
+            alt Client không tồn tại trong workspace
+                DB-->>PA: null
+                PA-->>PM: error Khách hàng không tồn tại trong workspace này
+            else Client hợp lệ
+                opt input.invoiceId có giá trị
+                    PA->>DB: invoice.findFirst(id, workspaceId, clientId) xác thực link
+                end
+                PA->>DB: payment.create(clientId, amount, paidAt, method, note, recordedById)
+                opt Link invoice hợp lệ
+                    PA->>DB: invoice.update(status PAID) best effort
+                end
+                PA->>DB: auditLog.create(action payment.recorded) best effort
+                PA-->>PM: success, payment
+                PM-->>Admin: Cập nhật ledger đã thu
+            end
+        end
+    end
+
+%% Nguồn (code thật):
+%% - fetchData gọi getUnbilledTasks + getBillingProfiles: src/components/invoice/InvoiceModal.tsx:77-92
+%% - handleGenerate -> createInvoiceRecord -> fetch /api/invoices/generate: InvoiceModal.tsx:315,374,416-421
+%% - getUnbilledTasks (verifyFinanceAccess, sub-client family, UNBILLED): src/actions/invoice-actions.ts:215-274
+%% - createInvoiceRecord (guard :359-364, pre-check double-bill :379-389, $transaction :392-484,
+%%   status SENT :423, claim atomic + CONCURRENT_INVOICE :443-452, deposit clamp :459-480,
+%%   sendEmail :487-501): src/actions/invoice-actions.ts:314-532
+%% - POST /api/invoices/generate (400 :15,24-26, 403 :16-21, 500 :41-44): src/app/api/invoices/generate/route.ts:5-45
+%% - generateInvoicePDF: src/lib/invoice-generator.ts:201
+%% - recordPayment (ADMIN gate :46, validate amount :48-49, client ACTIVE :53-59,
+%%   link invoice :65-72, payment.create :74-86, invoice PAID :88-90, auditLog :92-100):
+%%   src/actions/payment-actions.ts:44-108
+%% - verifyFinanceAccess = verifyProfileAdminAccess: src/lib/security.ts:203-207

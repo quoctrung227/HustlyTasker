@@ -1,0 +1,231 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    AuditLog {
+        BigInt id PK "autoincrement - append-only, cấm UPDATE/DELETE"
+        String workspaceId FK "nullable Cascade - null cho auth event"
+        String actorUserId FK "nullable SetNull - người thực hiện"
+        String userId FK "nullable SetNull - target user"
+        String action "String tự do: workspace.created, auth.signup ..."
+        String targetType "WorkspaceMember, Task, User ..."
+        String targetId
+        Json beforeData
+        Json afterData
+        String ipAddress
+    }
+
+    ErrorDictionary {
+        String id PK "uuid - từ điển lỗi GLOBAL, không tenant"
+        String code UK
+        String description
+        Int severity "1 nghiêm trọng đến 3 nhẹ"
+        Int penalty "trọng số điểm phạt"
+        Boolean isActive
+    }
+
+    ErrorLog {
+        String id PK "uuid - lỗi editor bị bắt trong 1 task"
+        String taskId FK "Cascade"
+        String userId FK "Cascade - editor mắc lỗi"
+        String errorId FK "ErrorDictionary"
+        String detectedById FK "manager bắt lỗi"
+        Int frequency
+        Int calculatedScore "frequency x penalty"
+        String workspaceId FK "Cascade"
+        String profileId FK "nullable"
+    }
+
+    MonthlyRank {
+        String id PK "uuid - xếp hạng lỗi tháng"
+        String userId FK "Cascade - UK cùng month, year, workspaceId"
+        Int month
+        Int year
+        String workspaceId FK "Cascade"
+        Int totalPenalty
+        Float errorRate
+        String rank "S, A, B, C, D, UNRANKED - String tự do"
+        Boolean isLocked
+        String payrollLockId FK "nullable"
+        String profileId FK "nullable"
+    }
+
+    ScheduleRule {
+        String id PK "uuid - lịch lặp theo thứ"
+        String userId FK "Cascade - UK cùng dayOfWeek, workspaceId, profileId"
+        String workspaceId FK
+        String profileId FK "required"
+        Int dayOfWeek "0 CN đến 6 T7"
+        String startTime "HH:mm"
+        String endTime "HH:mm"
+        Boolean isActive
+        Int version "optimistic lock"
+    }
+
+    ScheduleException {
+        String id PK "uuid - ngoại lệ lịch 1 ngày"
+        String userId FK "Cascade"
+        String workspaceId FK
+        String profileId FK "required"
+        DateTime date "UTC midnight"
+        ScheduleExceptionType type "enum BLOCK, ADD"
+        Int version
+    }
+
+    DailyAvailability {
+        String id PK "uuid - snapshot availability 24h"
+        String userId FK "Cascade - UK cùng date, workspaceId, profileId"
+        String workspaceId FK
+        String profileId FK "required"
+        DateTime date
+        Json schedule "array 24 chuỗi"
+    }
+
+    StudyPlaceProgress {
+        String id PK "cuid - spaced repetition SM-2"
+        String workspaceId FK "Cascade"
+        String userId FK "Cascade - UK cùng studySetId, questionId, workspaceId"
+        String studySetId
+        String questionId
+        Float easeFactor "default 2.5"
+        Int intervalDays
+        Int lapses
+        DateTime nextReviewAt
+        DateTime masteredAt
+    }
+
+    Session {
+        String id PK "cuid - phiên ANALYTICS, không phải auth"
+        String userId FK "nullable"
+        String workspaceId FK "nullable"
+        String ipAddress
+        String countryCode
+        DateTime startTime
+        DateTime endTime
+        Int durationSec
+    }
+
+    Event {
+        String id PK "cuid - event tracking"
+        String sessionId FK "Cascade"
+        String userId FK "nullable"
+        String eventType "String tự do: PAGE_VIEW, BUTTON_CLICK ..."
+        String featureName
+        Json metadata
+    }
+
+    UserPresence {
+        String userId PK "PK = userId, FK Cascade"
+        String status "ONLINE, OFFLINE, AWAY - String tự do"
+        DateTime lastHeartbeat
+    }
+
+    WikiPage {
+        String id PK "cuid - trang đọc dạng Notion"
+        String workspaceId FK "Cascade"
+        String profileId "scalar"
+        String parentId FK "self nullable SetNull - cây trang"
+        String title
+        String content "Tiptap HTML"
+        Int position
+        String authorId FK "User"
+    }
+
+    Attachment {
+        String id PK "cuid - file đính kèm wiki"
+        String workspaceId "scalar"
+        String profileId "scalar"
+        String wikiPageId FK "nullable Cascade"
+        String url
+        String mimeType
+        Int sizeBytes
+    }
+
+    IntegrationToken {
+        String id PK "uuid - OAuth Dropbox/Drive"
+        String userId FK "Cascade - UK cùng workspaceId, provider"
+        String workspaceId FK "Cascade"
+        String provider "dropbox hoặc google_drive"
+        String accessToken "AES-256-GCM encrypted"
+        String refreshToken "nullable encrypted"
+        DateTime expiresAt "null = không hết hạn"
+    }
+
+    WebhookEvent {
+        String id PK "id = event id của Mux - dedupe redelivery"
+        String provider "mux"
+        String type "video.asset.ready ..."
+        Json payload
+        DateTime processedAt "null = Inngest chưa xử lý xong"
+    }
+
+    UploadSession {
+        String id PK "uuid - sổ multipart upload R2"
+        String versionId FK "Cascade - ReviewVersion"
+        String idempotencyKey UK "nullable"
+        String r2UploadId
+        Int partsTotal
+        Int partsDone
+        DateTime expiresAt "24h - janitor abort"
+        DateTime completedAt
+        DateTime abortedAt
+    }
+
+    User {
+        String id PK "stub - chi tiết ở erd-auth"
+    }
+    Workspace {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+    Profile {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+    Task {
+        String id PK "stub - chi tiết ở erd-task"
+    }
+    PayrollLock {
+        String id PK "stub - chi tiết ở erd-finance"
+    }
+    ReviewVersion {
+        String id PK "stub - chi tiết ở erd-review"
+    }
+
+    Workspace |o--o{ AuditLog : "nullable Cascade"
+    User |o--o{ AuditLog : "actor SetNull"
+    User |o--o{ AuditLog : "target user SetNull"
+    ErrorDictionary ||--o{ ErrorLog : "errorId"
+    Task ||--o{ ErrorLog : "Cascade"
+    User ||--o{ ErrorLog : "editor mắc lỗi Cascade"
+    User ||--o{ ErrorLog : "detectedBy manager"
+    Workspace ||--o{ ErrorLog : "Cascade"
+    User ||--o{ MonthlyRank : "Cascade"
+    Workspace ||--o{ MonthlyRank : "Cascade"
+    PayrollLock |o--o{ MonthlyRank : "payrollLockId nullable"
+    User ||--o{ ScheduleRule : "Cascade"
+    Workspace ||--o{ ScheduleRule : "scope"
+    Profile ||--o{ ScheduleRule : "required"
+    User ||--o{ ScheduleException : "Cascade"
+    User ||--o{ DailyAvailability : "Cascade"
+    Workspace ||--o{ StudyPlaceProgress : "Cascade"
+    User ||--o{ StudyPlaceProgress : "Cascade"
+    User |o--o{ Session : "nullable"
+    Workspace |o--o{ Session : "nullable"
+    Session ||--o{ Event : "Cascade"
+    User |o--o{ Event : "nullable"
+    User ||--o| UserPresence : "1-1 Cascade"
+    Workspace ||--o{ WikiPage : "Cascade"
+    WikiPage |o--o{ WikiPage : "cây trang parentId SetNull"
+    User ||--o{ WikiPage : "author"
+    WikiPage |o--o{ Attachment : "nullable Cascade"
+    User ||--o{ IntegrationToken : "Cascade"
+    Workspace ||--o{ IntegrationToken : "Cascade"
+    ReviewVersion ||--o{ UploadSession : "Cascade"
+
+%% Nguồn: prisma/schema.prisma — AuditLog:861-886, ErrorDictionary:1014-1025 (GLOBAL không tenant),
+%% ErrorLog:1027-1050, MonthlyRank:1052-1075, ScheduleRule:1077-1099, ScheduleException:1101-1123,
+%% DailyAvailability:1125-1142, StudyPlaceProgress:1447-1473, Session:963-982, Event:984-998,
+%% UserPresence:1000-1008, WikiPage:1424-1445, Attachment:1475-1491, IntegrationToken:1374-1391,
+%% WebhookEvent:2040-2049 và UploadSession:2016-2037 (thuộc review module, cùng vẽ ở erd-review).
+%% ScheduleException/DailyAvailability cùng có FK Workspace+Profile như ScheduleRule (lược bớt cạnh cho dễ đọc).
+%% WebhookEvent không có relation nào. Phân nhóm "còn lại" theo docs/system-audit/00-discovery/parts/03-models.md mục 1.4 + 1.5 + 1.6.

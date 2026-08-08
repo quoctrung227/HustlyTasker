@@ -1,0 +1,233 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    %% ── UI entry (pages / components) ──
+    class CancelledTasksPage {
+        <<page admin-cancelled>>
+        +CancelledTasksClient
+        +MobileTrash
+    }
+    class ClientTrashPage {
+        <<page admin-client-trash>>
+        +ClientTrashClient
+    }
+    class ProfileTrashPage {
+        <<page admin-profile-trash>>
+        +ProfileTrashClient
+    }
+    class AccountTrashPage {
+        <<page account-trash>>
+        +RestoreWorkspaceButton
+    }
+    class TeamTrashPage {
+        <<page team-browser-trash>>
+        +TeamTrash
+        +isWorkspaceAdmin()
+    }
+
+    %% ── Server actions ──
+    class TaskActions {
+        <<src-actions-task-actions>>
+        +getCancelledTasks(workspaceId)
+        +restoreCancelledTask(taskId, workspaceId)
+    }
+    class CrmActions {
+        <<src-actions-crm-actions>>
+        +deleteClient(id, workspaceId)
+        +restoreClient(id, workspaceId)
+        +getTrashedClients(workspaceId)
+        +permanentlyDeleteClient(id, workspaceId)
+        -collectClientSubtreeIds()
+        -withClientNameLock()
+    }
+    class WorkspaceActions {
+        <<src-actions-workspace-actions>>
+        +deleteWorkspaceAction(workspaceId)
+        +getMyTrashedWorkspaces()
+        +restoreWorkspaceAction(workspaceId)
+    }
+    class ProfileActions {
+        <<src-actions-profile-actions>>
+        +deleteProfileAction(profileId)
+        +restoreProfileAction(profileId)
+        +getMyTrashedProfiles()
+    }
+
+    %% ── Review trash API + lib ──
+    class ReviewTrashRoutes {
+        <<api-review-trash>>
+        +GET_trash()
+        +POST_restore()
+        +POST_purge()
+        -withReviewRoute()
+    }
+    class ReviewFoldersLib {
+        <<src-lib-review-folders>>
+        +deleteItems(items)
+        +listTrash(workspaceId, cursor)
+        +restoreItems(items)
+    }
+    class ReviewPurgeLib {
+        <<src-lib-review-purge>>
+        +purgeExpiredTrash(batchSize)
+        +purgeItemsAuthorized(items)
+        +manualPurgeItems(items, ctx)
+        -purgeAssetById()
+        -teardownVersionExternal()
+        -folderHasDescendantRow()
+    }
+    class ReviewAccessLib {
+        <<src-lib-review-access>>
+        +requireReviewAccess(workspaceId)
+    }
+    class SecurityLib {
+        <<src-lib-security>>
+        +verifyWorkspaceAccess(workspaceId, ADMIN)
+        +verifyProfileAdminAccess(workspaceId)
+    }
+
+    %% ── Cron + Inngest ──
+    class CronHardDeleteProfiles {
+        <<api-cron-hard-delete-profiles>>
+        +GET(x-cron-secret)
+    }
+    class CronHardDeleteWorkspaces {
+        <<api-cron-hard-delete-workspaces>>
+        +GET(x-cron-secret)
+    }
+    class CronReviewJanitor {
+        <<api-cron-review-janitor>>
+        +GET(x-cron-secret)
+    }
+    class InngestReviewJanitor {
+        <<src-lib-review-inngest>>
+        +reviewJanitor()
+        +step_purge_expired_trash()
+    }
+
+    %% ── External ──
+    class MuxService {
+        <<external>>
+        +deleteMuxAsset(muxAssetId)
+    }
+    class R2Service {
+        <<external>>
+        +deleteObject(r2Key)
+    }
+
+    %% ── Prisma models ──
+    class Task {
+        +String id
+        +String status
+        +Boolean isArchived
+        +String assigneeId
+        +Int version
+    }
+    class Client {
+        +Int id
+        +Int parentId
+        +String status
+        +DateTime deletedAt
+        +DateTime hardDeleteAfter
+    }
+    class Workspace {
+        +String id
+        +String status
+        +DateTime deletedAt
+        +DateTime hardDeleteAfter
+    }
+    class Profile {
+        +String id
+        +String status
+        +DateTime deletedAt
+        +DateTime hardDeleteAfter
+    }
+    class ReviewFolder {
+        +String id
+        +String path
+        +Int itemCount
+        +BigInt totalSizeBytes
+        +DateTime deletedAt
+        +String deleteBatchId
+        +Boolean orphanedFromPurge
+    }
+    class ReviewAsset {
+        +String id
+        +String folderId
+        +DateTime deletedAt
+        +String deleteBatchId
+        +Boolean orphanedFromPurge
+    }
+    class ReviewVersion {
+        +String id
+        +String assetId
+        +String r2Key
+        +String muxAssetId
+        +String muxPlaybackId
+        +DateTime deletedAt
+        +String deleteBatchId
+    }
+
+    %% ── UI -> actions / API ──
+    CancelledTasksPage ..> TaskActions : getCancelledTasks + restore
+    CancelledTasksPage ..> CrmActions : getTrashedClients (mobile gộp 3 trash)
+    CancelledTasksPage ..> ProfileActions : getMyTrashedProfiles (mobile)
+    ClientTrashPage ..> CrmActions : restore + permanentlyDelete
+    ProfileTrashPage ..> ProfileActions : restore
+    AccountTrashPage ..> WorkspaceActions : getMyTrashedWorkspaces + restore
+    TeamTrashPage ..> ReviewTrashRoutes : fetch trash + restore + purge
+    TeamTrashPage ..> SecurityLib : verifyProfileAdminAccess
+
+    %% ── actions -> guard + models ──
+    TaskActions ..> SecurityLib : verifyWorkspaceAccess ADMIN
+    CrmActions ..> SecurityLib : verifyWorkspaceAccess ADMIN
+    WorkspaceActions ..> SecurityLib : verifyWorkspaceAccess ADMIN + OWNER
+    TaskActions --> Task : isArchived flip
+    CrmActions --> Client : status SOFT_DELETED - ACTIVE - delete
+    WorkspaceActions --> Workspace : status + hardDeleteAfter
+    ProfileActions --> Profile : status + hardDeleteAfter
+
+    %% ── review API -> lib -> models ──
+    ReviewTrashRoutes ..> ReviewFoldersLib : listTrash + restoreItems
+    ReviewTrashRoutes ..> ReviewPurgeLib : purgeItemsAuthorized
+    ReviewFoldersLib ..> ReviewAccessLib : requireReviewAccess
+    ReviewPurgeLib ..> ReviewAccessLib : requireReviewAccess ADMIN
+    ReviewFoldersLib --> ReviewFolder : deletedAt + deleteBatchId
+    ReviewFoldersLib --> ReviewAsset : deletedAt + deleteBatchId
+    ReviewFoldersLib --> ReviewVersion : deletedAt + deleteBatchId
+    ReviewPurgeLib --> ReviewAsset : delete row cascade
+    ReviewPurgeLib --> ReviewFolder : delete deepest-first
+    ReviewPurgeLib ..> MuxService : deleteMuxAsset ref-count
+    ReviewPurgeLib ..> R2Service : deleteObject ref-count
+
+    %% ── cron -> targets ──
+    CronHardDeleteProfiles --> Profile : delete when hardDeleteAfter lte now
+    CronHardDeleteWorkspaces --> Workspace : delete when hardDeleteAfter lte now
+    CronReviewJanitor ..> InngestReviewJanitor : inngest send JANITOR_REQUESTED
+    InngestReviewJanitor ..> ReviewPurgeLib : purgeExpiredTrash(25)
+
+    %% ── model relations ──
+    Client o-- Client : parent subsidiaries
+    Profile o-- Workspace : cascade delete
+    Workspace o-- Task : cascade delete
+    Client --> Task : tasks SetNull khi hard-delete
+    ReviewFolder o-- ReviewFolder : parent Restrict
+    ReviewFolder o-- ReviewAsset : folder Restrict
+    ReviewAsset *-- ReviewVersion : Cascade
+
+%% Nguồn (file:line):
+%% - src/actions/task-actions.ts:509 getCancelledTasks, :553 restoreCancelledTask (isArchived, Task.isArchived schema.prisma:363)
+%% - src/actions/crm-actions.ts:260 deleteClient, :297 restoreClient, :384 getTrashedClients, :417 permanentlyDeleteClient
+%% - src/actions/workspace-actions.ts:181 deleteWorkspaceAction, :279 getMyTrashedWorkspaces, :327 restoreWorkspaceAction
+%% - src/actions/profile-actions.ts:385 deleteProfileAction, :429 restoreProfileAction, :470 getMyTrashedProfiles
+%% - src/app/api/review/trash/route.ts:9 GET, restore/route.ts:18 POST, purge/route.ts:18 POST (withReviewRoute src/lib/review/route-auth.ts:21)
+%% - src/lib/review/folders.ts:811 deleteItems, :901 listTrash, :997 restoreItems
+%% - src/lib/review/purge.ts:236 purgeExpiredTrash, :311 manualPurgeItems, :372 purgeItemsAuthorized, :57 teardownVersionExternal
+%% - src/app/api/cron/hard-delete-profiles/route.ts:20, hard-delete-workspaces/route.ts:20, review-janitor/route.ts:13
+%% - src/lib/review/inngest.ts:526 reviewJanitor, :633 step purge-expired-trash
+%% - Pages: src/app/[workspaceId]/admin/cancelled/page.tsx, admin/client-trash/page.tsx, admin/profile-trash/page.tsx, src/app/account/trash/page.tsx, src/app/[workspaceId]/team/(browser)/trash/page.tsx
+%% - Models: prisma/schema.prisma:25 Profile.status, :69 Workspace.status, :331 Task, :546 Client.status, :1640 ReviewFolder, :1684 ReviewAsset, :1721 ReviewVersion

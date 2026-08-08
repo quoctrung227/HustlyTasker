@@ -1,0 +1,105 @@
+sequenceDiagram
+    autonumber
+    participant Admin as Admin
+    participant Toggle as MarketplaceToggle.tsx
+    participant Editor as Editor Staff
+    participant UI as TaskMarketplace.tsx (panel)
+    participant Tabs as TaskWorkflowTabs.tsx
+    participant CA as claim-actions.ts (server actions)
+    participant Sec as security.ts verifyWorkspaceAccess
+    participant DB as Prisma / Neon (Task, Workspace)
+
+    rect rgb(240,240,240)
+    note over Admin,DB: Admin đóng/mở phiên chợ
+    Admin->>Toggle: click handleToggle (optimistic)
+    Toggle->>CA: toggleMarketplace(workspaceId)
+    CA->>Sec: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt SECURITY_VIOLATION (không phải admin)
+        CA-->>Toggle: error Chỉ admin mới có quyền đóng/mở phiên chợ
+        Toggle-->>Admin: revert state + toast error
+    else là admin
+        CA->>DB: workspace.update marketplaceOpen = !cũ
+        CA-->>Toggle: success + marketplaceOpen mới
+    end
+    end
+
+    rect rgb(240,240,240)
+    note over Editor,DB: Editor mở panel và xem task
+    Editor->>UI: mở panel (event open-marketplace)
+    UI->>CA: getMarketplaceTasks(workspaceId)
+    CA->>Sec: verifyWorkspaceAccess(workspaceId, MEMBER)
+    alt SECURITY_VIOLATION (không phải member)
+        CA-->>UI: error Forbidden + tasks rỗng
+    else là member
+        CA->>CA: getMarketplaceStatus(workspaceId)
+        CA->>DB: workspace.findUnique marketplaceOpen
+        alt phiên chợ đóng
+            CA-->>UI: marketplaceOpen false, tasks rỗng
+            UI-->>Editor: badge Đã đóng
+        else phiên chợ mở
+            CA->>DB: task.findMany assigneeId null, isArchived false, take 50
+            CA-->>UI: tasks serialize (không có jobPriceUSD)
+            UI-->>Editor: danh sách card + polling 10s
+        end
+    end
+    end
+
+    rect rgb(240,240,240)
+    note over Editor,DB: Editor claim task (kéo thả)
+    Editor->>UI: kéo card vào FullScreenDropZone
+    UI->>UI: handleClaim - optimistic remove card
+    UI->>CA: claimTask(taskId, workspaceId)
+    CA->>CA: getSession()
+    alt chưa đăng nhập
+        CA-->>UI: error Unauthorized
+    else có session
+        CA->>Sec: verifyWorkspaceAccess(workspaceId, MEMBER)
+        alt SECURITY_VIOLATION
+            CA-->>UI: error Bạn không phải member của workspace này
+        else là member
+            CA->>DB: $transaction bắt đầu
+            DB->>DB: check marketplaceOpen trong tx (chống TOCTOU)
+            alt phiên chợ đóng / task không tồn tại / đã archive / đã có assignee / status khác Đang đợi giao
+                DB-->>CA: throw error
+                CA-->>UI: error message
+                UI-->>Editor: rollback card + toast error
+            else task hợp lệ
+                DB->>DB: task.updateMany where version cũ, assigneeId null
+                alt updated.count == 0 (race condition)
+                    DB-->>CA: throw Task đã được nhận bởi người khác
+                    CA-->>UI: error
+                    UI-->>Editor: rollback card + toast error
+                else claim thành công
+                    DB-->>CA: status = Nhận task, claimSource = MARKET, claimedAt = now, version+1
+                    CA->>CA: revalidatePath admin, dashboard, admin/queue
+                    CA-->>UI: success true
+                    UI-->>Editor: toast Task đã được nhận thành công
+                end
+            end
+        end
+    end
+    end
+
+    rect rgb(240,240,240)
+    note over Editor,DB: Editor trả task (trong 10 phút)
+    Editor->>Tabs: click Hoàn task
+    Tabs->>CA: returnTask(taskId, workspaceId)
+    CA->>Sec: verifyWorkspaceAccess(workspaceId, MEMBER)
+    alt SECURITY_VIOLATION
+        CA-->>Tabs: error Forbidden
+    else là member
+        CA->>DB: task.findUnique assigneeId, claimSource, claimedAt
+        alt assignee khác / claimSource khác MARKET / quá 10 phút
+            CA-->>Tabs: error (vd Đã quá 10 phút, không thể hoàn task)
+        else hợp lệ
+            CA->>DB: task.update assigneeId null, status = Đang đợi giao, claimSource = ADMIN, claimedAt null
+            CA-->>Tabs: success true
+            Tabs-->>Editor: task về phiên chợ
+        end
+    end
+    end
+
+%% Nguồn: src/actions/claim-actions.ts:34 (toggleMarketplace), :67 (getMarketplaceTasks), :128 (claimTask), :213 (returnTask)
+%% src/components/marketplace/TaskMarketplace.tsx:167 (fetchTasks), :209 (handleClaim), :235 (onDragEnd)
+%% src/components/marketplace/MarketplaceToggle.tsx:18 (handleToggle)
+%% src/components/TaskWorkflowTabs.tsx:909 (returnTask call), src/lib/security.ts:38 (verifyWorkspaceAccess)

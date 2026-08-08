@@ -1,0 +1,175 @@
+sequenceDiagram
+    autonumber
+    actor NV as Nhân viên nội bộ
+    participant Cron as Vercel Cron
+    participant DL as GET /api/cron/check-deadline
+    participant DG as GET /api/cron/send-digest
+    participant Bell as NotificationBell.tsx
+    participant Panel as NotificationPanel.tsx
+    participant Toggle as PushNotificationToggle.tsx
+    participant NA as notification-actions.ts
+    participant PA as push-actions.ts
+    participant EL as lib/notification-email.ts
+    participant WP as lib/web-push.ts
+    participant BC as lib/notification-broadcast.ts
+    participant DB as Prisma (Neon)
+    participant SB as Supabase Realtime
+    participant RS as Resend (sendEmail)
+
+    rect rgb(240, 240, 255)
+    note over Cron, SB: 1. Phát notification (ví dụ cron nhắc deadline)
+    Cron->>DL: GET kèm x-cron-secret hoặc Bearer
+    alt CRON_SECRET chưa cấu hình
+        DL-->>Cron: 500 CRON_SECRET not configured
+    else key khác secret
+        DL-->>Cron: 401 Unauthorized
+    else hợp lệ
+        DL->>DB: task.findMany deadline gần + status in OVERDUE_ELIGIBLE_STATUSES
+        DL->>DB: notification.findFirst dedup theo taskId + tier
+        alt đã có notification cùng tier
+            DL-->>DL: continue (bỏ qua task này)
+        else chưa có
+            DL->>NA: createNotificationInternal(TASK_DEADLINE_APPROACHING hoặc TASK_OVERDUE)
+            NA->>DB: notification.create (isRead false)
+            NA-)EL: maybeSendNotificationEmail (fire-and-forget)
+            EL->>DB: notificationPreference.findUnique
+            alt emailEnabled false hoặc digestMode OFF
+                EL-->>NA: SKIP không gửi email
+            else digest HOURLY/DAILY và không bypassDigest
+                EL-->>NA: SKIP chờ cron digest gộp
+            else đang quiet hours và không bypassQuietHours
+                EL-->>NA: SKIP quiet hours
+            else được gửi realtime
+                EL->>DB: claimForEmail set emailSentAt (updateMany where emailSentAt null)
+                alt claim thất bại (đã claim trước đó)
+                    EL-->>NA: SKIP tránh gửi trùng
+                else claim OK
+                    EL->>EL: buildTemplateParams chọn template
+                    EL->>RS: sendEmail(to, subject, html)
+                end
+            end
+            NA-)WP: sendWebPushToUser (fire-and-forget)
+            alt VAPID chưa cấu hình hoặc user không có subscription
+                WP-->>NA: return 0 (no-op)
+            else có subscription
+                WP->>DB: pushSubscription.findMany theo userId
+                WP->>WP: webpush.sendNotification từng endpoint
+                alt push service trả 404/410
+                    WP->>DB: pushSubscription.deleteMany prune endpoint chết
+                end
+            end
+            DL-)BC: broadcastNotificationToUser(userId, payload)
+            BC->>SB: POST /realtime/v1/api/broadcast (timeout 3s)
+            alt res không ok hoặc lỗi mạng
+                BC-->>DL: chỉ console.warn - notification vẫn nằm trong DB
+            else ok
+                SB-->>Bell: event NOTIFICATION_NEW trên channel user
+                Bell->>Bell: unreadCount +1, playNotificationSound
+            end
+        end
+        DL-->>Cron: 200 processed[]
+    end
+    end
+
+    rect rgb(240, 255, 240)
+    note over NV, DB: 2. Đọc in-app qua chuông
+    NV->>Bell: mở app (mount + poll 30s)
+    Bell->>NA: getUnreadNotificationCount()
+    alt chưa đăng nhập (getSession null)
+        NA-->>Bell: data.count 0
+    else có session
+        NA->>DB: notification.count isRead false isArchived false
+        NA-->>Bell: unreadCount
+    end
+    NV->>Panel: bấm chuông mở panel
+    Panel->>NA: getNotifications(cursor, limit 20, unreadOnly)
+    alt chưa đăng nhập
+        NA-->>Panel: error Unauthorized
+    else có session
+        NA->>DB: notification.findMany + count
+        NA-->>Panel: notifications + nextCursor + unreadCount
+    end
+    NV->>Panel: bấm Đã đọc hết
+    Panel->>NA: markAllNotificationsRead()
+    NA->>DB: notification.updateMany isRead true
+    NA-->>Panel: count đã đánh dấu
+    end
+
+    rect rgb(255, 250, 235)
+    note over NV, DB: 3. Preference + đăng ký web push
+    NV->>NA: updateMyNotificationPreferences(digestMode, quietHours)
+    alt digestMode ngoài REALTIME/HOURLY/DAILY/OFF
+        NA-->>NV: error Invalid digest mode
+    else quietHours ngoài 0-23
+        NA-->>NV: error quietHoursStart must be 0-23
+    else hợp lệ
+        NA->>DB: notificationPreference.upsert
+        NA-->>NV: data.ok true
+    end
+    NV->>Toggle: bật thông báo đẩy
+    Toggle->>PA: getVapidPublicKey()
+    alt VAPID chưa cấu hình
+        PA-->>Toggle: null (toggle tự ẩn)
+    else có key
+        Toggle->>Toggle: Notification.requestPermission + sw.js pushManager.subscribe
+        Toggle->>PA: savePushSubscription(endpoint, p256dh, auth)
+        alt chưa đăng nhập
+            PA-->>Toggle: error Bạn cần đăng nhập
+        else thiếu endpoint/p256dh/auth
+            PA-->>Toggle: error Thiếu thông tin đăng ký
+        else DB lỗi
+            PA-->>Toggle: error Không lưu được đăng ký thông báo
+        else OK
+            PA->>DB: pushSubscription.upsert theo endpoint unique
+            PA-->>Toggle: success true
+        end
+    end
+    end
+
+    rect rgb(255, 240, 245)
+    note over Cron, RS: 4. Email digest mỗi giờ + unsubscribe
+    Cron->>DG: GET kèm x-cron-secret hoặc Bearer
+    alt CRON_SECRET chưa cấu hình
+        DG-->>Cron: 500
+    else key khác secret
+        DG-->>Cron: 401 Unauthorized
+    else hợp lệ
+        DG->>EL: sendDigestEmails(HOURLY) - và DAILY nếu UTC hour = 1
+        EL->>DB: notificationPreference.findMany emailDigestMode + emailEnabled true
+        loop từng user có preference digest
+            alt HOURLY và đang quiet hours
+                EL-->>EL: skipped++
+            else có notification emailSentAt null
+                EL->>DB: notification.findMany emailSentAt null isArchived false take 50
+                EL->>RS: sendEmail digest (digestHourly hoặc digestDaily)
+                EL->>DB: notification.updateMany set emailSentAt
+            end
+        end
+        alt lỗi trong try
+            DG-->>Cron: 500 Failed
+        else xong
+            DG-->>Cron: 200 hourly + daily + ranDailyDigest
+        end
+    end
+    NV->>NA: bấm link unsubscribe trong email - GET /api/notifications/unsubscribe?token
+    note right of NA: route.ts:41 - token JWT là auth, không cần session
+    alt thiếu token hoặc verifyUnsubscribeToken fail
+        NA-->>NV: 400 trang HTML Liên kết không hợp lệ/hết hạn
+    else token hợp lệ
+        NA->>DB: notificationPreference.upsert emailEnabled false
+        NA-->>NV: 200 trang HTML Đã tắt email thông báo
+    end
+    end
+
+%% Nguồn (file thật):
+%% - check-deadline: src/app/api/cron/check-deadline/route.ts:14-199 (401 :29, 500 :25 và :198, dedup :52,:104,:162)
+%% - createNotificationInternal: src/actions/notification-actions.ts:24-68
+%% - maybeSendNotificationEmail: src/lib/notification-email.ts:323-412 (skip branches :349,:355,:362, claim :372)
+%% - sendWebPushToUser: src/lib/web-push.ts:35-85 (no-op :36,:45, prune 404/410 :76,:82)
+%% - broadcastNotificationToUser: src/lib/notification-broadcast.ts:46-83 (warn :74-79)
+%% - NotificationBell: src/components/notifications/NotificationBell.tsx:26-62 (poll 30s :32, NOTIFICATION_NEW :50)
+%% - getNotifications/markAllNotificationsRead: src/actions/notification-actions.ts:112,:197 (Unauthorized :119,:198)
+%% - updateMyNotificationPreferences: src/actions/notification-actions.ts:264-304 (validate :273-284)
+%% - push: src/actions/push-actions.ts:14,:18-47 (error off :23, login :26, thiếu keys :31, DB :42)
+%% - send-digest: src/app/api/cron/send-digest/route.ts:11-50 - sendDigestEmails: src/lib/notification-email.ts:464-569
+%% - unsubscribe: src/app/api/notifications/unsubscribe/route.ts:41-112 (400 :45,:57, upsert :70)

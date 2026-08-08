@@ -1,0 +1,56 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "UPLOADING (browser đang PUT part lên R2)" as UPLOADING
+    state "UPLOADED (CompleteMultipartUpload xong trên R2)" as UPLOADED
+    state "PROCESSING (đã báo Mux pull, chờ webhook ready)" as PROCESSING
+    state "READY (phát được, muxPlaybackId đã set, reviewState = AWAITING_REVIEW)" as READY
+    state "FAILED (terminal — errorMessage ghi lý do, không bao giờ quay lại)" as FAILED
+
+    [*] --> UPLOADING : initiate multipart (upload route, default của schema)
+
+    UPLOADING --> UPLOADED : finalize R2 thành công (complete route)
+    UPLOADING --> FAILED : janitor sweep (a) expireInflightUpload — session quá 24h, abort R2
+
+    UPLOADED --> READY : driveCompletion — IMAGE nhảy thẳng READY + head flip
+    UPLOADED --> PROCESSING : driveCompletion — VIDEO + send review/upload.completed
+    UPLOADED --> FAILED : applyMuxErrored (webhook errored đến khi còn UPLOADED)
+
+    PROCESSING --> READY : applyMuxReady — webhook video.asset.ready hoặc janitor reconcile (atomic flip, idempotent)
+    PROCESSING --> FAILED : applyMuxErrored — video.asset.errored / magic-bytes không phải video / Mux 404 / kẹt quá 24h
+
+    READY --> [*] : purgeExpiredTrash — trash quá 30 ngày, xóa Mux + R2 + DB
+    FAILED --> [*] : purgeExpiredTrash / xóa version
+
+    note right of PROCESSING
+        Janitor sweep (c) đối chiếu Mux khi kẹt quá 20 phút.
+        Chưa có muxAssetId thì re-send review/upload.completed.
+        Quá 24h vẫn preparing thì FAILED + deleteMuxAsset.
+    end note
+
+    note right of READY
+        Khi READY còn chạy thêm (inngest.ts 99-190):
+        clear statusId approved trên ReviewAsset,
+        currentVersionId = version mới,
+        revokeClientExposureOnNewVersion,
+        syncTaskFromReviewEvent sang REVIEW_STATUS_MAP.submitted,
+        notify uploader + manager.
+        ReviewState là mấy trạng thái RIÊNG:
+        DRAFT / AWAITING_REVIEW / CHANGES_REQUESTED / APPROVED.
+    end note
+
+%% Nguồn status THẬT (file:line):
+%% - enum ReviewPipelineStatus { UPLOADING, UPLOADED, PROCESSING, READY, FAILED } — prisma/schema.prisma:1623-1629
+%% - default UPLOADING — prisma/schema.prisma:1735 (ReviewVersion.pipelineStatus @default(UPLOADING))
+%% - UPLOADING→FAILED 'Phiên tải lên đã hết hạn (quá 24 giờ).' — src/lib/review/upload-service.ts:762-764 (expireInflightUpload),
+%%   gọi từ janitor sweep (a) src/lib/review/inngest.ts:530-551
+%% - UPLOADED→READY (IMAGE) / UPLOADED→PROCESSING (VIDEO) — src/lib/review/upload-service.ts:390-399 (driveCompletion),
+%%   VIDEO emit REVIEW_EVENTS.UPLOAD_COMPLETED :439
+%% - PROCESSING→READY + reviewState=AWAITING_REVIEW — src/lib/review/inngest.ts:74-91 (applyMuxReady, atomic updateMany)
+%% - PROCESSING/UPLOADED→FAILED — src/lib/review/inngest.ts:219-227 (applyMuxErrored);
+%%   magic-bytes reject :390-395; Mux 404 :480-484; preparing quá 24h :497-513
+%% - FAILED terminal, không quay về — src/lib/review/inngest.ts:196-197 (comment + guard consume event)
+%% - purge trash 30 ngày — src/lib/review/purge.ts:236 (purgeExpiredTrash), janitor sweep (e) inngest.ts:633
+%% - enum ReviewState { DRAFT, AWAITING_REVIEW, CHANGES_REQUESTED, APPROVED } — prisma/schema.prisma:1632-1637

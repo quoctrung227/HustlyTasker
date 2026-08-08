@@ -1,0 +1,112 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    User {
+        String id PK "uuid"
+        String username UK
+        Boolean usernameSetByUser "false = username cũ từ email, trigger migration modal"
+        String password "nullable - Google user không có password"
+        String googleId UK "nullable - canonical OAuth identity"
+        String authProvider "email hoặc google, default email"
+        String email "nullable, có index"
+        UserRole role "enum ADMIN, USER, AGENCY_ADMIN, CLIENT, LOCKED - default USER"
+        Boolean emailVerified "default false"
+        DateTime emailVerifiedAt
+        Boolean hasCompletedEmailMigration "tracking migration email user cũ"
+        Int failedLoginAttempts "5 fail trong 15 phút thì khóa"
+        DateTime lockedUntil "nullable, có index - account lockout"
+        Int sessionVersion "bump để invalidate mọi JWT cũ"
+        DateTime lastPasswordChangedAt
+        DateTime lastLoginAt
+        String lastLoginIp
+        Boolean allowExternalInvites "default true - chống spam invite"
+        Boolean isTreasurer
+        Boolean hasAcceptedTerms
+        String displayName "giữ Unicode tiếng Việt"
+        String profileId FK "nullable - Profile"
+        String agencyId FK "nullable - Agency"
+        Int clientId FK "nullable SetNull - Client portal link"
+    }
+
+    PushSubscription {
+        String id PK "uuid"
+        String userId FK "Cascade"
+        String endpoint UK "1 row mỗi trình duyệt đã cấp quyền"
+        String p256dh
+        String auth
+        String userAgent "nullable"
+    }
+
+    EmailVerificationToken {
+        String id PK "uuid"
+        String userId FK "Cascade"
+        String tokenHash UK "SHA-256 của raw token, raw chỉ nằm trong link email"
+        String purpose "EMAIL_VERIFICATION, PASSWORD_RESET, EMAIL_MIGRATION"
+        String email "có thể khác User.email khi đổi email"
+        DateTime expiresAt "24h verify hoặc 5 phút reset"
+        DateTime usedAt "null = chưa dùng"
+    }
+
+    PasswordResetOTP {
+        String id PK "uuid"
+        String userId FK "Cascade"
+        String otpHash "SHA-256 của OTP 6 số, không lưu plaintext"
+        String purpose "PASSWORD_RESET, EMAIL_MIGRATION"
+        String email "snapshot lúc tạo - chống email-change attack"
+        DateTime expiresAt "tạo + 10 phút"
+        Int attemptCount "tăng mỗi lần sai, từ 5 thì invalidate"
+        DateTime consumedAt "đặt khi nhập đúng OTP"
+        DateTime invalidatedAt "quá 5 lần thử hoặc superseded"
+        String ipAddress
+    }
+
+    LoginAttempt {
+        String id PK "uuid"
+        String userId FK "nullable SetNull - vẫn log khi user_not_found"
+        String emailTried "lowercase, email hoặc username"
+        Boolean success
+        String failReason "invalid_password, user_not_found, account_locked, email_not_verified, rate_limited"
+        String ipAddress
+        String userAgent
+    }
+
+    Session {
+        String id PK "cuid - phiên ANALYTICS, không phải JWT session"
+        String userId FK "nullable"
+        String workspaceId FK "nullable"
+        String ipAddress
+        String countryCode
+        String city
+        DateTime startTime
+        DateTime endTime
+        Int durationSec
+    }
+
+    Profile {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+    Agency {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+    Client {
+        Int id PK "stub - chi tiết ở erd-crm"
+    }
+    Workspace {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+
+    User ||--o{ PushSubscription : "đăng ký Web Push"
+    User ||--o{ EmailVerificationToken : "token xác thực"
+    User ||--o{ PasswordResetOTP : "OTP quên mật khẩu"
+    User |o--o{ LoginAttempt : "log đăng nhập"
+    User |o--o{ Session : "phiên analytics"
+    Workspace |o--o{ Session : "scope workspace"
+    Profile |o--o{ User : "profileId"
+    Agency |o--o{ User : "agencyId members"
+    Client |o--o{ User : "clientId portal user"
+
+%% Nguồn: prisma/schema.prisma — User:125-247, PushSubscription:253-264, EmailVerificationToken:1305-1320,
+%% PasswordResetOTP:1327-1345, LoginAttempt:1351-1365, Session:963-982 (analytics, KHÔNG phải auth session — auth dùng JWT jose stateless).
+%% Enum UserRole: prisma/schema.prisma:898-904. Phân nhóm theo docs/system-audit/00-discovery/parts/03-models.md mục 1.1.

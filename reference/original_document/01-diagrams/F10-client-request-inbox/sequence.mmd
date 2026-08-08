@@ -1,0 +1,106 @@
+sequenceDiagram
+    autonumber
+    participant KH as Khách hàng (portal)
+    participant UI as NewRequestPanel wizard 5 bước
+    participant SPA as submitClientRequestViaToken
+    participant AUTH as resolveShareToken share-link-auth
+    participant DB as Prisma Neon
+    participant NOTI as notifyProfileAdminsOfRequest
+    participant AD as Admin
+    participant INBOX as RequestsInbox admin requests
+    participant CRA as client-request-actions
+    participant SEC as verifyProfileAdminAccess
+
+    Note over KH,NOTI: Giai đoạn 1 - Khách gửi yêu cầu từ /share/token
+
+    KH->>UI: Điền General Videos Assets Brief rồi Send
+    UI->>SPA: submitClientRequestViaToken(token, input)
+    SPA->>AUTH: resolveShareToken(token)
+    alt token sai hoặc link revoked
+        AUTH-->>SPA: null
+        SPA-->>UI: error This link is invalid
+    else rate limit 20 req / 1h vượt ngưỡng
+        SPA-->>UI: error Too many requests
+    else workspaceId hoặc clientId ngoài scope
+        SPA-->>UI: error Invalid period / Invalid brand
+    else workspace không ACTIVE
+        SPA->>DB: workspace.findFirst status ACTIVE
+        DB-->>SPA: null
+        SPA-->>UI: error This period is no longer active
+    else title rỗng hoặc rawFootage không phải URL
+        SPA-->>UI: error validation (title, http link)
+    else hợp lệ
+        SPA->>DB: clientTaskRequest.create status NEW profileId từ scope
+        alt DB lỗi
+            DB-->>SPA: throw
+            SPA-->>UI: error Could not send your request
+        else tạo thành công
+            DB-->>SPA: req.id
+            SPA->>NOTI: notifyProfileAdminsOfRequest(scope, req)
+            NOTI->>DB: profileAccess.findMany role OWNER ADMIN
+            NOTI->>NOTI: createNotificationInternal TASK_CLIENT_SUBMITTED + broadcast
+            SPA->>DB: audit request.client_submitted
+            SPA-->>UI: success requestId
+            UI-->>KH: màn hình done
+        end
+    end
+
+    Note over AD,SEC: Giai đoạn 2 - Admin xử lý trong Hộp thư yêu cầu
+
+    AD->>INBOX: Mở /workspaceId/admin/requests
+    INBOX->>CRA: getClientRequests(workspaceId)
+    CRA->>SEC: verifyProfileAdminAccess(workspaceId)
+    alt không phải OWNER hoặc ADMIN
+        SEC-->>CRA: throw (403)
+        CRA-->>INBOX: lỗi truy cập
+    else có quyền
+        CRA->>DB: clientTaskRequest.findMany status NEW REVIEWING
+        DB-->>INBOX: danh sách ClientRequestDTO
+    end
+
+    alt Admin bấm Tạo task (accept)
+        AD->>INBOX: accept(id)
+        INBOX->>CRA: acceptClientRequest(requestId, workspaceId)
+        CRA->>SEC: verifyProfileAdminAccess(workspaceId)
+        CRA->>DB: clientTaskRequest.findFirst theo id + workspaceId + profileId
+        alt không tìm thấy
+            CRA-->>INBOX: error Không tìm thấy yêu cầu
+        else đã ACCEPTED trước đó
+            CRA-->>INBOX: error Yêu cầu này đã được duyệt
+        else hợp lệ
+            CRA->>DB: task.create status Đang đợi giao, assigneeId null
+            alt tạo task lỗi
+                DB-->>CRA: throw
+                CRA-->>INBOX: error Không tạo được task từ yêu cầu
+            else ok
+                CRA->>DB: clientTaskRequest.update status ACCEPTED + taskId + reviewedBy
+                CRA->>DB: audit request.accepted + revalidatePath requests queue admin
+                CRA-->>INBOX: success taskId
+                INBOX-->>AD: ẩn card khỏi inbox
+            end
+        end
+    else Admin bấm Từ chối (reject)
+        AD->>INBOX: reject(id) kèm note
+        INBOX->>CRA: rejectClientRequest(requestId, workspaceId, note)
+        CRA->>SEC: verifyProfileAdminAccess(workspaceId)
+        CRA->>DB: clientTaskRequest.findFirst
+        alt không tìm thấy
+            CRA-->>INBOX: error Không tìm thấy yêu cầu
+        else đã ACCEPTED
+            CRA-->>INBOX: error Đã duyệt, không thể từ chối
+        else hợp lệ
+            CRA->>CRA: sanitizeClientText(note)
+            CRA->>DB: clientTaskRequest.update status REJECTED + rejectionNote
+            CRA->>DB: audit request.rejected + revalidatePath
+            CRA-->>INBOX: success
+            INBOX-->>AD: ẩn card khỏi inbox
+        end
+    end
+
+%% Nguồn:
+%% src/actions/share-portal-actions.ts:1350-1452 submitClientRequestViaToken (rateLimit :1354, scope check :1361-1362, workspace ACTIVE :1364, validate :1371-1395, create NEW :1408, notify :1435, audit :1441)
+%% src/actions/share-portal-actions.ts:1287-1326 notifyProfileAdminsOfRequest (TASK_CLIENT_SUBMITTED)
+%% src/lib/share-link-auth.ts:73 resolveShareToken (null = uniform failure)
+%% src/actions/client-request-actions.ts:18 adminCtx (verifyProfileAdminAccess throws), :48 getClientRequests, :102-168 acceptClientRequest (guard :107-108, task.create :124, update ACCEPTED :150), :171-193 rejectClientRequest (guard :176-177, update REJECTED :180)
+%% src/components/admin/RequestsInbox.tsx:46 accept, :54 reject
+%% src/app/[workspaceId]/admin/requests/page.tsx:8

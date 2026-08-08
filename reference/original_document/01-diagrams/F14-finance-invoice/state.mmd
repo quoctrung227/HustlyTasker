@@ -1,0 +1,46 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    direction LR
+
+    state "SENT - đã phát hành" as SENT
+    state "PAID - đã thu tiền" as PAID
+    state "VOID - đã hủy" as VOID
+    state "DRAFT - chỉ là default schema, không có code path tạo" as DRAFT
+    state "OVERDUE - có trong enum, server không bao giờ ghi" as OVERDUE
+
+    [*] --> SENT : createInvoiceRecord tạo invoice trong transaction (task UNBILLED chuyển INVOICED, trừ deposit clamp)
+    SENT --> PAID : recordPayment có invoiceId link cùng workspace và client
+    SENT --> VOID : voidInvoice (task trở về UNBILLED, hoàn clientDepositDeducted)
+    PAID --> VOID : voidInvoice không chặn invoice PAID
+    VOID --> VOID : voidInvoice lần 2 no-op
+    VOID --> [*]
+
+    note right of SENT
+        Code luôn tạo với status SENT
+        không bao giờ tạo DRAFT
+    end note
+
+    note right of VOID
+        Guard trước tx trả lỗi Invoice is already void
+        Trong tx re-read dưới pg_advisory_xact_lock
+        để hoàn deposit tối đa 1 lần
+    end note
+
+    note left of DRAFT
+        DRAFT và OVERDUE là trạng thái chết
+        trong flow F14 hiện tại
+    end note
+
+%% Nguồn status THẬT (enum InvoiceStatus): prisma/schema.prisma:915-921 (DRAFT SENT PAID OVERDUE VOID)
+%% - Tạo với status SENT: src/actions/invoice-actions.ts:423 (status: 'SENT' // Default to SENT for now)
+%% - DRAFT chỉ là @default(DRAFT) ở schema: prisma/schema.prisma:769 - không có code path nào insert DRAFT
+%% - SENT -> PAID: src/actions/payment-actions.ts:88-90 (recordPayment update invoice status 'PAID' khi có invoiceId hợp lệ, best-effort)
+%% - -> VOID: src/actions/invoice-actions.ts:625-627 (voidInvoice); guard already-void :607 + re-read trong tx :618-622
+%%   side effect: task.updateMany invoiceId null + invoiceStatus UNBILLED :631-637, hoàn deposit :639-653
+%% - OVERDUE: không được server ghi - chỉ xuất hiện như label hiển thị (src/components/portal/calm/format.ts:52-57)
+%%   và mock harness (src/app/desk-preview/DeskHarness.tsx:36)
+%% - Task.invoiceStatus (UNBILLED/INVOICED) là vòng đời phụ đi kèm: prisma/schema.prisma:923-926,
+%%   claim UNBILLED->INVOICED: invoice-actions.ts:443-452, revert khi void: :631-637

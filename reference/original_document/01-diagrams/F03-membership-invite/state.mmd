@@ -1,0 +1,50 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "PENDING (chờ phản hồi)" as PENDING
+    state "ACCEPTED (đã chấp nhận)" as ACCEPTED
+    state "DECLINED (đã từ chối)" as DECLINED
+    state "EXPIRED (hết hạn / bị thay thế)" as EXPIRED
+    state "REVOKED (admin thu hồi)" as REVOKED
+
+    [*] --> PENDING : inviteToWorkspace tạo lời mời cross-profile
+    PENDING --> PENDING : re-invite refresh expiresAt + role (giữ PENDING)
+    PENDING --> ACCEPTED : acceptWorkspaceInvitation CAS updateMany
+    PENDING --> DECLINED : declineWorkspaceInvitation
+    PENDING --> REVOKED : revokeWorkspaceInvitation
+    PENDING --> EXPIRED : idempotent-accept khi user vẫn đang là member
+
+    PENDING --> [*] : hard-delete khi remove / leave / gỡ du học
+    ACCEPTED --> [*] : hard-delete khi remove / leave / gỡ du học
+    DECLINED --> [*] : hard-delete khi remove / leave / gỡ du học
+    EXPIRED --> [*] : hard-delete khi remove / leave / gỡ du học
+    REVOKED --> [*] : hard-delete khi remove / leave / gỡ du học
+
+    note right of PENDING
+        expiresAt quá hạn thì lời mời bị coi là stale
+        (accept check expiresAt gt now) nhưng KHÔNG tự động
+        ghi status EXPIRED - chỉ nhánh idempotent-accept ghi
+    end note
+
+    note right of ACCEPTED
+        Khi CAS thành công, transaction tiếp tục
+        workspaceMember.upsert + profileAccess.upsert.
+        Nếu guard sau CAS từ chối (isClientInvite / CLIENT PA)
+        row vẫn ở ACCEPTED nhưng KHÔNG cấp quyền
+    end note
+
+%% Nguồn status THẬT (string, không enum):
+%% prisma/schema.prisma:838 — status String @default("PENDING")
+%%   // PENDING | ACCEPTED | DECLINED | EXPIRED | REVOKED
+%% Transitions:
+%%   [*] -> PENDING: src/actions/member-actions.ts:541-551 (workspaceInvitation.create)
+%%   PENDING -> PENDING (re-invite): member-actions.ts:526-539 (update role/expiresAt, giữ PENDING)
+%%   PENDING -> ACCEPTED: member-actions.ts:756-767 (CAS updateMany status ACCEPTED + respondedAt)
+%%   PENDING -> DECLINED: member-actions.ts:969-972 (update status DECLINED + respondedAt)
+%%   PENDING -> REVOKED: member-actions.ts:1031-1034 (revokeWorkspaceInvitation)
+%%   PENDING -> EXPIRED: member-actions.ts:699-703 (idempotent-accept retire khi đã là member)
+%%   stale check (không ghi status): member-actions.ts:719, :738 (expiresAt <= now => báo lỗi hết hạn)
+%%   hard-delete mọi status: member-actions.ts:1220 (removeWorkspaceMember), :1294 (leaveWorkspace),
+%%     src/actions/cross-team-actions.ts:223-225 (removeCrossTeamAccess deleteMany invitation)

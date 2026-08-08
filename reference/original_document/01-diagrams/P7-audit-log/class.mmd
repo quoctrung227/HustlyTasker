@@ -1,0 +1,157 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class AuditLog {
+        +BigInt id
+        +String workspaceId
+        +String actorUserId
+        +String userId
+        +String action
+        +String targetType
+        +String targetId
+        +Json beforeData
+        +Json afterData
+        +String ipAddress
+        +String userAgent
+        +DateTime createdAt
+    }
+
+    class ErrorDictionary {
+        +String id
+        +String code
+        +String description
+        +Int severity
+        +Int penalty
+        +Boolean isActive
+    }
+
+    class ErrorLog {
+        +String id
+        +String taskId
+        +String userId
+        +String errorId
+        +Int frequency
+        +Int calculatedScore
+        +String detectedById
+        +String workspaceId
+        +String profileId
+    }
+
+    class User {
+        +String id
+        +String username
+        +String nickname
+    }
+
+    class Workspace {
+        +String id
+    }
+
+    class Task {
+        +String id
+        +String title
+        +String status
+    }
+
+    class AuditLogLib {
+        +audit(AuditOpts) void
+    }
+
+    class AuditActions {
+        +getWorkspaceAuditLogs(workspaceId, filters, page, pageSize) AuditLogResult
+        +getAuditLogActionTypes(workspaceId) String[]
+        +getAuditLogActors(workspaceId) Actor[]
+        -redactSensitive(data) unknown
+    }
+
+    class AnalyticsActions {
+        +getAnalyticsData(workspaceId)
+        +getUserErrorDetails(workspaceId, userId)
+        +getUserPerformanceScore(workspaceId, userId)
+        +getStaffErrorLogsDetail(workspaceId, userId)
+        +removeErrorLog(workspaceId, errorLogId)
+    }
+
+    class SecurityLib {
+        +verifyWorkspaceAccess(workspaceId, requiredRole)
+        +verifyProfileAdminAccess(workspaceId)
+    }
+
+    class LogClientErrorRoute {
+        +POST(req) NextResponse
+    }
+
+    class AdminAuditLogPage {
+        +AdminAuditLogPage(params)
+    }
+
+    class MissionControlAuditPage {
+        +MissionControlAuditPage(params)
+    }
+
+    class UserErrorsPage {
+        +UserErrorsPage(params)
+    }
+
+    class AuditLogViewer {
+        +loadLogs(filters, page)
+    }
+
+    class MobileAuditLog {
+        +render()
+    }
+
+    class StaffErrorDetail {
+        +handleRemove(errorId)
+    }
+
+    class GlobalErrorTsx {
+        +reportClientError()
+    }
+
+    AuditLog --> Workspace : workspace onDelete Cascade
+    AuditLog --> User : actor onDelete SetNull
+    AuditLog --> User : user target
+
+    ErrorLog --> ErrorDictionary : error
+    ErrorLog --> Task : task onDelete Cascade
+    ErrorLog --> User : user vi phạm
+    ErrorLog --> User : detectedBy manager
+    ErrorLog --> Workspace : workspace onDelete Cascade
+    ErrorDictionary o-- ErrorLog : logs
+
+    AuditLogLib ..> AuditLog : prisma create append-only
+    AuditActions ..> AuditLog : count findMany distinct
+    AuditActions ..> SecurityLib : verifyWorkspaceAccess ADMIN
+    AnalyticsActions ..> ErrorLog : groupBy aggregate findMany delete
+    AnalyticsActions ..> ErrorDictionary : findMany isActive
+    AnalyticsActions ..> SecurityLib : verifyWorkspaceAccess MEMBER-ADMIN
+
+    AdminAuditLogPage ..> AuditActions : Promise.all 3 actions
+    AdminAuditLogPage --> AuditLogViewer : desktop
+    AdminAuditLogPage --> MobileAuditLog : mobile dispatcher
+    MissionControlAuditPage ..> SecurityLib : verifyProfileAdminAccess
+    MissionControlAuditPage ..> AuditActions : cùng 3 actions
+    MissionControlAuditPage --> AuditLogViewer : tái sử dụng
+    AuditLogViewer ..> AuditActions : getWorkspaceAuditLogs filter-page
+    UserErrorsPage ..> AnalyticsActions : score + detail
+    UserErrorsPage --> StaffErrorDetail : isUserView true
+    StaffErrorDetail ..> AnalyticsActions : removeErrorLog
+    GlobalErrorTsx ..> LogClientErrorRoute : POST api log-client-error
+
+%% Nguồn (file:line):
+%% AuditLog model: prisma/schema.prisma:861-886 (append-only, workspace Cascade :879, actor SetNull :880)
+%% ErrorDictionary model: prisma/schema.prisma:1014-1025 (severity 1-3, penalty, isActive)
+%% ErrorLog model: prisma/schema.prisma:1027-1050 (frequency, calculatedScore = frequency * penalty, detectedById)
+%% AuditLogLib.audit(): src/lib/audit-log.ts:153-197 (non-throwing, insert-only)
+%% AuditActions: src/actions/audit-actions.ts:49 (getWorkspaceAuditLogs), :163 (getAuditLogActionTypes), :180 (getAuditLogActors), :114 (redactSensitive)
+%% AnalyticsActions: src/actions/analytics-actions.ts:7,97,145,201,261
+%% SecurityLib: src/lib/security.ts:38 (verifyWorkspaceAccess)
+%% LogClientErrorRoute: src/app/api/log-client-error/route.ts:17 (POST, không auth, chỉ console.error — không ghi DB)
+%% Pages: src/app/[workspaceId]/admin/audit-log/page.tsx:12, src/app/[workspaceId]/mc/audit/page.tsx:22, src/app/[workspaceId]/dashboard/errors/page.tsx:8
+%% Components: src/components/workspace/AuditLogViewer.tsx:118, src/components/admin/MobileAuditLog.tsx, src/components/admin/analytics/StaffErrorDetail.tsx:49
+%% Lưu ý audit: không còn đường ghi ErrorLog (errorLog.create) trong src hiện tại — chỉ đọc/aggregate/xóa.

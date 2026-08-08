@@ -1,0 +1,161 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class UserModel {
+        +String id
+        +String username
+        +String password
+        +String avatarUrl
+        +String nickname
+        +String phoneNumber
+        +String paymentQrUrl
+        +String paymentBankName
+        +String paymentAccountNum
+        +Int sessionVersion
+        +UserRole role
+    }
+
+    class ProfileModel {
+        +String id
+        +String name
+        +String bannerUrl
+        +String logoUrl
+        +Json settings
+        +String status
+        +DateTime deletedAt
+        +DateTime hardDeleteAfter
+    }
+
+    class TagCategoryModel {
+        +String id
+        +String name
+        +String profileId
+        +String userId
+        +String workspaceId
+    }
+
+    class TaskTagModel {
+        +String id
+        +String taskId
+        +String tagCategoryId
+    }
+
+    class TaskModel {
+        +String id
+        +String notes_vi
+        +String status
+    }
+
+    class ProfilePage {
+        +render()
+    }
+    class ProfileForm {
+        +handleUpdateProfile()
+        +handleChangePassword()
+    }
+    class AvatarUpload {
+        +handleFile()
+    }
+    class PaymentQrUpload {
+        +handleUpload()
+    }
+    class ProfileSettingsSection {
+        +saveName()
+        +savePortalAccent()
+    }
+    class TagLibraryPopup {
+        +handleCreate()
+        +handleDelete()
+    }
+
+    class ProfileActions {
+        +updateProfile(userId, data, workspaceId)
+        +changePassword(userId, currentPass, newPass, workspaceId)
+        +getProfileSettings(profileId)
+        +updateProfileSettings(profileId, data)
+        +deleteProfileAction(profileId)
+        +restoreProfileAction(profileId)
+    }
+
+    class UploadActions {
+        +uploadAvatar(userId, formData)
+        +uploadPaymentQr(userId, formData)
+        +uploadProfileBanner(profileId, formData)
+        +uploadProfileLogo(profileId, formData)
+    }
+
+    class TagActions {
+        +getTagsForUser(workspaceId)
+        +createTag(name, workspaceId)
+        +updateTag(tagId, name, workspaceId)
+        +deleteTag(tagId, workspaceId)
+        +setTaskTags(taskId, tagCategoryIds, workspaceId)
+        +getTaskTags(taskId)
+    }
+
+    class GlobalSettingsActions {
+        +getFrameAccount()
+        +updateFrameAccount(account, password)
+    }
+
+    class AuthLib {
+        +getSession()
+        +login(userData)
+    }
+    class SecurityLib {
+        +verifyWorkspaceAccess(workspaceId, minRole)
+        +verifyActiveSession()
+    }
+    class ProfilePermissions {
+        +getProfileRole(userId, profileId)
+        +isSessionLive(session)
+    }
+    class StorageLib {
+        +uploadPublicImage(filename, buffer, contentType)
+    }
+
+    ProfilePage --> ProfileForm : render
+    ProfilePage --> AvatarUpload : render
+    ProfilePage --> PaymentQrUpload : render
+    ProfileForm ..> ProfileActions : updateProfile + changePassword
+    AvatarUpload ..> UploadActions : uploadAvatar
+    PaymentQrUpload ..> UploadActions : uploadPaymentQr
+    ProfileSettingsSection ..> ProfileActions : updateProfileSettings
+    TagLibraryPopup ..> TagActions : createTag updateTag deleteTag
+
+    ProfileActions ..> AuthLib : getSession login
+    ProfileActions ..> ProfilePermissions : getProfileRole isSessionLive
+    UploadActions ..> AuthLib : getSession
+    UploadActions ..> ProfilePermissions : getProfileRole (verifyProfileOwner)
+    UploadActions ..> StorageLib : uploadPublicImage
+    TagActions ..> SecurityLib : verifyWorkspaceAccess
+    GlobalSettingsActions ..> SecurityLib : verifyActiveSession
+
+    ProfileActions ..> UserModel : update nickname phone password
+    ProfileActions ..> ProfileModel : update name settings status
+    UploadActions ..> UserModel : update avatarUrl paymentQrUrl
+    UploadActions ..> ProfileModel : update bannerUrl logoUrl
+    TagActions ..> TagCategoryModel : CRUD
+    TagActions ..> TaskTagModel : deleteMany + createMany
+    GlobalSettingsActions ..> TaskModel : upsert id global-system-settings
+
+    ProfileModel "1" o-- "n" UserModel : users
+    ProfileModel "1" o-- "n" TagCategoryModel : tagCategories
+    UserModel "1" o-- "n" TagCategoryModel : owner
+    TagCategoryModel "1" o-- "n" TaskTagModel : taskTags
+    TaskModel "1" o-- "n" TaskTagModel : tags
+
+%% Nguồn code thật (file:line):
+%% - UserModel: prisma/schema.prisma:125 (User) — avatarUrl:139, paymentQrUrl:149, sessionVersion:170
+%% - ProfileModel: prisma/schema.prisma:11 (Profile) — bannerUrl:14, logoUrl:15, settings:16, status:25
+%% - TagCategoryModel: prisma/schema.prisma:1170, TaskTagModel: prisma/schema.prisma:1189
+%% - ProfileActions: src/actions/profile-actions.ts — updateProfile:183, updateProfileSettings:319, changePassword:508, deleteProfileAction:385, restoreProfileAction:429, getProfileSettings:286
+%% - UploadActions: src/actions/upload-actions.ts — uploadPaymentQr:53, uploadAvatar:120, uploadProfileBanner:210, uploadProfileLogo:257, verifyProfileOwner:196
+%% - TagActions: src/actions/tag-actions.ts — getTagsForUser:12, createTag:47, updateTag:94, deleteTag:120, setTaskTags:140, getTaskTags:181
+%% - GlobalSettingsActions: src/actions/global-settings.ts — getFrameAccount:8, updateFrameAccount:54 (lưu credential Frame vào Task id=global-system-settings, notes_vi JSON)
+%% - UI: src/app/[workspaceId]/dashboard/profile/page.tsx (ProfileForm, AvatarUpload, PaymentQrUpload); src/components/profile/ProfileSettingsSection.tsx; src/components/tags/TagLibraryPopup.tsx
+%% - Lib: src/lib/auth.ts (getSession:65, login:16); src/lib/security.ts (verifyWorkspaceAccess:38); src/lib/profile-permissions.ts (getProfileRole:24, isSessionLive:46); src/lib/storage.ts (uploadPublicImage:37 — Vercel Blob)

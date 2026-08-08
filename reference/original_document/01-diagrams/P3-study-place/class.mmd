@@ -1,0 +1,140 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class AdminSettingsPage {
+        +getSession()
+        +verifyWorkspaceAccess(workspaceId, ADMIN)
+        +getStudyPlaceProgress(workspaceId)
+        +isMobileDevice()
+    }
+
+    class WorkspaceSettingsPanel {
+        +activeTab study
+        +studyProgress StudyPlaceProgressDTO
+    }
+
+    class MobileWorkspaceSettings {
+        +studyProgress StudyPlaceProgressDTO
+    }
+
+    class StudyPlaceBoard {
+        -mode dashboard due flashcards quiz write sprint bank
+        -queueScope due all bookmarked
+        -progressMap Map
+        +rateQuestion(questionId, quality, isCorrect)
+        +toggleBookmark(question)
+        +resetProgress()
+        +mergeProgress(progress)
+    }
+
+    class StudySession {
+        +advance()
+        +previous()
+        +onRate()
+        +onBookmark()
+    }
+
+    class StudyPlaceActions {
+        +getStudyPlaceProgress(workspaceId, studySetId)
+        +reviewStudyPlaceQuestionAction(input)
+        +toggleStudyPlaceBookmarkAction(input)
+        +resetStudyPlaceProgressAction(input)
+        -serializeStudyProgress(row)
+        -assertQuestion(questionId)
+    }
+
+    class StudyPlaceLib {
+        +STUDY_PLACE_SET_ID
+        +STUDY_PLACE_QUESTIONS
+        +STUDY_PLACE_QUESTION_IDS
+        +computeNextStudyProgress(current, quality, isCorrect)
+        +isStudyPlaceDue(progress)
+        +isCloseRecallAnswer(input, answer)
+        +normalizeRecallText(value)
+        +getStudyPlaceQuestion(questionId)
+    }
+
+    class SecurityLib {
+        +verifyWorkspaceAccess(workspaceId, requiredRole)
+        +verifyProfileAdminAccess(workspaceId)
+    }
+
+    class StudyPlaceQuestion {
+        +String id
+        +String question
+        +List~String~ options
+        +String correctAnswer
+        +String viTranslation
+        +List~StudyPlaceKeyTerm~ keyTerms
+        +List~String~ tags
+    }
+
+    class StudyPlaceProgressDTO {
+        +String questionId
+        +Float easeFactor
+        +Int intervalDays
+        +Int repetition
+        +Int attempts
+        +Int correctAttempts
+        +Int lapses
+        +Boolean bookmarked
+        +String nextReviewAt
+        +String masteredAt
+    }
+
+    class StudyPlaceProgress {
+        +String id
+        +String workspaceId
+        +String userId
+        +String studySetId
+        +String questionId
+        +Float easeFactor
+        +Int intervalDays
+        +Int repetition
+        +Int attempts
+        +Int correctAttempts
+        +Int lapses
+        +Int lastQuality
+        +Boolean bookmarked
+        +DateTime lastReviewedAt
+        +DateTime nextReviewAt
+        +DateTime masteredAt
+    }
+
+    class Workspace {
+        +String id
+    }
+
+    class User {
+        +String id
+    }
+
+    AdminSettingsPage ..> SecurityLib : guard ADMIN
+    AdminSettingsPage ..> StudyPlaceActions : getStudyPlaceProgress
+    AdminSettingsPage --> WorkspaceSettingsPanel : desktop
+    AdminSettingsPage --> MobileWorkspaceSettings : mobile
+    WorkspaceSettingsPanel --> StudyPlaceBoard : tab study
+    MobileWorkspaceSettings --> StudyPlaceBoard
+    StudyPlaceBoard *-- StudySession
+    StudyPlaceBoard ..> StudyPlaceActions : server actions
+    StudyPlaceBoard ..> StudyPlaceLib : questions + isStudyPlaceDue
+    StudyPlaceActions ..> SecurityLib : verifyProfileAdminAccess
+    StudyPlaceActions ..> StudyPlaceLib : computeNextStudyProgress
+    StudyPlaceActions ..> StudyPlaceProgress : prisma findMany upsert deleteMany
+    StudyPlaceActions ..> StudyPlaceProgressDTO : serialize
+    StudyPlaceLib o-- StudyPlaceQuestion : study-place-data.json
+    StudyPlaceProgress --> Workspace : workspaceId
+    StudyPlaceProgress --> User : userId
+
+%% Nguồn (file thật trong repo):
+%% AdminSettingsPage: src/app/[workspaceId]/admin/settings/page.tsx:11-131 (guard verifyWorkspaceAccess ADMIN :24, getStudyPlaceProgress :102, mobile dispatcher :117)
+%% WorkspaceSettingsPanel: src/components/workspace/WorkspaceSettingsPanel.tsx:62-195 (tab study render StudyPlaceBoard :194)
+%% StudyPlaceBoard + StudySession: src/components/study-place/StudyPlaceBoard.tsx:244-759
+%% StudyPlaceActions: src/actions/study-place-actions.ts:50-226
+%% StudyPlaceLib: src/lib/study-place.ts:1-150
+%% SecurityLib: src/lib/security.ts:38 (verifyWorkspaceAccess), :180 (verifyProfileAdminAccess)
+%% Model StudyPlaceProgress: prisma/schema.prisma:1447-1473 (@@unique workspace_user_studySet_question :1470)

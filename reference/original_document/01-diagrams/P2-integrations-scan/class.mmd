@@ -1,0 +1,152 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class IntegrationToken {
+        +String id
+        +String userId
+        +String workspaceId
+        +String provider
+        +String accessToken
+        +String refreshToken
+        +DateTime expiresAt
+        +String accountEmail
+        +DateTime createdAt
+        +DateTime updatedAt
+    }
+
+    class User {
+        +String id
+    }
+
+    class Workspace {
+        +String id
+    }
+
+    class ConnectorsPanel {
+        +handleConnect(provider)
+        +handleDisconnect(providerId)
+    }
+
+    class AddTaskModal {
+        +seedHookGraphFromVelox()
+    }
+
+    class VeloxMultiHookMapEditor {
+        +runScan()
+    }
+
+    class GoogleDriveAuthorizeRoute {
+        +GET(req)
+    }
+
+    class GoogleDriveCallbackRoute {
+        +GET(req)
+    }
+
+    class DropboxAuthorizeRoute {
+        +GET(req)
+    }
+
+    class DropboxCallbackRoute {
+        +GET(req)
+    }
+
+    class ScanFolderRoute {
+        +int maxDuration 300
+        +POST(req)
+    }
+
+    class IntegrationActions {
+        +getConnectedIntegrations(workspaceId)
+        +disconnectIntegration(workspaceId, provider)
+    }
+
+    class IntegrationTokensLib {
+        +refreshTokenIfNeeded(tokenRow)
+    }
+
+    class TokenEncryption {
+        +encryptToken(plain)
+        +decryptToken(cipher)
+    }
+
+    class CloudLinkParser {
+        +parseCloudLink(url)
+        +isCloudStorageUrl(url)
+    }
+
+    class CloudScanner {
+        +scanDropboxFolder(accessToken, folderPath)
+        +scanGoogleDriveFolder(accessToken, folderId)
+        +recursiveScanFolder(input)
+    }
+
+    class VeloxV4Adapter {
+        +rawTreeToScanInput(raw, provider, rootName, clientId)
+    }
+
+    class VeloxV4Engine {
+        +runEngineV4(input)
+    }
+
+    class SecurityLib {
+        +verifyWorkspaceAccess(workspaceId, role)
+    }
+
+    class RateLimitDb {
+        +limitDb(key, limit, windowSec)
+    }
+
+    User "1" o-- "n" IntegrationToken : userId
+    Workspace "1" o-- "n" IntegrationToken : workspaceId
+
+    ConnectorsPanel ..> DropboxAuthorizeRoute : handleConnect redirect
+    ConnectorsPanel ..> GoogleDriveAuthorizeRoute : handleConnect redirect
+    ConnectorsPanel ..> IntegrationActions : disconnectIntegration
+
+    GoogleDriveCallbackRoute ..> TokenEncryption : encryptToken
+    GoogleDriveCallbackRoute --> IntegrationToken : upsert provider google_drive
+    DropboxCallbackRoute ..> TokenEncryption : encryptToken
+    DropboxCallbackRoute --> IntegrationToken : upsert provider dropbox
+
+    AddTaskModal ..> ScanFolderRoute : POST v=4
+    VeloxMultiHookMapEditor ..> ScanFolderRoute : POST v=4
+
+    ScanFolderRoute ..> SecurityLib : verifyWorkspaceAccess MEMBER
+    ScanFolderRoute ..> RateLimitDb : limitDb 10 per 60s
+    ScanFolderRoute ..> CloudLinkParser : parseCloudLink
+    ScanFolderRoute --> IntegrationToken : findUnique userId workspaceId provider
+    ScanFolderRoute ..> IntegrationTokensLib : refreshTokenIfNeeded
+    ScanFolderRoute ..> CloudScanner : recursiveScanFolder
+    ScanFolderRoute ..> VeloxV4Adapter : rawTreeToScanInput
+    ScanFolderRoute ..> VeloxV4Engine : runEngineV4
+
+    IntegrationTokensLib ..> TokenEncryption : decryptToken encryptToken
+    IntegrationTokensLib --> IntegrationToken : update accessToken expiresAt
+
+    IntegrationActions --> IntegrationToken : findMany findUnique delete
+    IntegrationActions ..> TokenEncryption : decryptToken for revoke
+    IntegrationActions ..> SecurityLib : verifyWorkspaceAccess MEMBER
+
+%% Nguồn (file:line):
+%% IntegrationToken: prisma/schema.prisma:1374-1391 (@@unique([userId, workspaceId, provider]))
+%% ConnectorsPanel: src/components/settings/ConnectorsPanel.tsx:80-110 (handleConnect:90, handleDisconnect:95)
+%% AddTaskModal.seedHookGraphFromVelox: src/components/dashboard/AddTaskModal.tsx:489-511 (fetch /api/integrations/scan-folder?v=4:496)
+%% VeloxMultiHookMapEditor.runScan: src/components/velox/VeloxMultiHookMapEditor.tsx:91-116
+%% GoogleDriveAuthorizeRoute: src/app/api/integrations/google-drive/authorize/route.ts:5
+%% GoogleDriveCallbackRoute: src/app/api/integrations/google-drive/callback/route.ts:23 (upsert:126)
+%% DropboxAuthorizeRoute: src/app/api/integrations/dropbox/authorize/route.ts:5
+%% DropboxCallbackRoute: src/app/api/integrations/dropbox/callback/route.ts:19 (upsert:127)
+%% ScanFolderRoute: src/app/api/integrations/scan-folder/route.ts:58 (maxDuration=300:56)
+%% IntegrationActions: src/actions/integration-actions.ts:35,74
+%% IntegrationTokensLib.refreshTokenIfNeeded: src/lib/integration-tokens.ts:29
+%% TokenEncryption: src/lib/token-encryption.ts (encryptToken/decryptToken)
+%% CloudLinkParser.parseCloudLink: src/lib/cloud-link-parser.ts:44; isCloudStorageUrl:129
+%% CloudScanner: src/lib/cloud-scanner.ts:105 (scanDropboxFolder), 322 (scanGoogleDriveFolder), 751 (recursiveScanFolder)
+%% VeloxV4Adapter.rawTreeToScanInput: src/lib/velox/v4-adapter.ts:20
+%% VeloxV4Engine.runEngineV4: src/lib/velox/v4-engine.ts:94
+%% SecurityLib.verifyWorkspaceAccess: src/lib/security.ts; RateLimitDb.limitDb: src/lib/review/rate-limit-db.ts

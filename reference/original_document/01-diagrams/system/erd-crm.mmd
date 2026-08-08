@@ -1,0 +1,141 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    Client {
+        Int id PK "autoincrement - khác uuid của đa số model"
+        String name
+        Int parentId FK "self nullable Cascade - cây sub-brand"
+        Int mergedIntoId FK "self nullable SetNull - canonical merge"
+        ClientTier tier "enum DIAMOND, GOLD, SILVER, WARNING, standard"
+        String status "ACTIVE, SOFT_DELETED, MERGED - String tự do"
+        DateTime deletedAt
+        DateTime hardDeleteAfter
+        Decimal depositBalance
+        Int inputQuality
+        Int paymentRating
+        String profileId FK "nullable - scope canonical theo PROFILE"
+        String workspaceId FK "LEGACY read-only, sẽ drop"
+    }
+
+    ClientShareLink {
+        String id PK "uuid - link portal công khai"
+        String tokenHash UK "SHA-256, raw token chỉ hiện 1 lần"
+        Int clientId FK "Cascade"
+        String profileId FK "Cascade"
+        String createdById FK "nullable SetNull - User"
+        DateTime revokedAt "nullable - thu hồi"
+        DateTime expiresAt "null = sống vĩnh viễn"
+        String passphraseHash "nullable - gate portal"
+        Boolean allowVideoComments
+        Boolean allowDownload
+        Boolean showAllVersions
+        Boolean canApprove
+        String notifyEmail "email nhận thông báo đã verify OTP"
+        String notifyEmailUnsubToken UK "one-click unsubscribe"
+        Int accessCount
+    }
+
+    Project {
+        Int id PK "autoincrement"
+        String name
+        String code
+        Int clientId FK "Cascade"
+        String workspaceId FK "nullable"
+        String profileId FK "nullable"
+        String clientUserId FK "nullable - User"
+    }
+
+    Contact {
+        String id PK "uuid - danh bạ giữa 2 user"
+        String requesterId FK "Cascade - UK cùng receiverId"
+        String receiverId FK "Cascade"
+        ContactStatus status "enum PENDING, ACCEPTED, DECLINED, BLOCKED"
+    }
+
+    PriceTemplate {
+        String id PK "uuid - template giá Add-Task"
+        String name
+        Float priceUSD
+        Float wageVND
+        String workspaceId "scalar - KHÔNG có relation Prisma"
+        Int sortOrder
+    }
+
+    PricingRule {
+        String id PK "uuid - rule tính giá tự động"
+        String name
+        Int clientId FK "nullable SetNull - null là default workspace"
+        String workspaceId FK "Cascade"
+        String profileId "scalar"
+        String ruleType "flat, per_minute, tiered_duration, custom"
+        Json config
+        Boolean isDefault
+    }
+
+    ClientTaskRequest {
+        String id PK "uuid - intake từ portal, KHÔNG phải Task"
+        String profileId "scalar required - set từ scope share link"
+        String workspaceId "scalar required"
+        Int clientId FK "nullable SetNull"
+        String viaShareLinkId "scalar"
+        String submittedVia "SHARE_LINK hoặc ACCOUNT"
+        String title
+        ClientRequestStatus status "enum NEW, REVIEWING, ACCEPTED, REJECTED"
+        String reviewedById "scalar"
+        String taskId FK "nullable SetNull - Task spawn khi accept"
+        String rejectionNote
+    }
+
+    Rating {
+        String id PK "cuid"
+        String taskId FK "UK - 1-1 với Task"
+        String clientId FK "nullable - String TRỎ USER, khác Client.id Int"
+        String staffId FK "User"
+        String workspaceId FK "nullable"
+        String shareLinkId FK "nullable SetNull - ClientShareLink"
+        String ratedVia "ACCOUNT hoặc SHARE_LINK"
+        Decimal creativeQuality
+        Decimal responsiveness
+        Decimal communication
+    }
+
+    Profile {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+    User {
+        String id PK "stub - chi tiết ở erd-auth"
+    }
+    Task {
+        String id PK "stub - chi tiết ở erd-task"
+    }
+    Workspace {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+
+    Client |o--o{ Client : "parentId cây sub-brand Cascade"
+    Client |o--o{ Client : "mergedInto SetNull"
+    Profile |o--o{ Client : "profileId nullable"
+    Client ||--o{ Project : "Cascade"
+    Client ||--o{ ClientShareLink : "Cascade"
+    Profile ||--o{ ClientShareLink : "Cascade"
+    User |o--o{ ClientShareLink : "createdBy SetNull"
+    Client |o--o{ PricingRule : "clientId SetNull"
+    Workspace ||--o{ PricingRule : "Cascade"
+    Client |o--o{ ClientTaskRequest : "clientId SetNull"
+    Task |o--o{ ClientTaskRequest : "taskId SetNull khi accept"
+    Task ||--o| Rating : "1-1 taskId UK"
+    User ||--o{ Rating : "staff"
+    User |o--o{ Rating : "client nullable - String trỏ User"
+    ClientShareLink |o--o{ Rating : "shareLinkId SetNull"
+    User ||--o{ Contact : "requester Cascade"
+    User ||--o{ Contact : "receiver Cascade"
+    Workspace |o..o{ PriceTemplate : "scalar-FK workspaceId"
+    ClientShareLink |o..o{ ClientTaskRequest : "scalar-FK viaShareLinkId"
+
+%% Nguồn: prisma/schema.prisma — Client:494-559, ClientShareLink:572-616, Project:676-691,
+%% Contact:1279-1293, PriceTemplate:1149-1159 (không relation), PricingRule:1404-1422,
+%% ClientTaskRequest:632-674, Rating:928-957 (bẫy đặt tên: Rating.clientId là String trỏ User).
+%% Partial unique thêm bằng SQL tay: client_profile_name_unique.sql (profileId + parentId + lower(name) WHERE ACTIVE).
+%% Phân nhóm theo docs/system-audit/00-discovery/parts/03-models.md mục 1.3 + 1.5.

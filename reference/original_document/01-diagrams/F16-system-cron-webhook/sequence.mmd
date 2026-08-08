@@ -1,0 +1,164 @@
+sequenceDiagram
+    autonumber
+    participant VC as Vercel Cron (vercel.json)
+    participant CD as GET api/cron/check-deadline
+    participant SD as GET api/cron/send-digest
+    participant CL as 4 cron dọn dẹp (cleanup-notifications, auth-cleanup, hard-delete-workspaces, hard-delete-profiles)
+    participant RJ as GET api/cron/review-janitor
+    participant MX as Mux (bên ngoài)
+    participant WH as POST api/webhooks/mux
+    participant ING as Inngest serve (api/inngest, 4 fn)
+    participant LIB as lib notification-email + email
+    participant RS as Resend API
+    participant R2 as Cloudflare R2
+    participant DB as Prisma / Neon
+
+    Note over VC,DB: KHỐI 1 — cron check-deadline (mỗi giờ)
+    VC->>CD: GET kèm x-cron-secret
+    alt CRON_SECRET chưa cấu hình
+        CD-->>VC: 500 CRON_SECRET not configured
+    else key khác secret
+        CD-->>VC: 401 Unauthorized
+    else key hợp lệ
+        CD->>DB: task.findMany deadline trong 1h/24h, status in OVERDUE_ELIGIBLE_STATUSES
+        CD->>DB: notification.findFirst dedup theo taskId + tier
+        CD->>DB: createNotificationInternal TASK_DEADLINE_APPROACHING (tier 1h rồi 24h)
+        CD->>DB: task.update status = Quá hạn (deadline đã qua)
+        CD->>DB: createNotificationInternal TASK_OVERDUE (dedup)
+        alt lỗi DB
+            CD-->>VC: 500 Failed
+        else thành công
+            CD-->>VC: 200 processed danh sách
+        end
+    end
+
+    Note over VC,RS: KHỐI 2 — cron send-digest (mỗi giờ)
+    VC->>SD: GET kèm x-cron-secret
+    alt guard secret fail
+        SD-->>VC: 401 / 500 (cùng pattern)
+    else hợp lệ
+        SD->>LIB: sendDigestEmails HOURLY
+        LIB->>DB: notificationPreference.findMany emailDigestMode + emailEnabled
+        loop mỗi user có pref
+            alt HOURLY và đang quiet hours
+                LIB->>LIB: skip user (skipped++)
+            else có notification emailSentAt null
+                LIB->>DB: notification.findMany emailSentAt null, isArchived false, take 50
+                LIB->>RS: sendEmail digest (templates digestHourly/digestDaily)
+                LIB->>DB: notification.updateMany emailSentAt = now
+            end
+        end
+        opt utcHour bằng 1 (8h sáng VN)
+            SD->>LIB: sendDigestEmails DAILY
+        end
+        SD-->>VC: 200 hourly + daily + ranDailyDigest
+    end
+
+    Note over VC,DB: KHỐI 3 — 4 cron dọn dẹp hàng ngày
+    VC->>CL: GET kèm x-cron-secret (auth-cleanup dùng safeEqual timingSafeEqual)
+    alt guard secret fail
+        CL-->>VC: 401 / 500
+    else hợp lệ
+        CL->>DB: cleanup-notifications — notification.deleteMany archived hơn 30d, read hơn 90d
+        CL->>DB: auth-cleanup — deleteMany EmailVerificationToken expired, PasswordResetOTP expired/consumed 7d, LoginAttempt hơn 90d
+        CL->>DB: hard-delete-workspaces — audit workspace.hard_deleted rồi workspace.delete cascade (hardDeleteAfter đã qua)
+        CL->>DB: hard-delete-profiles — audit profile.hard_deleted rồi profile.delete cascade
+        alt cột status/hardDeleteAfter chưa migrate (P2009)
+            CL-->>VC: 200 deleted 0, skipped migration pending
+        else thành công
+            CL-->>VC: 200 số bản ghi đã xóa
+        end
+    end
+
+    Note over VC,DB: KHỐI 4 — cron review-janitor 20h UTC → Inngest reviewJanitor
+    VC->>RJ: GET kèm x-cron-secret
+    alt guard secret fail
+        RJ-->>VC: 401 / 500
+    else hợp lệ
+        RJ->>ING: inngest.send review/janitor.requested
+        alt send lỗi
+            RJ-->>VC: 502 inngest send failed
+        else ok
+            RJ-->>VC: 200 success
+        end
+    end
+    ING->>ING: chạy fn reviewJanitor (retries 2, 5 sweep)
+    ING->>DB: (a) uploadSession hết hạn → expireInflightUpload — UPLOADING sang FAILED + abort R2 multipart
+    ING->>DB: (b) redrive UPLOADED kẹt quá 15p → reconcileStuckUploadedVersion → driveCompletion
+    ING->>MX: (c) PROCESSING kẹt quá 20p → getMuxAsset đối chiếu
+    alt Mux trả 404
+        ING->>DB: applyMuxErrored — Mux không còn asset
+    else asset ready/errored
+        ING->>DB: applyMuxReady / applyMuxErrored (cùng hàm với webhook)
+    else vẫn preparing quá 24h
+        ING->>DB: applyMuxErrored quá thời gian
+        ING->>MX: deleteMuxAsset asset kẹt (chỉ khi đã FAILED)
+    end
+    ING->>DB: (d) webhookEvent processedAt null tuổi 1h..7d → re-send review/mux.event.received
+    ING->>DB: (e) purgeExpiredTrash — xóa Mux + R2 + DB rows trash quá 30 ngày
+
+    Note over MX,DB: KHỐI 5 — webhook Mux → Inngest reviewMuxWebhook
+    MX->>WH: POST body + header Mux-Signature t,v1
+    alt chữ ký HMAC sai hoặc lệch quá 5 phút
+        WH-->>MX: 401 invalid signature (Mux sẽ retry)
+    else JSON hỏng
+        WH-->>MX: 400 bad json
+    else hợp lệ
+        WH->>DB: webhookEvent.create id = Mux event id (ledger)
+        alt P2002 trùng id (redelivery)
+            WH-->>MX: 200 duplicated true — không bắn lại event
+        else ghi mới
+            WH->>ING: inngest.send review/mux.event.received
+            Note right of WH: send lỗi chỉ log — vẫn trả 200, janitor (d) sẽ re-enqueue
+            WH-->>MX: 200 ok
+            ING->>DB: step load-event — webhookEvent.findUnique
+            alt ledger mất hoặc processedAt đã set
+                ING->>ING: return skipped / duplicate
+            else type video.asset.ready
+                ING->>DB: applyMuxReady — flip PROCESSING sang READY + reviewState AWAITING_REVIEW + currentVersionId + clear statusId approved
+                ING->>DB: revokeClientExposureOnNewVersion + syncTaskFromReviewEvent (task sang trạng thái submitted)
+                ING->>DB: notifyReview + notifyManagerOfReviewFlip + auditReviewFeed
+                alt outcome unexpected (version chưa PROCESSING)
+                    ING->>ING: throw để Inngest retry (tối đa 4)
+                end
+            else type video.asset.errored
+                ING->>DB: applyMuxErrored — flip PROCESSING/UPLOADED sang FAILED + errorMessage
+            else type khác
+                ING->>ING: ignored — chỉ log
+            end
+            ING->>DB: step mark-processed — processedAt = now (ghi CUỐI để retry an toàn)
+        end
+    end
+
+    Note over R2,ING: KHỐI 6 — 2 fn Inngest còn lại (nguồn event ngoài F16)
+    ING->>ING: reviewProcessUpload (event review/upload.completed từ driveCompletion)
+    ING->>R2: getObjectRange 4KB — verify magic bytes
+    alt nội dung không phải video
+        ING->>DB: flip PROCESSING sang FAILED — nội dung tệp không hợp lệ
+    else video hợp lệ
+        ING->>R2: ensureColorTaggedInput BT709 + presignGetObject 24h
+        ING->>MX: createMuxAsset inputUrl + passthrough versionId
+        ING->>DB: store muxAssetId (guard PROCESSING + null, xóa asset thừa nếu thua cuộc)
+    end
+    ING->>ING: reviewShareDecision (event review/decision.recorded từ route decision)
+    ING->>DB: load-state — reviewState khớp + version là head, không thì skip superseded
+    alt decision request_changes
+        ING->>DB: syncTaskOnChangesRequested (backup idempotent)
+    else decision approve
+        ING->>DB: task.updateMany clientReview APPROVED (guard isArchived false)
+    end
+    ING->>DB: audit task.client_approved / task.client_changes_requested
+
+%% Nguồn (file:line):
+%% - src/app/api/cron/check-deadline/route.ts:14-30 guard, :38-135 tier 1h/24h, :139-193 Quá hạn, :196-199 catch 500
+%% - src/app/api/cron/send-digest/route.ts:11-27 guard, :31-38 HOURLY + DAILY utcHour===1
+%% - src/lib/notification-email.ts:464-569 sendDigestEmails (quiet hours :480, take 50 :492, emailSentAt :553)
+%% - src/lib/email.ts:26 sendEmail (Resend)
+%% - src/app/api/cron/cleanup-notifications/route.ts:35-49; auth-cleanup/route.ts:47-64 (safeEqual :19);
+%%   hard-delete-workspaces/route.ts:47-83 (P2009 skip :55-58); hard-delete-profiles/route.ts:44-89
+%% - src/app/api/cron/review-janitor/route.ts:31 send JANITOR_REQUESTED, :36 502
+%% - src/lib/review/inngest.ts:526-638 reviewJanitor 5 step (a-e), :463-516 reconcileProcessingVersion
+%% - src/app/api/webhooks/mux/route.ts:54-57 401, :62-64 400, :74-79 ledger P2002, :87-93 send + log-only fail
+%% - src/lib/review/inngest.ts:259-332 reviewMuxWebhook (unexpected throw :302-304, mark-processed :323-329)
+%% - src/lib/review/inngest.ts:341-456 reviewProcessUpload; :657-749 reviewShareDecision (superseded :675-683)
+%% - src/lib/review/upload-service.ts:378-444 driveCompletion phát UPLOAD_COMPLETED

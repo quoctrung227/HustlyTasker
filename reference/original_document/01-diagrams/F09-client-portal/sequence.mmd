@@ -1,0 +1,106 @@
+sequenceDiagram
+    autonumber
+    participant KH as Khách hàng (không account, token = credential)
+    participant Page as share/[token]/page.tsx (RSC)
+    participant UI as SharePortalClient → DeskApp
+    participant Auth as resolveShareToken (share-link-auth.ts)
+    participant Act as share-portal-actions.ts
+    participant PDF as api/share/[token]/invoices/[id]/pdf
+    participant DB as Prisma (Neon Postgres)
+    participant Noti as notifyStaff + Resend
+
+    KH->>Page: GET /share/[token]
+    Page->>Auth: resolveShareToken(token, recordAccess true)
+    Auth->>DB: limitDb per IP → clientShareLink.findUnique(tokenHash)
+    alt token sai format / revokedAt / expiresAt / client-profile không ACTIVE / rate-limited
+        Auth-->>Page: null (uniform failure)
+        Page-->>KH: notFound() — 404 giống hệt mọi lỗi
+    else token hợp lệ
+        Auth->>DB: client.findMany (name-path scope) + workspace.findMany
+        Auth-->>Page: ShareLinkScope (clientIds, workspaceIds)
+        Page->>Act: getShareSnapshot(token)
+        Act->>DB: task.findMany + invoice.findMany (whitelist select)
+        Act->>DB: reviewAsset.findMany (READY) + findClientReviewSlugs
+        Act-->>Page: tasks (clientStatus derive, assignee null) + invoices (bank whitelist)
+        Page->>DB: audit share_link.accessed
+        Page-->>KH: render SharePortalClient
+    end
+
+    KH->>UI: bấm Approve deliverable
+    UI->>Act: approveDeliverableViaToken(token, taskId)
+    Act->>Auth: resolveShareToken(token) — re-resolve mỗi action
+    Act->>DB: findScopedTask (clientId + workspaceId in scope, isArchived false)
+    alt scope null hoặc task ngoài scope
+        Act-->>UI: error This link is invalid or the deliverable no longer exists
+    else đã Hoàn tất / clientReview APPROVED
+        Act-->>UI: error already been approved
+    else chưa ở phase khách — isClientFacingPhase false
+        Act-->>UI: error not currently awaiting your review
+    else đủ điều kiện
+        Act->>DB: task.updateMany pin status+clientReview+tenancy → status Hoàn tất, clientReview APPROVED
+        alt count = 0 (admin vừa hủy / cut mới đè)
+            Act-->>UI: error just changed, please refresh
+        else count = 1
+            Act->>Noti: notifyStaff assignee + assignedBy (Khách đã duyệt)
+            Act->>DB: audit task.client_approved (viaShareLinkId, ip)
+            Act-->>UI: success true
+        end
+    end
+
+    KH->>UI: Request changes + feedback
+    UI->>Act: requestChangesViaToken(token, taskId, feedback)
+    Act->>Act: sanitizeClientText(feedback)
+    alt feedback rỗng sau sanitize
+        Act-->>UI: error Please describe the changes
+    else hợp lệ và qua cùng các gate như approve
+        Act->>DB: task.updateMany → status Revision, clientReview CHANGES, clientFeedback
+        Act->>Noti: notifyStaff (Khách yêu cầu chỉnh sửa)
+        Act->>DB: audit task.client_changes_requested
+        Act-->>UI: success true
+    end
+
+    KH->>UI: gửi yêu cầu mới (wizard)
+    UI->>Act: submitClientRequestViaToken(token, input)
+    Act->>Auth: resolveShareToken(token)
+    Act->>Act: rateLimit client-submit-request 20/h
+    alt rate-limited
+        Act-->>UI: error Too many requests
+    else workspaceId/clientId ngoài scope hoặc link raw không hợp lệ
+        Act-->>UI: error Invalid period / Invalid brand / link invalid
+    else hợp lệ
+        Act->>DB: clientTaskRequest.create (status NEW, viaShareLinkId)
+        alt DB create lỗi
+            Act-->>UI: error Could not send your request
+        else tạo xong
+            Act->>Noti: notifyProfileAdminsOfRequest (OWNER-ADMIN, TASK_CLIENT_SUBMITTED)
+            Act->>DB: audit request.client_submitted
+            Act-->>UI: success + requestId
+        end
+    end
+
+    KH->>PDF: GET invoice PDF (invoicePdfUrl)
+    PDF->>Auth: resolveShareToken(token)
+    alt scope null
+        PDF-->>KH: 404 Not found
+    else limitDb share-invoice-pdf 10/300s vượt mức
+        PDF-->>KH: 429 Too many requests + Retry-After
+    else invoice.findFirst ngoài scope (clientIds + workspaceIds)
+        PDF-->>KH: 404 Not found (uniform)
+    else invoice có filePath và không VOID
+        PDF->>DB: audit share_link.invoice_downloaded (stored)
+        PDF-->>KH: 302 redirect file gốc
+    else render lại
+        PDF->>PDF: generateInvoicePDF (headless Chromium)
+        alt render fail
+            PDF-->>KH: 500 Could not build the PDF
+        else thành công
+            PDF->>DB: audit share_link.invoice_downloaded (generated)
+            PDF-->>KH: 200 application/pdf, Cache-Control private no-store
+        end
+    end
+
+    %% Nguồn: src/app/share/[token]/page.tsx:16-53 · src/lib/share-link-auth.ts:73-281
+    %% src/actions/share-portal-actions.ts: getShareSnapshot:165, findScopedTask:480,
+    %%   approveDeliverableViaToken:765-835, requestChangesViaToken:1011-1075,
+    %%   submitClientRequestViaToken:1350-1452, notifyStaff:705, notifyProfileAdminsOfRequest:1287
+    %% src/app/api/share/[token]/invoices/[id]/pdf/route.ts:51-188

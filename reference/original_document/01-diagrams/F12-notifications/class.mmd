@@ -1,0 +1,192 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class User {
+        +String id
+        +String email
+        +String username
+        +String nickname
+    }
+
+    class Notification {
+        +String id
+        +String userId
+        +NotificationType type
+        +String title
+        +String body
+        +Boolean isRead
+        +Boolean isArchived
+        +String taskId
+        +String actorId
+        +Json metadata
+        +DateTime pushSentAt
+        +DateTime emailSentAt
+        +DateTime createdAt
+    }
+
+    class NotificationType {
+        <<enumeration>>
+        TASK_ASSIGNED
+        TASK_UNASSIGNED
+        TASK_STATUS_CHANGED
+        TASK_DEADLINE_APPROACHING
+        TASK_OVERDUE
+        TASK_COMMENT
+        TASK_STARTED
+        TASK_DELIVERED
+        WORKSPACE_INVITATION_ACCEPTED
+        WORKSPACE_INVITATION_DECLINED
+        WORKSPACE_INVITATION_RECEIVED
+        VIDEO_VERSION_UPLOADED
+        VIDEO_COMMENT_NEW
+        VIDEO_REVIEW_APPROVED
+        VIDEO_CHANGES_REQUESTED
+        TASK_CLIENT_SUBMITTED
+        COMMENT_ASSIGNED
+        COMMENT_RESOLVED
+    }
+
+    class NotificationPreference {
+        +String id
+        +String userId
+        +Boolean emailEnabled
+        +String emailDigestMode
+        +Int quietHoursStart
+        +Int quietHoursEnd
+    }
+
+    class PushSubscription {
+        +String id
+        +String userId
+        +String endpoint
+        +String p256dh
+        +String auth
+        +String userAgent
+    }
+
+    class NotificationActions {
+        <<server actions>>
+        +createNotificationInternal(params)
+        +createBulkNotificationsInternal(userIds, params)
+        +createAndBroadcastNotifications(userIds, params)
+        +getNotifications(cursor, limit, unreadOnly)
+        +getUnreadNotificationCount()
+        +markNotificationRead(id)
+        +markAllNotificationsRead()
+        +archiveNotification(id)
+        +clearAllArchived()
+        +getMyNotificationPreferences()
+        +updateMyNotificationPreferences(params)
+    }
+
+    class PushActions {
+        <<server actions>>
+        +getVapidPublicKey()
+        +savePushSubscription(sub)
+        +deletePushSubscription(endpoint)
+    }
+
+    class NotificationEmailLib {
+        <<lib notification-email.ts>>
+        +maybeSendNotificationEmail(notification, email)
+        +sendDigestEmails(mode)
+        -isInQuietHours(start, end)
+        -claimForEmail(notificationId)
+        -buildTemplateParams(ctx)
+        -BYPASS_CONFIG
+    }
+
+    class WebPushLib {
+        <<lib web-push.ts>>
+        +isWebPushConfigured()
+        +sendWebPushToUser(userId, payload)
+    }
+
+    class NotificationBroadcastLib {
+        <<lib notification-broadcast.ts>>
+        +broadcastNotificationToUser(userId, payload)
+        +broadcastToTopic(topic, event, payload)
+    }
+
+    class NotificationBell {
+        <<client component>>
+        -unreadCount
+        -incoming
+        +handleEvent(event, payload)
+    }
+
+    class NotificationPanel {
+        <<client component>>
+        -items
+        -tab
+        +load(reset)
+        +handleMarkAllRead()
+    }
+
+    class PushNotificationToggle {
+        <<client component>>
+        +enable()
+        +disable()
+    }
+
+    class SendDigestCronRoute {
+        <<api route send-digest>>
+        +GET(request)
+    }
+
+    class CheckDeadlineCronRoute {
+        <<api route check-deadline>>
+        +GET(request)
+    }
+
+    class UnsubscribeRoute {
+        <<api route unsubscribe>>
+        +GET(request)
+    }
+
+    User "1" o-- "*" Notification : userId
+    User "1" o-- "0..1" NotificationPreference : userId unique
+    User "1" o-- "*" PushSubscription : userId
+    Notification --> NotificationType : type
+
+    NotificationBell *-- NotificationPanel : mở panel
+    NotificationPanel *-- PushNotificationToggle : header
+    NotificationBell ..> NotificationActions : getUnreadNotificationCount
+    NotificationPanel ..> NotificationActions : getNotifications markAllRead
+    PushNotificationToggle ..> PushActions : save delete subscription
+
+    NotificationActions ..> Notification : create read update delete
+    NotificationActions ..> NotificationPreference : upsert preference
+    NotificationActions ..> NotificationEmailLib : maybeSendNotificationEmail
+    NotificationActions ..> WebPushLib : sendWebPushToUser
+    NotificationActions ..> NotificationBroadcastLib : broadcast realtime
+
+    PushActions ..> PushSubscription : upsert deleteMany
+    PushActions ..> WebPushLib : isWebPushConfigured
+    WebPushLib ..> PushSubscription : findMany prune dead
+
+    NotificationEmailLib ..> NotificationPreference : đọc preference
+    NotificationEmailLib ..> Notification : claim emailSentAt
+
+    SendDigestCronRoute ..> NotificationEmailLib : sendDigestEmails
+    CheckDeadlineCronRoute ..> NotificationActions : createNotificationInternal
+    CheckDeadlineCronRoute ..> NotificationBroadcastLib : broadcastNotificationToUser
+    UnsubscribeRoute ..> NotificationPreference : upsert emailEnabled false
+
+%% Nguồn (file thật trong repo):
+%% - Notification / NotificationPreference / PushSubscription / enum NotificationType: prisma/schema.prisma:1241-1277, :253-264, :1213-1239
+%% - NotificationActions: src/actions/notification-actions.ts:24,70,86,112,165,176,197,209,228,243,264
+%% - PushActions: src/actions/push-actions.ts:14,18,49
+%% - NotificationEmailLib: src/lib/notification-email.ts:44 (BYPASS_CONFIG), :93,:107,:125,:323 (maybeSendNotificationEmail), :464 (sendDigestEmails)
+%% - WebPushLib: src/lib/web-push.ts:18,35
+%% - NotificationBroadcastLib: src/lib/notification-broadcast.ts:19,46
+%% - NotificationBell: src/components/notifications/NotificationBell.tsx:18
+%% - NotificationPanel: src/components/notifications/NotificationPanel.tsx:23
+%% - PushNotificationToggle: src/components/notifications/PushNotificationToggle.tsx
+%% - Cron routes: src/app/api/cron/send-digest/route.ts:11, src/app/api/cron/check-deadline/route.ts:14
+%% - Unsubscribe: src/app/api/notifications/unsubscribe/route.ts:41
+%% - pushSentAt: có trong schema nhưng KHÔNG được ghi ở đâu trong src/ (field dự phòng)

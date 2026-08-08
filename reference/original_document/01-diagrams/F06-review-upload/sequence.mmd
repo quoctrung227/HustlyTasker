@@ -1,0 +1,112 @@
+sequenceDiagram
+    autonumber
+    actor Editor as Editor / Admin
+    participant UI as TeamBrowser / TaskReviewUploadSection
+    participant Eng as uploadEngine (upload-engine.ts)
+    participant API as Route /api/review/uploads/* (withReviewRoute)
+    participant Svc as upload-service.ts
+    participant DB as Prisma / Neon
+    participant R2 as Cloudflare R2
+    participant Mux as Mux
+    participant WH as POST /api/webhooks/mux
+    participant Ing as Inngest (/api/inngest)
+
+    Editor->>UI: chọn hoặc kéo-thả file video
+    UI->>Eng: uploadEngine.enqueue(file, target)
+    Eng->>Eng: validateFileMeta + sniffContent (magic bytes)
+    alt file lỗi (EMPTY / UNSUPPORTED_TYPE / TOO_LARGE / BAD_CONTENT)
+        Eng-->>UI: status failed, không gọi server
+    else file hợp lệ
+        Eng->>API: POST initiate hoặc task-upload/initiate (Idempotency-Key)
+        API->>Svc: initiateUpload / initiateTaskUpload
+        Svc->>Svc: requireReviewAccess(workspaceId)
+        alt chưa đăng nhập hoặc sai workspace
+            Svc-->>Eng: 401 UNAUTHORIZED / 403 FORBIDDEN (ReviewAccessError)
+        else body sai schema hoặc file không nhận
+            Svc-->>Eng: 400 VALIDATION_ERROR / 415 UNSUPPORTED_MEDIA_TYPE / 413 FILE_TOO_LARGE
+        else task-upload nhưng editor không phải assignee
+            Svc-->>Eng: 403 FORBIDDEN (chỉ bàn giao task được giao)
+        else OK
+            Svc->>DB: create ReviewAsset + ReviewVersion (pipelineStatus UPLOADING) + UploadSession
+            Svc->>R2: createMultipart + presignUploadPart x N
+            Svc-->>Eng: 201 uploadSessionId + danh sách presigned part URL
+        end
+    end
+
+    loop từng part (4 part/file, 8 in-flight, retry tối đa 5 lần backoff)
+        Eng->>R2: XHR PUT part trực tiếp lên R2
+        R2-->>Eng: 200 + ETag
+    end
+    alt part trả 403 (presigned URL hết hạn)
+        Eng->>API: re-initiate cùng Idempotency-Key để re-sign URL
+    else part lỗi mạng / 5xx quá 5 lần
+        Eng-->>UI: failFile NETWORK, hiện nút Thử lại
+    end
+
+    Eng->>API: POST uploads/:uploadSessionId/complete kèm parts + etags
+    API->>Svc: completeUpload(uploadSessionId, parts)
+    Svc->>DB: claim atomic UPLOADING sang UPLOADED (updateMany)
+    Svc->>R2: completeMultipart hoặc headObject (single-part)
+    alt R2 finalize lỗi
+        Svc->>DB: revertFinalizeClaim UPLOADED về UPLOADING
+        Svc-->>Eng: 502 UPSTREAM_ERROR (provider r2)
+    else dung lượng thật vượt cap (headObject)
+        Svc->>R2: deleteObject
+        Svc->>DB: ReviewVersion FAILED
+        Svc-->>Eng: 413 FILE_TOO_LARGE
+    else session hết hạn / đã abort
+        Svc-->>Eng: 410 UPLOAD_EXPIRED / 409 STATE_INVALID
+    else OK
+        Svc->>DB: UploadSession.completedAt + driveCompletion
+        Note over Svc,DB: IMAGE sang READY ngay, VIDEO sang PROCESSING
+        Svc->>Ing: inngest.send review/upload.completed (chỉ video)
+        Svc-->>Eng: uploadStatus processing hoặc ready
+    end
+
+    loop poll 3s tối đa 1h
+        Eng->>API: GET uploads/:uploadSessionId (getUploadStatus)
+        API-->>Eng: uploadStatus + version DTO
+    end
+
+    Ing->>Ing: reviewProcessUpload, step verify-content (magic bytes từ R2)
+    alt nội dung không phải video
+        Ing->>DB: ReviewVersion FAILED (magic-bytes)
+    else OK
+        Ing->>R2: ensureColorTaggedInput + presignGetObject 24h
+        Ing->>Mux: createMuxAsset(inputUrl, passthrough = versionId)
+        Mux-->>Ing: muxAssetId
+        Ing->>DB: lưu muxAssetId (guard PROCESSING + null)
+    end
+
+    Mux->>WH: webhook video.asset.ready hoặc video.asset.errored (Mux-Signature)
+    alt chữ ký HMAC sai hoặc lệch quá 5 phút
+        WH-->>Mux: 401 invalid signature (Mux sẽ retry)
+    else JSON hỏng
+        WH-->>Mux: 400 bad json
+    else hợp lệ
+        WH->>DB: WebhookEvent.create (P2002 trùng thì ack, không refire)
+        WH->>Ing: inngest.send review/mux.event.received
+        WH-->>Mux: 200 ok
+    end
+
+    Ing->>DB: reviewMuxWebhook, step load-event (ledger WebhookEvent)
+    alt đã processedAt (duplicate)
+        Ing->>Ing: skip
+    else video.asset.ready
+        Ing->>DB: applyMuxReady, flip PROCESSING sang READY + currentVersionId + notify uploader
+    else video.asset.errored
+        Ing->>DB: applyMuxErrored, flip sang FAILED + errorMessage
+    end
+    Ing->>DB: mark WebhookEvent.processedAt
+
+    Eng->>API: poll thấy ready
+    Eng-->>UI: status done, card Sẵn sàng để review
+
+%% Nguồn (file:line):
+%% - enqueue/validate/PUT/complete/poll: src/lib/review/upload-engine.ts:298,113,518,744,817
+%% - POST initiate: src/app/api/review/uploads/initiate/route.ts:28 · task-upload: src/app/api/review/task-upload/initiate/route.ts:22
+%% - complete route: src/app/api/review/uploads/[uploadSessionId]/complete/route.ts:22 · GET poll: [uploadSessionId]/route.ts:16 · abort: abort/route.ts:15
+%% - initiateUpload: src/lib/review/upload-service.ts:127 · completeUpload: :463 · driveCompletion: :378 · getUploadStatus: :600 · initiateTaskUpload: :649 (403 assignee :674)
+%% - guard: withReviewRoute src/lib/review/route-auth.ts:21 · requireReviewAccess src/lib/review/access.ts:32
+%% - Mux webhook: src/app/api/webhooks/mux/route.ts:50 (verify :23, 401 :57, 400 :64, ledger :74, send :87)
+%% - Inngest: src/lib/review/inngest.ts:341 reviewProcessUpload (verify-content :379, reject :390, create-mux-asset :423), :259 reviewMuxWebhook (applyMuxReady :64, applyMuxErrored :213, mark-processed :323)

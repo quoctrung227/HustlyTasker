@@ -1,0 +1,113 @@
+sequenceDiagram
+    autonumber
+    actor Staff as Staff Editor
+    actor Admin as Admin
+    participant MW as middleware.ts
+    participant PT as PresenceTracker.tsx
+    participant LPage as dashboard/page.tsx + Leaderboard.tsx
+    participant LBtn as RefreshLeaderboardButton.tsx
+    participant APage as admin/analytics/page.tsx
+    participant LPB as LivePresenceBoard.tsx
+    participant TA as tracking-actions.ts
+    participant AA as analytics-actions.ts
+    participant LA as leaderboard-actions.ts
+    participant SEC as lib/security.ts
+    participant DB as Prisma Neon
+
+    rect rgb(235, 245, 255)
+    note over Staff, DB: A. Presence tracking - heartbeat 30s
+    Staff->>MW: request trang bất kỳ
+    MW-->>Staff: set cookie tracking_session_id maxAge 30 phút
+    Staff->>PT: mount trong app/[workspaceId]/layout.tsx dòng 176
+    loop mỗi 30s PING_INTERVAL_MS
+        PT->>TA: pingHeartbeat status ONLINE hoặc AWAY
+        TA->>TA: getSession lấy userId từ session - bỏ qua arg client
+        alt không có session đăng nhập
+            TA-->>PT: success false reason Unauthenticated
+        else có session
+            TA->>DB: userPresence.upsert status + lastHeartbeat
+            opt có cookie tracking_session_id
+                TA->>DB: session.upsert ip country city endTime
+            end
+            TA-->>PT: success true
+        end
+    end
+    Staff->>TA: trackEvent eventType featureName
+    TA->>TA: push vào eventBuffer in-memory
+    alt buffer đủ 5 event hoặc timeout 1s
+        TA->>DB: event.createMany batch
+        alt lỗi DB khi flush
+            TA->>TA: console.error - mất cả batch event
+        end
+    end
+    end
+
+    rect rgb(240, 255, 240)
+    note over Admin, DB: B. Admin xem analytics + live presence
+    Admin->>APage: GET /[workspaceId]/admin/analytics
+    APage->>SEC: verifyWorkspaceAccess workspaceId ADMIN
+    alt throw SECURITY_VIOLATION không đủ quyền
+        APage-->>Admin: redirect về /[workspaceId]/dashboard
+    else guard pass
+        APage->>AA: getAnalyticsData workspaceId
+        AA->>SEC: verifyWorkspaceAccess ADMIN lần 2
+        alt guard fail hoặc lỗi DB
+            AA-->>APage: catch nuốt lỗi - trả mảng rỗng
+        else ok
+            AA->>DB: task.groupBy assigneeId status in Hoàn tất Revision
+            AA->>DB: errorLog.groupBy userId sum calculatedScore
+            AA-->>APage: xếp hạng S A B C D theo errorRate
+        end
+        APage-->>Admin: AnalyticsTable + LivePresenceBoard
+        loop mỗi 15s fetchData
+            LPB->>TA: getLivePresence
+            TA->>TA: getSession profileId + callerIsClient
+            alt thiếu sessionProfileId hoặc caller là CLIENT
+                TA-->>LPB: trả mảng rỗng
+            else hợp lệ
+                TA->>DB: userPresence.findMany lastHeartbeat trong 5 phút + user profileId
+                TA-->>LPB: danh sách ONLINE AWAY + lastSeen
+            end
+        end
+        Admin->>APage: mở staff/[userId]
+        APage->>AA: getUserPerformanceScore + getStaffErrorLogsDetail
+        alt caller không phải admin và không phải chính user đó
+            AA-->>APage: trả null hoặc mảng rỗng
+        else được phép
+            AA->>DB: task.count + errorLog.aggregate + errorLog.findMany include error task
+            AA-->>APage: rank + chi tiết lỗi theo task
+        end
+    end
+    end
+
+    rect rgb(255, 248, 235)
+    note over Admin, DB: C. Leaderboard dashboard + refresh cache
+    Staff->>LPage: GET /[workspaceId]/dashboard
+    LPage->>DB: getLeaderboardData qua unstable_cache tag leaderboard revalidate 86400
+    DB-->>LPage: task.groupBy + errorLog.groupBy + user.findMany role USER
+    LPage-->>Staff: podium top 3 + rank S đến D
+    Admin->>LBtn: bấm nút Làm mới dữ liệu
+    alt đang cooldown 30s
+        LBtn-->>Admin: toast Vui lòng đợi 30 giây
+    else cho phép
+        LBtn->>LA: refreshLeaderboardAction
+        LA->>LA: revalidateTag leaderboard
+        LA-->>LBtn: success true
+        LBtn-->>Admin: toast Đã cập nhật bảng xếp hạng
+    end
+    end
+
+%% NGUỒN (file:line):
+%% - src/middleware.ts:129-136 cookie tracking_session_id (httpOnly, maxAge 30*60).
+%% - src/components/tracking/PresenceTracker.tsx:31-44 ping đầu + loop 30s, AWAY sau 15 phút.
+%% - src/actions/tracking-actions.ts:91-148 pingHeartbeat (AUDIT R1 fix #16: userId từ session),
+%%   :58-86 trackEvent + eventBuffer FLUSH_THRESHOLD 5 / timeout 1s, :33-53 flushEvents catch lỗi,
+%%   :311-354 getLivePresence (lọc 5 phút, guard profileId + callerIsClient HT-034).
+%% - src/app/[workspaceId]/admin/analytics/page.tsx:16-20 guard ADMIN redirect dashboard, :22 getAnalyticsData.
+%% - src/actions/analytics-actions.ts:9 guard ADMIN, :92-94 catch trả [], :16 status in Hoàn tất/Revision,
+%%   :145-199 getUserPerformanceScore (guard :147-148), :201-259 getStaffErrorLogsDetail (guard :203-204).
+%% - src/components/admin/analytics/LivePresenceBoard.tsx:38-42 poll 15s.
+%% - src/components/dashboard/Leaderboard.tsx:10-125 getLeaderboardData unstable_cache tags ['leaderboard'].
+%% - src/components/dashboard/RefreshLeaderboardButton.tsx:14-27 cooldown 30s + toast.
+%% - src/actions/leaderboard-actions.ts:5-9 refreshLeaderboardAction revalidateTag('leaderboard').
+%% - src/lib/security.ts:38-68 verifyWorkspaceAccess throw SECURITY_VIOLATION.

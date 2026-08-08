@@ -1,0 +1,73 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Đang thực hiện" as DangThucHien
+    state "Revision" as Revision
+    state "Đã nộp video (nội bộ) — A2" as A2
+    state "Đang sửa feedback (nội bộ) — A3" as A3
+    state "Đã sửa feedback (nội bộ) — A4" as A4
+    state "Đã gửi video (khách) — A5" as A5
+    state "Đã nhận feedback (khách) — A6" as A6
+    state "Đã sửa feedback (khách) — A7" as A7
+    state "Hoàn tất" as HoanTat
+    state "Đã hủy" as DaHuy
+
+    [*] --> DangThucHien : editor nhận task
+
+    DangThucHien --> A2 : F7 Mux READY (Inngest syncTaskFromReviewEvent)
+    Revision --> A2 : F7 Mux READY (nộp lại bản sửa)
+    A4 --> A2 : F7 re-upload trong vòng nội bộ
+    A5 --> A2 : revokeClientExposureOnNewVersion (head mới khi khách đang giữ link)
+
+    A2 --> A3 : F8 markFeedbackDone (admin chốt phiên feedback)
+    A4 --> A3 : F8 mở vòng feedback mới (multi-round)
+    A3 --> A4 : F9 confirmFixDone (editor xác nhận sửa, vòng nội bộ)
+
+    A2 --> A5 : F10 approveInternalAndSendToClient (admin duyệt gửi khách)
+    A4 --> A5 : F10 duyệt sau vòng sửa nội bộ
+    A7 --> A5 : F10 re-send sau khi sửa feedback khách
+
+    A5 --> A6 : khách Request changes trên /r/ (syncTaskOnChangesRequested)
+    A6 --> A7 : F9 confirmFixDone (editor xác nhận sửa, vòng khách)
+
+    DangThucHien --> Revision : khách Request changes khi chưa gửi (fallback legacy, giữ deadline)
+
+    A5 --> HoanTat : confirmTaskHoanTat (asset ở status Hoàn tất, banner FR-D02)
+    A2 --> HoanTat : confirmTaskHoanTat (đường nội bộ)
+    DangThucHien --> DaHuy : admin hủy/lưu trữ task (manual)
+
+    HoanTat --> [*]
+    DaHuy --> [*]
+
+    note right of A6
+        A6 chỉ vào được từ A5
+        (STATUS_TRANSITIONS).
+        Khách bấm request-changes lặp lại
+        khi đang A6/A7 = no-op,
+        không rơi về Revision.
+    end note
+
+    note right of HoanTat
+        Terminal (isTerminalStatus).
+        Sự kiện review (guest decision,
+        webhook Mux trễ) KHÔNG BAO GIỜ
+        auto-flip task terminal —
+        chỉ staff đổi tay mới mở lại.
+    end note
+
+%% Nguồn status THẬT (string trong code, không bịa):
+%% VALID_TASK_STATUSES: src/lib/task-statuses.ts:18-39 —
+%%   'Đang thực hiện' :22 · 'Đã nộp video (nội bộ)' A2 :26 · 'Đang sửa feedback (nội bộ)' A3 :27
+%%   'Đã sửa feedback (nội bộ)' A4 :28 · 'Đã gửi video (khách)' A5 :29 · 'Đã nhận feedback (khách)' A6 :30
+%%   'Đã sửa feedback (khách)' A7 :31 · 'Revision' :32 · 'Hoàn tất' :37 · 'Đã hủy' :38
+%% STATUS_TRANSITIONS (predecessor guard cho auto-transition): src/lib/task-statuses.ts:199-218
+%%   A2 ← ['Đang thực hiện','Revision','Đã sửa feedback (nội bộ)','Đã gửi video (khách)'] :208
+%%   A3 ← [A2, A4] :213 · A4 ← [A3] :214 · A5 ← [A4, A2, A7] :215 · A6 ← [A5] :216 · A7 ← [A6] :217
+%% Hành động: F8 markFeedbackDone src/lib/review/task-sync.ts:272 · F9 confirmFixDone :298 (A3→A4 hoặc A6→A7 :305-310)
+%%   F10 approveInternalAndSendToClient :377 · guest request-changes syncTaskOnChangesRequested :158
+%%   (A5→A6, còn lại fallback 'Revision' giữ deadline :181-186) · confirmTaskHoanTat :26 (guard asset approved :28-34)
+%%   revokeClientExposureOnNewVersion :452 (A5/A6/A7 → A2 khi có head mới :476-494)
+%% Terminal guard: isTerminalStatus src/lib/task-statuses.ts:156-158 · task-sync.ts:109-116 (skipped_terminal)
+%% REVIEW_STATUS_MAP (nghĩa → giá trị status): src/lib/review/status-map.ts:8-29

@@ -1,0 +1,169 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class Task {
+        +String id
+        +String title
+        +String status
+        +DateTime deadline
+        +Decimal value
+        +Decimal wageVND
+        +Decimal jobPriceUSD
+        +Decimal profitVND
+        +Decimal exchangeRate
+        +String assigneeId
+        +String assignedById
+        +Int clientId
+        +String workspaceId
+        +String profileId
+        +Int version
+        +Boolean isArchived
+        +Boolean isPenalized
+        +String productLink
+        +ClaimSource claimSource
+        +DateTime claimedAt
+    }
+
+    class TaskRawFootage {
+        +String id
+        +String taskId
+        +RawFootageDisplayType displayType
+        +Json veloxMap
+        +Json manualGraph
+        +String sourceFolderUrl
+        +DateTime scannedAt
+    }
+
+    class PerformanceMetric {
+        +String userId
+        +Int month
+        +Int year
+        +Decimal revenue
+        +Int internalRevisionCount
+        +Int clientRevisionCount
+        +Float score
+        +String classification
+    }
+
+    class User {
+        +String id
+        +String username
+        +String nickname
+        +String email
+        +UserRole role
+    }
+
+    class Client {
+        +Int id
+        +String name
+        +String profileId
+    }
+
+    class DashboardActionWrapper {
+        +handleAddTask(data, options)
+    }
+    class McAddScreen {
+        +render()
+    }
+    class StatusCell {
+        +onChangeStatus()
+    }
+    class DesktopTaskTable {
+        +onAssign()
+    }
+
+    class AdminActions {
+        +createTask(formData, workspaceId)
+        +updateTaskManager(taskId, managerId, workspaceId)
+    }
+    class VeloxBatchActions {
+        +createTasksFromBatch(data, workspaceId)
+    }
+    class RawFootageActions {
+        +saveRawFootageMap(taskId, args)
+        +saveHookGraph(taskId, graph)
+    }
+    class TaskManagementActions {
+        +deleteTask(id, workspaceId)
+        +updateTask(id, data, workspaceId)
+        +assignTask(taskId, assignmentId, workspaceId)
+    }
+    class TaskActions {
+        +updateTaskStatus(id, newStatus, workspaceId, newNotes, currentVersion)
+        +getCancelledTasks(workspaceId)
+        +restoreCancelledTask(taskId, workspaceId)
+    }
+
+    class TaskStatusesLib {
+        +VALID_TASK_STATUSES
+        +TASK_STATUS_META
+        +SALARY_PENDING_STATUSES
+        +TERMINAL_STATUSES
+        +STATUS_TRANSITIONS
+        +isValidStatus(s)
+        +isTerminalStatus(s)
+        +isClientFacingStatus(s)
+        +canAutoTransition(current, target)
+    }
+    class FsmConfig {
+        +validateTransition(current, target)
+    }
+    class SecurityLib {
+        +verifyWorkspaceAccess(workspaceId, role)
+    }
+    class CronCheckDeadline {
+        +GET()
+    }
+    class EmailLib {
+        +sendEmail(to, subject, html)
+    }
+    class NotificationActions {
+        +createNotificationInternal(input)
+    }
+
+    Task o-- User : assignee
+    Task o-- User : assignedBy
+    Task o-- Client : client
+    Task *-- TaskRawFootage : rawFootage 1-1
+    PerformanceMetric o-- User : user
+
+    DashboardActionWrapper ..> AdminActions : 1 video createTask
+    DashboardActionWrapper ..> VeloxBatchActions : N video Velox batch
+    DashboardActionWrapper ..> RawFootageActions : saveHookGraph sau create
+    McAddScreen ..> DashboardActionWrapper : shell MC dùng chung form
+    StatusCell ..> TaskActions : đổi status
+    DesktopTaskTable ..> TaskManagementActions : giao task
+
+    AdminActions ..> SecurityLib : guard ADMIN
+    VeloxBatchActions ..> SecurityLib : guard ADMIN
+    TaskManagementActions ..> SecurityLib : guard ADMIN
+    TaskActions ..> SecurityLib : guard MEMBER + admin check
+    TaskActions ..> TaskStatusesLib : isValidStatus terminal client-facing
+    TaskActions ..> FsmConfig : validateTransition luôn true
+    TaskActions ..> EmailLib : email Resend GD3 GD4
+    TaskActions ..> NotificationActions : in-app notify
+    AdminActions ..> EmailLib : email taskAssigned
+    AdminActions ..> Task : prisma create
+    VeloxBatchActions ..> Task : prisma transaction create N
+    TaskManagementActions ..> Task : prisma update assignee status
+    TaskActions ..> Task : prisma update status version
+    RawFootageActions ..> TaskRawFootage : upsert veloxMap manualGraph
+    CronCheckDeadline ..> TaskStatusesLib : whitelist OVERDUE_ELIGIBLE
+    CronCheckDeadline ..> Task : set status Quá hạn
+
+%% Nguồn (file:line, repo root):
+%% Task / TaskRawFootage / PerformanceMetric: prisma/schema.prisma:331,432,697
+%% createTask: src/actions/admin-actions.ts:85 (status tạo: :232)
+%% createTasksFromBatch: src/actions/velox-batch-actions.ts:102 (status: :218)
+%% saveRawFootageMap / saveHookGraph: src/actions/raw-footage-actions.ts:215,351
+%% deleteTask / updateTask / assignTask: src/actions/task-management-actions.ts:12,35,118
+%% updateTaskStatus / getCancelledTasks / restoreCancelledTask: src/actions/task-actions.ts:17,509,553
+%% task-statuses: src/lib/task-statuses.ts:18,84,116,148,199
+%% fsm-config (FSM disabled): src/lib/fsm-config.ts:122-125
+%% verifyWorkspaceAccess: src/lib/security.ts
+%% cron: src/app/api/cron/check-deadline/route.ts:41,158
+%% UI: src/components/dashboard/DashboardActionWrapper.tsx:290,353,384 - src/app/[workspaceId]/mc/add/page.tsx:12 - src/components/tasks/cells/StatusCell.tsx - src/components/DesktopTaskTable.tsx

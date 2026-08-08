@@ -1,0 +1,224 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class User {
+        +String id
+        +String username
+        +String displayName
+        +String nickname
+        +String role
+        +String profileId
+    }
+
+    class Task {
+        +String id
+        +String status
+        +String assigneeId
+        +Decimal value
+    }
+
+    class UserPresence {
+        +String userId
+        +String status
+        +DateTime lastHeartbeat
+    }
+
+    class Session {
+        +String id
+        +String userId
+        +String workspaceId
+        +String ipAddress
+        +String countryCode
+        +String city
+        +DateTime startTime
+        +DateTime endTime
+        +Int durationSec
+    }
+
+    class Event {
+        +String id
+        +String sessionId
+        +String userId
+        +String eventType
+        +String featureName
+        +Json metadata
+        +DateTime createdAt
+    }
+
+    class ErrorDictionary {
+        +String id
+        +String code
+        +String description
+        +Int severity
+        +Int penalty
+        +Boolean isActive
+    }
+
+    class ErrorLog {
+        +String id
+        +String taskId
+        +String userId
+        +String errorId
+        +Int frequency
+        +Int calculatedScore
+        +String detectedById
+        +String workspaceId
+    }
+
+    class MonthlyRank {
+        +String id
+        +String userId
+        +Int month
+        +Int year
+        +String workspaceId
+        +Int totalTasks
+        +Int totalPenalty
+        +Float errorRate
+        +String rank
+        +Boolean isLocked
+        +String payrollLockId
+    }
+
+    class PerformanceMetric {
+        +String id
+        +String userId
+        +Int month
+        +Int year
+        +Decimal revenue
+        +Float onTimeRate
+        +Float score
+        +String classification
+    }
+
+    class AnalyticsActions {
+        +getAnalyticsData(workspaceId)
+        +getUserErrorDetails(workspaceId, userId)
+        +getUserPerformanceScore(workspaceId, userId)
+        +getStaffErrorLogsDetail(workspaceId, userId)
+        +removeErrorLog(workspaceId, errorLogId)
+    }
+
+    class TrackingActions {
+        -eventBuffer
+        -FLUSH_THRESHOLD 5
+        +trackEvent(payload)
+        +forceFlush()
+        +pingHeartbeat(status)
+        +getSessionTrends()
+        +getRecentEventLogs(limit)
+        +getFrictionData()
+        +getLivePresence()
+        -callerIsClient(userId, profileId)
+        -flushEvents()
+    }
+
+    class LeaderboardActions {
+        +refreshLeaderboardAction()
+    }
+
+    class ReputationActions {
+        +checkOverdueTasks(workspaceId)
+    }
+
+    class BonusActions {
+        +calculateMonthlyBonus(workspaceId)
+        +revertMonthlyBonus(workspaceId)
+        +getPayrollLockStatus(workspaceId)
+    }
+
+    class SecurityLib {
+        +verifyWorkspaceAccess(workspaceId, requiredRole)
+    }
+
+    class MiddlewareTs {
+        +set cookie tracking_session_id 30 phút
+    }
+
+    class LeaderboardServer {
+        +getLeaderboardData(workspaceId, profileId) unstable_cache tag leaderboard
+    }
+
+    class RefreshLeaderboardButton {
+        +handleRefresh() cooldown 30s
+    }
+
+    class PresenceTracker {
+        -PING_INTERVAL_MS 30000
+        -ACTIVITY_TIMEOUT_MS 15 phút
+    }
+
+    class LivePresenceBoard {
+        +fetchData() poll 15s
+        +handleImpersonate(userId)
+    }
+
+    class AdminAnalyticsPage {
+        +guard ADMIN rồi render AnalyticsTable
+    }
+
+    class StaffAnalyticsDetailPage {
+        +staff userId chi tiết lỗi
+    }
+
+    class McAnalyticsPage {
+        +bản sao Mission Control cùng action
+    }
+
+    User "1" --> "0..1" UserPresence : presence
+    User "1" --> "many" Session : sessions
+    User "1" --> "many" ErrorLog : UserErrorLogs
+    User "1" --> "many" MonthlyRank : UserMonthlyRanks
+    User "1" --> "many" PerformanceMetric : metrics
+    Session "1" o-- "many" Event : events onDelete Cascade
+    ErrorDictionary "1" --> "many" ErrorLog : logs
+    Task "1" --> "many" ErrorLog : onDelete Cascade
+
+    AdminAnalyticsPage ..> SecurityLib : verifyWorkspaceAccess ADMIN
+    AdminAnalyticsPage ..> AnalyticsActions : getAnalyticsData
+    AdminAnalyticsPage ..> LivePresenceBoard : render
+    McAnalyticsPage ..> AnalyticsActions : getAnalyticsData
+    McAnalyticsPage ..> LivePresenceBoard : render
+    StaffAnalyticsDetailPage ..> AnalyticsActions : getUserPerformanceScore + getStaffErrorLogsDetail
+
+    AnalyticsActions ..> SecurityLib : guard ADMIN hoặc MEMBER
+    AnalyticsActions ..> Task : groupBy status Hoàn tất Revision
+    AnalyticsActions ..> ErrorLog : groupBy sum calculatedScore
+    AnalyticsActions ..> ErrorDictionary : findMany isActive
+
+    PresenceTracker ..> TrackingActions : pingHeartbeat moi 30s
+    MiddlewareTs ..> TrackingActions : cap cookie tracking_session_id
+    TrackingActions ..> UserPresence : upsert status lastHeartbeat
+    TrackingActions ..> Session : upsert ip country city
+    TrackingActions ..> Event : createMany tu eventBuffer
+    LivePresenceBoard ..> TrackingActions : getLivePresence 5 phut gan nhat
+
+    RefreshLeaderboardButton ..> LeaderboardActions : refreshLeaderboardAction
+    LeaderboardActions ..> LeaderboardServer : revalidateTag leaderboard
+    LeaderboardServer ..> Task : groupBy Hoàn tất Revision + SALARY_PENDING_STATUSES
+    LeaderboardServer ..> ErrorLog : groupBy sum calculatedScore
+    LeaderboardServer ..> User : findMany role USER top 10
+
+    BonusActions ..> MonthlyRank : deleteMany + create isLocked true
+    ReputationActions ..> Task : stub đã tắt theo product rule
+
+%% NGUỒN (file:line):
+%% - Model Prisma: prisma/schema.prisma — PerformanceMetric:697, Session:963, Event:984,
+%%   UserPresence:1000, ErrorDictionary:1014, ErrorLog:1027, MonthlyRank:1052.
+%% - src/actions/analytics-actions.ts:7 getAnalyticsData, :97 getUserErrorDetails,
+%%   :145 getUserPerformanceScore, :201 getStaffErrorLogsDetail, :261 removeErrorLog.
+%% - src/actions/tracking-actions.ts:58 trackEvent, :91 pingHeartbeat, :166 getSessionTrends,
+%%   :217 getRecentEventLogs, :260 getFrictionData, :311 getLivePresence, :157 callerIsClient.
+%% - src/actions/leaderboard-actions.ts:5 refreshLeaderboardAction (revalidateTag leaderboard).
+%% - src/actions/reputation-actions.ts:3 checkOverdueTasks (stub: disabled by product rule).
+%% - src/actions/bonus-actions.ts:118 calculateMonthlyBonus ghi MonthlyRank isLocked=true, :63 revertMonthlyBonus.
+%% - src/components/dashboard/Leaderboard.tsx:10 getLeaderboardData (unstable_cache tags leaderboard, revalidate 86400).
+%% - src/components/dashboard/RefreshLeaderboardButton.tsx:14 handleRefresh (cooldown 30s).
+%% - src/components/tracking/PresenceTracker.tsx:6-7 PING_INTERVAL_MS/ACTIVITY_TIMEOUT_MS, mount tai src/app/[workspaceId]/layout.tsx:176.
+%% - src/components/admin/analytics/LivePresenceBoard.tsx:31-40 fetchData poll 15s, :21 handleImpersonate (flow P5).
+%% - src/app/[workspaceId]/admin/analytics/page.tsx:17 verifyWorkspaceAccess ADMIN, staff/[userId]/page.tsx:34-35, mc/analytics/page.tsx:31.
+%% - src/middleware.ts:129-136 cookie tracking_session_id maxAge 30*60.
+%% - src/lib/security.ts:38 verifyWorkspaceAccess.

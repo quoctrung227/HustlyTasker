@@ -1,0 +1,49 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Giai đoạn nội bộ — clientReview null, isClientFacingPhase false" as NoiBo
+    state "Đã gửi video (khách) — clientReview null, portal derive AWAITING" as A5
+    state "Hoàn tất + clientReview APPROVED" as Approved
+    state "Revision + clientReview CHANGES" as Changes
+    state "Đã hủy — isArchived true, clientStatus Closed" as Cancelled
+    state "Đã chấm sao — Rating ratedVia SHARE_LINK" as Rated
+
+    [*] --> NoiBo : task tạo mới hoặc khách gửi (Đang đợi giao, type Khách gửi)
+    NoiBo --> A5 : admin duyệt và gửi khách — status Đã gửi video (khách)
+    A5 --> Approved : approveDeliverableViaToken hoặc bulk — updateMany pin status
+    A5 --> Changes : requestChangesViaToken + clientFeedback
+    Changes --> NoiBo : editor sửa lại — chu trình A6 A7 nội bộ
+    NoiBo --> A5 : bản dựng mới gửi lại cho khách
+    Approved --> Rated : submitRatingViaToken — Rating.taskId unique, chỉ 1 lần
+    NoiBo --> Cancelled : admin hủy task — isArchived true
+    A5 --> Cancelled : admin hủy — mọi write của token bị từ chối
+    Approved --> [*]
+    Rated --> [*]
+    Cancelled --> [*] : tombstone chỉ hiện nếu clientReview APPROVED hoặc CHANGES
+
+    note right of A5
+        Portal chỉ cho approve và request changes khi
+        isClientFacingPhase true — clientReview khác null
+        hoặc status chứa chữ khách (portal-derive.ts 77-79).
+        AWAITING chỉ synthesize in-memory, không ghi DB
+        (share-portal-actions.ts 399).
+    end note
+
+    note right of Approved
+        Approve ghi status Hoàn tất + deadline null +
+        clientReview APPROVED + version tăng — đây là
+        tín hiệu payroll (salaryCompleted true).
+    end note
+
+    %% NGUỒN STATUS THẬT (không bịa):
+    %% - Task.status là String tự do — VALID_TASK_STATUSES: src/lib/task-statuses.ts:18-39
+    %%   'Đang đợi giao' (createTaskViaToken ghi, share-portal-actions.ts:1231)
+    %%   'Đã gửi video (khách)' = A5 (task-statuses.ts:29; needsClientAction portal-derive.ts:64-66)
+    %%   'Hoàn tất' (approveDeliverableViaToken ghi, share-portal-actions.ts:804; bulk :936)
+    %%   'Revision' (requestChangesViaToken ghi, share-portal-actions.ts:1043)
+    %%   'Đã hủy' + isArchived (getShareSnapshot tombstone :193-196, clientStatus Closed :433)
+    %% - Task.clientReview String?: prisma/schema.prisma:385 — giá trị 'AWAITING' | 'APPROVED' | 'CHANGES'
+    %%   (APPROVED :806, CHANGES :1045, AWAITING synthesize :399, portal-derive.ts:41-44)
+    %% - Rating: taskId unique + ratedVia 'SHARE_LINK' (schema.prisma:928-946, submitRatingViaToken :1113-1126)

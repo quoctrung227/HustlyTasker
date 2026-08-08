@@ -1,0 +1,52 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Chưa có record (mặc định 24 slot EMPTY)" as NoRecord
+    state "EMPTY" as EMPTY
+    state "FREE" as FREE
+    state "BUSY" as BUSY
+    state "TENTATIVE" as TENTATIVE
+
+    [*] --> NoRecord
+    NoRecord --> EMPTY : getMyAvailability trả DEFAULT_SCHEDULE
+    NoRecord --> FREE : saveMyAvailability upsert create
+    NoRecord --> BUSY : saveMyAvailability upsert create
+    NoRecord --> TENTATIVE : saveMyAvailability upsert create
+
+    EMPTY --> FREE : saveMyAvailability
+    EMPTY --> BUSY : saveMyAvailability
+    EMPTY --> TENTATIVE : saveMyAvailability
+    FREE --> BUSY : saveMyAvailability
+    FREE --> TENTATIVE : saveMyAvailability
+    FREE --> EMPTY : saveMyAvailability xóa đánh dấu
+    BUSY --> FREE : saveMyAvailability
+    BUSY --> TENTATIVE : saveMyAvailability
+    BUSY --> EMPTY : saveMyAvailability xóa đánh dấu
+    TENTATIVE --> FREE : saveMyAvailability
+    TENTATIVE --> BUSY : saveMyAvailability
+    TENTATIVE --> EMPTY : saveMyAvailability xóa đánh dấu
+
+    note right of NoRecord
+        saveMyAvailability chặn sửa ngày quá khứ
+        (targetDate nhỏ hơn todayDate thì trả lỗi)
+        và chặn dateKey sai định dạng
+    end note
+
+    note right of EMPTY
+        Giá trị ngoài bộ 4 status hợp lệ
+        bị normalizeSchedule ép về EMPTY
+    end note
+
+%% Đối tượng: 1 slot giờ trong DailyAvailability.schedule (Json mảng 24 string)
+%% Nguồn status THẬT (string trong code, không phải enum Prisma):
+%% VALID_STATUSES = EMPTY, FREE, BUSY, TENTATIVE — src/actions/availability-actions.ts:10
+%% DEFAULT_SCHEDULE = 24 x EMPTY — availability-actions.ts:11
+%% normalizeSchedule ép giá trị lạ về EMPTY — availability-actions.ts:13-16
+%% saveMyAvailability upsert + chặn quá khứ — availability-actions.ts:111-161 (chặn quá khứ:124-126)
+%% Model DailyAvailability — prisma/schema.prisma:1125-1142
+%% Ghi chú: UI ghi (AvailabilityWeekEditor/AvailabilityEditor) hiện là legacy không được mount trên page nào;
+%% đường đọc còn sống: getAdminAvailabilityWeek cho mc/lich (mc/lich/page.tsx:62).
+%% Flow chính đang chạy (OptimisticGrid) dùng ScheduleException type BLOCK|ADD (schema.prisma:1144-1147),
+%% là record tạo/xóa (create/delete), không có vòng đời status nên không vẽ ở đây.

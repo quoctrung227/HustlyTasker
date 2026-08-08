@@ -1,0 +1,52 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "DRAFT" as DRAFT
+    state "AWAITING_REVIEW" as AWAITING_REVIEW
+    state "CHANGES_REQUESTED" as CHANGES_REQUESTED
+    state "APPROVED" as APPROVED
+
+    [*] --> DRAFT : tạo ReviewVersion (default)
+
+    DRAFT --> AWAITING_REVIEW : pipeline READY - video qua Mux webhook applyMuxReady, image qua driveProcessing
+
+    AWAITING_REVIEW --> APPROVED : guest bấm Approve (submitGuestDecision)
+    AWAITING_REVIEW --> CHANGES_REQUESTED : guest bấm Request changes
+
+    APPROVED --> CHANGES_REQUESTED : guest đổi ý - latest wins, mỗi lần flip đều ghi ReviewActivity
+    CHANGES_REQUESTED --> APPROVED : guest đổi ý - latest wins
+
+    APPROVED --> APPROVED : lặp lại approve = 200 no-op (double-click safe)
+    CHANGES_REQUESTED --> CHANGES_REQUESTED : lặp lại request_changes = no-op nhưng note mới vẫn lưu comment
+
+    note right of DRAFT
+        Quyết định trên DRAFT bị 409 STATE_INVALID.
+        pipelineStatus khác READY cũng 409.
+    end note
+
+    note right of APPROVED
+        Chỉ quyết định trên HEAD version mới kéo theo
+        reviewAsset.statusId = Hoàn tất và đồng bộ Task.
+        Version cũ (showAllVersions) chỉ flip state của chính nó.
+    end note
+
+    note left of CHANGES_REQUESTED
+        Head + request_changes còn đồng bộ Task
+        A5 Đã gửi video (khách) sang A6 Đã nhận feedback (khách),
+        trạng thái khác rơi về Revision (giữ deadline).
+    end note
+
+%% Nguồn status THẬT (enum ReviewState): prisma/schema.prisma:1632-1637
+%%   DRAFT / AWAITING_REVIEW / CHANGES_REQUESTED / APPROVED
+%% [*] -> DRAFT: prisma/schema.prisma:1757 (reviewState ReviewState @default(DRAFT))
+%% DRAFT -> AWAITING_REVIEW: src/lib/review/inngest.ts:74-91 (applyMuxReady, video webhook)
+%%   và src/lib/review/upload-service.ts:395-399 (image READY)
+%% AWAITING_REVIEW -> APPROVED / CHANGES_REQUESTED và flip 2 chiều latest-wins:
+%%   src/lib/review/share-decision.ts:44-47 (TARGET map), 217-248 (tx flip optimistic)
+%% Lặp lại = no-op 200: share-decision.ts:201-204; DRAFT -> 409: share-decision.ts:205-207
+%% Đồng bộ Task chỉ khi isHead: share-decision.ts:196, 226-231, 273-327
+%%   + task-sync.ts:158-196 (A5->A6 'Đã nhận feedback (khách)' / legacy 'Revision')
+%% Trạng thái card asset khi approve head: reviewAsset.statusId = REVIEW_STATUS_MAP.approved
+%%   = 'Hoàn tất' (src/lib/review/status-map.ts:10)

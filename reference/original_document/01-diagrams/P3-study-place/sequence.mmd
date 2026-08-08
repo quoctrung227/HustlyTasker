@@ -1,0 +1,84 @@
+sequenceDiagram
+    autonumber
+    actor U as Staff hoặc Admin
+    participant Page as AdminSettingsPage (admin/settings/page.tsx)
+    participant Board as StudyPlaceBoard (client)
+    participant Act as study-place-actions.ts
+    participant Sec as lib/security.ts
+    participant Lib as lib/study-place.ts
+    participant DB as Prisma studyPlaceProgress
+
+    U->>Page: GET /workspaceId/admin/settings (tab StudyPlace)
+    Page->>Sec: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt Không có session hoặc thiếu quyền ADMIN
+        Sec-->>Page: throw SECURITY_VIOLATION
+        Page-->>U: redirect về /workspaceId/admin
+    else Đủ quyền ADMIN
+        Page->>Act: getStudyPlaceProgress(workspaceId)
+        Act->>Sec: verifyProfileAdminAccess(workspaceId)
+        Sec-->>Act: access (userId)
+        Act->>DB: findMany where workspaceId + userId + studySetId
+        DB-->>Act: rows tiến độ
+        Act-->>Page: StudyPlaceProgressDTO list
+        Page-->>U: render StudyPlaceBoard (dashboard + 6 mode)
+    end
+
+    U->>Board: chọn đáp án quiz hoặc chấm Hard Good Easy
+    Board->>Act: reviewStudyPlaceQuestionAction(workspaceId, questionId, quality, isCorrect)
+    Act->>Act: assertQuestion(questionId)
+    alt questionId không nằm trong STUDY_PLACE_QUESTION_IDS
+        Act-->>Board: return error (Câu hỏi StudyPlace không hợp lệ)
+        Board-->>U: toast.error
+    else questionId hợp lệ
+        Act->>Sec: verifyProfileAdminAccess(workspaceId)
+        alt Session hết hiệu lực hoặc không phải profile admin
+            Sec-->>Act: throw SECURITY_VIOLATION
+            Act-->>Board: catch rồi return error
+            Board-->>U: toast.error
+        else Access OK
+            Act->>DB: findUnique key workspace_user_studySet_question
+            DB-->>Act: current hoặc null
+            Act->>Lib: computeNextStudyProgress(current, quality, isCorrect)
+            Lib-->>Act: easeFactor, intervalDays, repetition, nextReviewAt, masteredAt
+            Act->>DB: upsert (create hoặc update tiến độ)
+            alt Lỗi DB khi upsert
+                DB-->>Act: throw
+                Act-->>Board: return error (Không thể lưu tiến độ học)
+                Board-->>U: toast.error
+            else Ghi thành công
+                DB-->>Act: row mới
+                Act->>Act: revalidatePath /workspaceId/admin/settings
+                Act-->>Board: success + progress DTO
+                Board->>Board: mergeProgress cập nhật progressMap
+                Board-->>U: hiện đúng sai + lịch ôn kế tiếp
+            end
+        end
+    end
+
+    opt Bookmark câu hỏi
+        U->>Board: bấm nút bookmark
+        Board->>Act: toggleStudyPlaceBookmarkAction(questionId, bookmarked)
+        Act->>Sec: verifyProfileAdminAccess(workspaceId)
+        Act->>DB: upsert bookmarked
+        Act-->>Board: success + progress
+        Board-->>U: đổi icon Bookmark
+    end
+
+    opt Reset tiến độ
+        U->>Board: bấm Reset và confirm
+        Board->>Act: resetStudyPlaceProgressAction(workspaceId, studySetId)
+        Act->>Sec: verifyProfileAdminAccess(workspaceId)
+        Act->>DB: deleteMany tiến độ của user trong workspace
+        Act-->>Board: success
+        Board->>Board: setProgressMap rỗng
+        Board-->>U: toast Đã reset tiến độ StudyPlace
+    end
+
+%% Nguồn:
+%% Guard trang: src/app/[workspaceId]/admin/settings/page.tsx:24 (verifyWorkspaceAccess ADMIN, catch -> redirect :28)
+%% Load tiến độ: page.tsx:102 -> getStudyPlaceProgress (src/actions/study-place-actions.ts:50-76)
+%% Review: reviewStudyPlaceQuestionAction (study-place-actions.ts:78-146) - assertQuestion :81, verifyProfileAdminAccess :82, findUnique :83, computeNextStudyProgress :103, upsert :104, revalidatePath :140, catch error :142-145
+%% Bookmark: toggleStudyPlaceBookmarkAction (study-place-actions.ts:148-199)
+%% Reset: resetStudyPlaceProgressAction (study-place-actions.ts:201-226)
+%% Client gọi action + toast.error: src/components/study-place/StudyPlaceBoard.tsx:282-329
+%% verifyProfileAdminAccess throw SECURITY_VIOLATION: src/lib/security.ts:180-191

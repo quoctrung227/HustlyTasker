@@ -1,0 +1,202 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class InvoiceModal {
+        <<UI Component>>
+        +fetchData()
+        +refreshProfiles()
+        +handleGenerate()
+    }
+
+    class RecordPaymentModal {
+        <<UI Component>>
+        +loadHistory()
+        +submit()
+    }
+
+    class InvoiceActions {
+        <<Server Actions>>
+        +getBillingProfiles(workspaceId)
+        +createBillingProfile(data)
+        +updateBillingProfile(id, data, workspaceId)
+        +deleteBillingProfile(id, workspaceId)
+        +getUnbilledTasks(clientId, workspaceId)
+        +calculateInvoicePreview(taskIds, taxRate, deposit, workspaceId)
+        +createInvoiceRecord(data, workspaceId)
+        +getClientInvoices(clientId, workspaceId)
+        +voidInvoice(invoiceId, workspaceId)
+    }
+
+    class PaymentActions {
+        <<Server Actions>>
+        +recordPayment(input, workspaceId)
+        +deletePayment(paymentId, workspaceId)
+        +getPaymentLedger(workspaceId)
+        +getClientPayments(clientId, workspaceId)
+    }
+
+    class ApiInvoicesGenerate {
+        <<API Route>>
+        +POST(pdfPayload) PdfBuffer
+    }
+
+    class ApiInvoiceDownload {
+        <<API Route>>
+        +GET(id, workspaceId) PdfBuffer
+    }
+
+    class InvoiceGeneratorLib {
+        <<Lib>>
+        +generateInvoicePDF(data) Buffer
+    }
+
+    class SecurityLib {
+        <<Lib>>
+        +verifyFinanceAccess(workspaceId)
+        +verifyWorkspaceAccess(workspaceId, role)
+    }
+
+    class Invoice {
+        <<Prisma Model>>
+        +String id
+        +String invoiceNumber
+        +Int clientId
+        +String createdBy
+        +DateTime issueDate
+        +DateTime dueDate
+        +Decimal subtotalAmount
+        +Decimal depositDeducted
+        +Decimal clientDepositDeducted
+        +Decimal taxPercent
+        +Decimal taxAmount
+        +Decimal totalDue
+        +InvoiceStatus status
+        +Json billingSnapshot
+        +Json clientSnapshot
+        +String workspaceId
+        +String profileId
+    }
+
+    class InvoiceItem {
+        <<Prisma Model>>
+        +String id
+        +String invoiceId
+        +String taskId
+        +String description
+        +Int quantity
+        +Decimal unitPrice
+        +Decimal amount
+    }
+
+    class Payment {
+        <<Prisma Model>>
+        +String id
+        +Int clientId
+        +String workspaceId
+        +String profileId
+        +String invoiceId
+        +Decimal amount
+        +DateTime paidAt
+        +String method
+        +String note
+        +String recordedById
+    }
+
+    class BillingProfile {
+        <<Prisma Model>>
+        +String id
+        +String profileName
+        +String beneficiaryName
+        +String bankName
+        +String accountNumber
+        +String swiftCode
+        +String currency
+        +Boolean isDefault
+        +String profileId
+    }
+
+    class Client {
+        <<Prisma Model>>
+        +Int id
+        +String name
+        +Int parentId
+        +Decimal depositBalance
+        +String status
+        +String profileId
+    }
+
+    class Task {
+        <<Prisma Model>>
+        +String id
+        +String title
+        +Decimal jobPriceUSD
+        +String invoiceId
+        +InvoiceTaskStatus invoiceStatus
+        +Int clientId
+    }
+
+    class InvoiceStatus {
+        <<enumeration>>
+        DRAFT
+        SENT
+        PAID
+        OVERDUE
+        VOID
+    }
+
+    class InvoiceTaskStatus {
+        <<enumeration>>
+        UNBILLED
+        INVOICED
+    }
+
+    InvoiceModal ..> InvoiceActions : gọi server action
+    InvoiceModal ..> ApiInvoicesGenerate : fetch POST tạo PDF
+    RecordPaymentModal ..> PaymentActions : gọi server action
+
+    InvoiceActions ..> SecurityLib : verifyFinanceAccess
+    PaymentActions ..> SecurityLib : verifyWorkspaceAccess ADMIN
+    ApiInvoicesGenerate ..> SecurityLib : verifyFinanceAccess
+    ApiInvoiceDownload ..> SecurityLib : verifyFinanceAccess
+
+    ApiInvoicesGenerate ..> InvoiceGeneratorLib : generateInvoicePDF
+    ApiInvoiceDownload ..> InvoiceGeneratorLib : generateInvoicePDF
+    ApiInvoiceDownload ..> Invoice : đọc invoice + items + client
+
+    InvoiceActions ..> Invoice : create trong transaction
+    InvoiceActions ..> Task : claim UNBILLED sang INVOICED
+    InvoiceActions ..> Client : trừ hoặc hoàn depositBalance
+    InvoiceActions ..> BillingProfile : CRUD + đóng băng billingSnapshot
+    PaymentActions ..> Payment : create và delete
+    PaymentActions ..> Invoice : update status PAID khi link
+
+    Client "1" o-- "0..n" Invoice : invoices
+    Client "1" o-- "0..n" Task : tasks
+    Client "1" o-- "0..1" Client : parent và sub-client
+    Invoice "1" *-- "1..n" InvoiceItem : items onDelete Cascade
+    Invoice "1" o-- "0..n" Task : invoiceId nullable
+    InvoiceItem ..> Task : taskId optional
+    Payment ..> Invoice : invoiceId scalar không FK
+    Payment ..> Client : clientId scalar không FK
+    Invoice ..> InvoiceStatus : status
+    Task ..> InvoiceTaskStatus : invoiceStatus
+
+%% Nguồn (file thật trong repo):
+%% - Model Invoice: prisma/schema.prisma:752-785 · InvoiceItem: 787-797 · Payment: 805-821
+%% - BillingProfile: prisma/schema.prisma:735-750 · Client: 494+ · Task.invoiceId/invoiceStatus: 361-362,376
+%% - enum InvoiceStatus: prisma/schema.prisma:915-921 · enum InvoiceTaskStatus: 923-926
+%% - InvoiceActions: src/actions/invoice-actions.ts (getBillingProfiles:22, createBillingProfile:64,
+%%   updateBillingProfile:127, deleteBillingProfile:186, getUnbilledTasks:215, calculateInvoicePreview:277,
+%%   createInvoiceRecord:314, getClientInvoices:536, voidInvoice:581)
+%% - PaymentActions: src/actions/payment-actions.ts (recordPayment:44, deletePayment:110,
+%%   getPaymentLedger:139, getClientPayments:164)
+%% - ApiInvoicesGenerate: src/app/api/invoices/generate/route.ts:5 (POST)
+%% - ApiInvoiceDownload: src/app/api/invoices/[id]/download/route.ts:6 (GET)
+%% - InvoiceGeneratorLib: src/lib/invoice-generator.ts:201 (generateInvoicePDF)
+%% - SecurityLib: src/lib/security.ts:38 (verifyWorkspaceAccess), :203 (verifyFinanceAccess)
+%% - InvoiceModal: src/components/invoice/InvoiceModal.tsx:38 (fetchData:77, refreshProfiles:105, handleGenerate:315)
+%% - RecordPaymentModal: src/components/crm/RecordPaymentModal.tsx:15 (loadHistory:41, submit:49)

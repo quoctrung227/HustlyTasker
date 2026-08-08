@@ -1,0 +1,44 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Chưa có bản ghi UserPresence" as NoRow
+    state "OFFLINE" as OFFLINE
+    state "ONLINE" as ONLINE
+    state "AWAY" as AWAY
+    state "BUSY" as BUSY
+
+    [*] --> NoRow
+
+    NoRow --> ONLINE : ping đầu tiên khi mount PresenceTracker - upsert create status ONLINE
+    NoRow --> OFFLINE : default schema nếu tạo row không kèm status - thực tế không xảy ra qua pingHeartbeat
+
+    ONLINE --> ONLINE : heartbeat mỗi 30s PING_INTERVAL_MS
+    ONLINE --> AWAY : quá 15 phút không có mousemove keydown scroll click touchstart
+    AWAY --> AWAY : heartbeat mỗi 30s vẫn gửi AWAY
+    AWAY --> ONLINE : user hoạt động trở lại - pingHeartbeat ONLINE ngay lập tức
+
+    note right of ONLINE
+        LivePresenceBoard chỉ hiển thị row có
+        lastHeartbeat trong 5 phút gần nhất.
+        Quá 5 phút row bị lọc khỏi danh sách
+        nhưng status trong DB KHÔNG đổi
+        (không có transition về OFFLINE).
+    end note
+
+    note right of BUSY
+        BUSY và OFFLINE có trong union type của
+        pingHeartbeat nhưng KHÔNG UI nào gửi.
+        PresenceTracker chỉ gửi ONLINE / AWAY
+        nên đây là 2 trạng thái chết (dead state).
+    end note
+
+%% NGUỒN (file:line) — status THẬT trong code:
+%% - prisma/schema.prisma:1000-1008 model UserPresence, status String @default("OFFLINE"),
+%%   comment schema: "Trạng thái: ONLINE, OFFLINE, AWAY".
+%% - src/actions/tracking-actions.ts:91 pingHeartbeat(status: 'ONLINE' | 'AWAY' | 'BUSY' | 'OFFLINE' = 'ONLINE')
+%%   → prisma.userPresence.upsert (update/create status + lastHeartbeat) tại :101-112.
+%% - src/components/tracking/PresenceTracker.tsx:6 PING_INTERVAL_MS=30000, :7 ACTIVITY_TIMEOUT_MS=15 phút,
+%%   :19-22 AWAY→ONLINE khi có activity, :34-44 loop gửi ONLINE hoặc AWAY (không bao giờ gửi BUSY/OFFLINE).
+%% - src/actions/tracking-actions.ts:320-324 getLivePresence lọc lastHeartbeat >= now - 5 phút (chỉ là filter đọc).

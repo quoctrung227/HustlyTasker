@@ -1,0 +1,156 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class ScheduleRule {
+        +String id
+        +String userId
+        +String workspaceId
+        +String profileId
+        +Int dayOfWeek
+        +String startTime
+        +String endTime
+        +String timezone
+        +Boolean isActive
+        +String updatedById
+        +Int version
+    }
+
+    class ScheduleException {
+        +String id
+        +String userId
+        +String workspaceId
+        +String profileId
+        +DateTime date
+        +String startTime
+        +String endTime
+        +ScheduleExceptionType type
+        +String reason
+        +String updatedById
+    }
+
+    class ScheduleExceptionType {
+        <<enumeration>>
+        BLOCK
+        ADD
+    }
+
+    class DailyAvailability {
+        +String id
+        +String userId
+        +String workspaceId
+        +String profileId
+        +DateTime date
+        +Json schedule24slot
+    }
+
+    class User {
+        +String id
+        +String username
+        +String nickname
+        +String role
+    }
+
+    class UserSchedulePage {
+        <<ServerPage>>
+        +docRuleVaExceptionCuaChinhUser()
+    }
+
+    class AdminSchedulePage {
+        <<ServerPage>>
+        +docRuleVaExceptionToanBoStaff()
+        +isMobileDevice()
+    }
+
+    class MissionControlCalendarPage {
+        <<ServerPage>>
+        +verifyProfileAdminAccess()
+    }
+
+    class OptimisticGrid {
+        <<ClientComponent>>
+        +useOptimistic()
+        +createBatchScheduleExceptions()
+        +deleteScheduleExceptionsByIds()
+        +deleteScheduleExceptionsForDay()
+    }
+
+    class MobileScheduleView {
+        <<ClientComponent>>
+    }
+
+    class AvailabilityWeekEditor {
+        <<ClientComponentLegacy>>
+        +saveMyAvailability()
+    }
+
+    class ScheduleActions {
+        <<ServerActions>>
+        +upsertScheduleRule()
+        +deleteScheduleRule()
+        +createScheduleException()
+        +createBatchScheduleExceptions()
+        +deleteScheduleException()
+        +deleteScheduleExceptionsByIds()
+        +deleteScheduleExceptionsForDay()
+        +getEffectiveAvailability()
+        -validateAccess()
+    }
+
+    class AvailabilityActions {
+        <<ServerActions>>
+        +getMyAvailability()
+        +getMyAvailabilityWeek()
+        +saveMyAvailability()
+        +getAdminAvailabilityMatrix()
+        +getAdminAvailabilityWeek()
+        -ensureWorkspaceAccess()
+    }
+
+    class SecurityLib {
+        <<Lib>>
+        +verifyWorkspaceAccess(workspaceId, role)
+        +verifyProfileAdminAccess(workspaceId)
+    }
+
+    class PrismaWorkspace {
+        <<Lib>>
+        +getWorkspacePrisma(workspaceId, profileId)
+        +resolveActiveProfileId()
+    }
+
+    UserSchedulePage --> OptimisticGrid : render editable
+    AdminSchedulePage --> OptimisticGrid : render readOnly
+    AdminSchedulePage --> MobileScheduleView : mobile dispatcher
+    OptimisticGrid ..> ScheduleActions : gọi server action
+    AvailabilityWeekEditor ..> AvailabilityActions : saveMyAvailability
+    MissionControlCalendarPage ..> AvailabilityActions : getAdminAvailabilityWeek
+    ScheduleActions ..> SecurityLib : validateAccess gọi verifyWorkspaceAccess
+    AvailabilityActions ..> SecurityLib : matrix yêu cầu ADMIN
+    ScheduleActions ..> PrismaWorkspace : getWorkspacePrisma
+    UserSchedulePage ..> PrismaWorkspace : đọc trực tiếp rule exception
+    AdminSchedulePage ..> PrismaWorkspace : đọc trực tiếp rule exception
+    ScheduleActions --> ScheduleRule : CRUD
+    ScheduleActions --> ScheduleException : CRUD
+    AvailabilityActions --> DailyAvailability : upsert findMany
+    User "1" o-- "n" ScheduleRule
+    User "1" o-- "n" ScheduleException
+    User "1" o-- "n" DailyAvailability
+    ScheduleException ..> ScheduleExceptionType : type
+
+%% Nguồn (file:line):
+%% ScheduleRule: prisma/schema.prisma:1077-1099 (unique userId+dayOfWeek+workspaceId+profileId)
+%% ScheduleException: prisma/schema.prisma:1101-1123, enum ScheduleExceptionType BLOCK|ADD: schema.prisma:1144-1147
+%% DailyAvailability: prisma/schema.prisma:1125-1142 (schedule = Json mảng 24 string)
+%% UserSchedulePage: src/app/[workspaceId]/dashboard/schedule/page.tsx:10 (đọc scheduleRule:43, scheduleException:47)
+%% AdminSchedulePage: src/app/[workspaceId]/admin/schedule/page.tsx:12 (staff:43, rules:61, exceptions:69, mobile dispatcher:120)
+%% MissionControlCalendarPage: src/app/[workspaceId]/mc/lich/page.tsx:40 (verifyProfileAdminAccess:45, getAdminAvailabilityWeek:62)
+%% OptimisticGrid: src/components/schedule/OptimisticGrid.tsx:60 (gọi action:278,320,347,362,379)
+%% AvailabilityWeekEditor (legacy, không page nào mount AvailabilityScheduleClient): src/components/schedule/AvailabilityWeekEditor.tsx:6,131
+%% ScheduleActions: src/actions/schedule-actions.ts:37,97,119,165,204,227,272,307 (validateAccess:12)
+%% AvailabilityActions: src/actions/availability-actions.ts:44,73,111,163,216 (ensureWorkspaceAccess:22)
+%% SecurityLib: src/lib/security.ts:38 verifyWorkspaceAccess
+%% PrismaWorkspace: src/lib/prisma-workspace.ts getWorkspacePrisma, resolveActiveProfileId

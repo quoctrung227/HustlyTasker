@@ -1,0 +1,136 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class NewRequestPanel {
+        <<component>>
+        +wizard 5 bước General Videos Assets Brief Review
+        +actions.submitRequest(input)
+    }
+    class SharePortalClient {
+        <<component>>
+        +submitRequest maps to submitClientRequestViaToken(token, input)
+    }
+    class RequestsInbox {
+        <<component>>
+        +accept(id)
+        +reject(id)
+    }
+    class ClientRequestsPage {
+        <<server page>>
+        +getClientRequests(workspaceId)
+    }
+
+    class SharePortalActions {
+        <<server actions>>
+        +submitClientRequestViaToken(token, input)
+        -notifyProfileAdminsOfRequest(scope, req, monthLabel)
+    }
+    class ClientRequestActions {
+        <<server actions>>
+        -adminCtx(workspaceId)
+        +getClientRequests(workspaceId, opts)
+        +getUnreadRequestCount(workspaceId)
+        +acceptClientRequest(requestId, workspaceId)
+        +rejectClientRequest(requestId, workspaceId, note)
+        +markRequestAccepted(requestId, workspaceId)
+    }
+
+    class ShareLinkAuth {
+        <<lib>>
+        +resolveShareToken(rawToken, opts)
+        +getRequestIp()
+    }
+    class Security {
+        <<lib>>
+        +verifyProfileAdminAccess(workspaceId)
+    }
+    class Sanitize {
+        <<lib>>
+        +sanitizeClientText(text, max)
+    }
+    class AuditLog {
+        <<lib>>
+        +audit(entry)
+    }
+    class NotificationActions {
+        <<server actions>>
+        +createNotificationInternal(input)
+        +broadcastNotificationToUser(userId, payload)
+    }
+
+    class ClientTaskRequest {
+        <<model>>
+        +id String
+        +profileId String
+        +workspaceId String
+        +clientId Int nullable
+        +viaShareLinkId String nullable
+        +submittedVia String
+        +title String
+        +videoList desiredType desiredDeadline
+        +rawFootage collectFile bRoll refs submitFolder script notes
+        +status ClientRequestStatus
+        +reviewedById reviewedAt rejectionNote
+        +taskId String nullable
+    }
+    class Task {
+        <<model>>
+        +id String
+        +title type status
+        +assigneeId null on spawn
+        +assignedById clientId workspaceId profileId
+        +resources references collectFilesLink submissionFolder
+        +deadline notes_vi
+    }
+    class Client {
+        <<model>>
+        +id Int
+        +name parent
+    }
+    class ClientShareLink {
+        <<model>>
+        +id tokenHash scope
+    }
+    class Workspace {
+        <<model>>
+        +id name status profileId
+    }
+    class Notification {
+        <<model>>
+        +id userId type TASK_CLIENT_SUBMITTED
+        +title body metadata
+    }
+
+    NewRequestPanel ..> SharePortalClient : DeliverableActions
+    SharePortalClient ..> SharePortalActions : submitClientRequestViaToken
+    SharePortalActions ..> ShareLinkAuth : resolveShareToken
+    SharePortalActions ..> Sanitize : sanitizeClientText
+    SharePortalActions ..> AuditLog : audit request.client_submitted
+    SharePortalActions ..> NotificationActions : notify OWNER ADMIN
+    SharePortalActions ..> ClientTaskRequest : create status NEW
+    NotificationActions ..> Notification : create
+
+    ClientRequestsPage ..> ClientRequestActions : getClientRequests
+    ClientRequestsPage *-- RequestsInbox : render initialRequests
+    RequestsInbox ..> ClientRequestActions : accept reject
+    ClientRequestActions ..> Security : verifyProfileAdminAccess
+    ClientRequestActions ..> Sanitize : sanitizeClientText note
+    ClientRequestActions ..> AuditLog : audit accepted rejected
+    ClientRequestActions ..> ClientTaskRequest : update status
+    ClientRequestActions ..> Task : create on accept
+
+    ClientTaskRequest --> Task : taskId set on accept SetNull
+    ClientTaskRequest --> Client : clientId SetNull
+    ClientTaskRequest ..> ClientShareLink : viaShareLinkId
+    ClientTaskRequest ..> Workspace : workspaceId profileId
+
+%% Nguồn:
+%% src/actions/share-portal-actions.ts:1350 submitClientRequestViaToken, :1287 notifyProfileAdminsOfRequest
+%% src/actions/client-request-actions.ts:18 adminCtx, :48 getClientRequests, :87 getUnreadRequestCount, :102 acceptClientRequest, :171 rejectClientRequest, :200 markRequestAccepted
+%% src/components/portal/desk/NewRequestPanel.tsx:18, src/components/portal/share/SharePortalClient.tsx:55
+%% src/app/[workspaceId]/admin/requests/page.tsx:5, src/components/admin/RequestsInbox.tsx:32
+%% prisma/schema.prisma:632 ClientTaskRequest, :625 enum ClientRequestStatus

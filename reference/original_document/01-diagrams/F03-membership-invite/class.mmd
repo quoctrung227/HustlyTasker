@@ -1,0 +1,198 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class ProfileMembersPanel {
+        <<UI component>>
+        props profileId workspaceId
+    }
+    class PendingInvitationsBanner {
+        <<UI component>>
+        handleAccept()
+        handleDecline()
+    }
+    class NotificationItem {
+        <<UI component>>
+        handleAcceptInvitation()
+        handleDeclineInvitation()
+    }
+    class CrossTeamManager {
+        <<UI component>>
+        handleRequest()
+    }
+    class PendingCrossTeamRequests {
+        <<UI component>>
+        handleApprove()
+        handleReject()
+    }
+
+    class ProfileMemberActions {
+        <<server actions>>
+        inviteToProfileAction(profileId, workspaceId, usernameOrEmail, role)
+        getProfileMembers(profileId)
+    }
+    class MemberActions {
+        <<server actions>>
+        inviteToWorkspace(workspaceId, targetUsername, role, message)
+        acceptWorkspaceInvitation(invitationId)
+        declineWorkspaceInvitation(invitationId)
+        revokeWorkspaceInvitation(workspaceId, invitationId)
+        changeWorkspaceMemberRole(workspaceId, targetUserId, newRole)
+        removeWorkspaceMember(workspaceId, targetUserId)
+        leaveWorkspace(workspaceId)
+        notifyInvitee(params)
+    }
+    class CreateUserAction {
+        <<server action>>
+        createUser(formData, workspaceId)
+    }
+    class CrossTeamActions {
+        <<server actions>>
+        requestCrossTeamAccess(userId, targetProfileId, workspaceId)
+        approveCrossTeamAccess(requestId, workspaceId)
+        rejectCrossTeamAccess(requestId, workspaceId)
+        removeCrossTeamAccess(userId, profileId, workspaceId)
+    }
+
+    class SecurityLib {
+        <<lib security.ts>>
+        verifyWorkspaceAccess(workspaceId, minRole)
+        verifyProfileAdminAccess(workspaceId)
+    }
+    class ProfilePermissions {
+        <<lib profile-permissions.ts>>
+        getProfileRole(userId, profileId)
+        isSessionLive(session)
+    }
+    class RateLimitUpstash {
+        <<lib rate-limit-upstash.ts>>
+        checkInviteCallerRate(userId)
+        checkInviteRate(workspaceId, targetUserId)
+    }
+    class UserLookup {
+        <<lib user-lookup.ts>>
+        findUserByEmailOrUsername(identifier)
+    }
+    class WorkspaceGuards {
+        <<lib workspace-guards.ts>>
+        ensureNotLastOwner(workspaceId, userId)
+    }
+    class NotifyPipeline {
+        <<lib email + notification>>
+        sendEmail(to, subject, html)
+        createNotificationInternal(params)
+        broadcastNotificationToUser(userId, notif)
+    }
+
+    class WorkspaceInvitation {
+        <<Prisma model>>
+        id String
+        workspaceId String
+        invitedUserId String
+        role String
+        token String
+        status String
+        invitedById String
+        message String
+        expiresAt DateTime
+        respondedAt DateTime
+    }
+    class WorkspaceMember {
+        <<Prisma model>>
+        id String
+        userId String
+        workspaceId String
+        role String
+        joinedAt DateTime
+    }
+    class ProfileAccess {
+        <<Prisma model>>
+        id String
+        userId String
+        profileId String
+        role ProfileRole
+        grantedAt DateTime
+        clientId Int
+    }
+    class ProfileAccessRequest {
+        <<Prisma model>>
+        id String
+        userId String
+        targetProfileId String
+        requestedById String
+        approvedById String
+        status String
+    }
+    class User {
+        <<Prisma model>>
+        id String
+        username String
+        email String
+        role UserRole
+        profileId String
+        allowExternalInvites Boolean
+        sessionVersion Int
+    }
+    class Workspace {
+        <<Prisma model>>
+        id String
+        profileId String
+        status String
+    }
+    class Profile {
+        <<Prisma model>>
+        id String
+        name String
+    }
+
+    ProfileMembersPanel ..> ProfileMemberActions : gọi invite
+    ProfileMemberActions ..> MemberActions : delegate inviteToWorkspace
+    PendingInvitationsBanner ..> MemberActions : accept / decline
+    NotificationItem ..> MemberActions : accept / decline
+    CrossTeamManager ..> CrossTeamActions : request / remove
+    PendingCrossTeamRequests ..> CrossTeamActions : approve / reject
+
+    MemberActions ..> SecurityLib : guard ADMIN
+    MemberActions ..> RateLimitUpstash : 40h caller + 5 ngày target
+    MemberActions ..> UserLookup : resolve target
+    MemberActions ..> WorkspaceGuards : bảo vệ OWNER cuối
+    MemberActions ..> NotifyPipeline : email + bell
+    CreateUserAction ..> SecurityLib : verifyProfileAdminAccess
+    CrossTeamActions ..> ProfilePermissions : getProfileRole + isSessionLive
+
+    MemberActions ..> WorkspaceInvitation : create update deleteMany
+    MemberActions ..> WorkspaceMember : create upsert deleteMany
+    MemberActions ..> ProfileAccess : upsert deleteMany
+    CreateUserAction ..> User : create
+    CrossTeamActions ..> ProfileAccessRequest : create update
+    CrossTeamActions ..> ProfileAccess : upsert deleteMany
+
+    Workspace "1" o-- "*" WorkspaceMember
+    User "1" o-- "*" WorkspaceMember
+    Workspace "1" o-- "*" WorkspaceInvitation
+    User "1" o-- "*" WorkspaceInvitation : invitedUser invitedBy
+    Profile "1" o-- "*" ProfileAccess
+    User "1" o-- "*" ProfileAccess
+    Profile "1" o-- "*" ProfileAccessRequest : targetProfile
+    User "1" o-- "*" ProfileAccessRequest
+    User "*" --> "0..1" Profile : profileId team gốc
+
+%% Nguồn (file:line, repo root):
+%% src/actions/member-actions.ts:303 inviteToWorkspace, :617 acceptWorkspaceInvitation,
+%%   :937 declineWorkspaceInvitation, :1019 revokeWorkspaceInvitation,
+%%   :1054 changeWorkspaceMemberRole, :1132 removeWorkspaceMember, :1247 leaveWorkspace, :15 notifyInvitee
+%% src/actions/profile-member-actions.ts:113 inviteToProfileAction (delegate :153-154)
+%% src/actions/create-user.ts:17 createUser
+%% src/actions/cross-team-actions.ts:11 requestCrossTeamAccess, :94 approveCrossTeamAccess,
+%%   :137 rejectCrossTeamAccess, :169 removeCrossTeamAccess
+%% src/lib/security.ts:38 verifyWorkspaceAccess; src/lib/profile-permissions.ts getProfileRole/isSessionLive
+%% prisma/schema.prisma:826 WorkspaceInvitation, :110 WorkspaceMember, :266 ProfileAccess,
+%%   :292 ProfileAccessRequest, :125 User
+%% UI: src/components/profile/ProfileMembersPanel.tsx (mounted bởi
+%%   src/app/[workspaceId]/admin/profile-members/page.tsx:8 — admin/members/page.tsx:13 redirect sang đây),
+%%   src/components/workspace/PendingInvitationsBanner.tsx:42,63,
+%%   src/components/notifications/NotificationItem.tsx:61,88,
+%%   src/components/admin/CrossTeamManager.tsx:28, src/components/admin/PendingCrossTeamRequests.tsx:24,32

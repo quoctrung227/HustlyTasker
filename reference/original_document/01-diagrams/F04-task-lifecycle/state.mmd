@@ -1,0 +1,73 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Đang đợi giao" as DangDoiGiao
+    state "Nhận task" as NhanTask
+    state "Đã nhận task" as DaNhanTask
+    state "Đang thực hiện" as DangThucHien
+    state "Revision" as RevisionSt
+    state "Quá hạn" as QuaHan
+    state "Hoàn tất" as HoanTat
+    state "Đã hủy" as DaHuy
+
+    state "Review module - 6 status video A2-A7" as ReviewModule {
+        state "Đã nộp video (nội bộ)" as A2
+        state "Đang sửa feedback (nội bộ)" as A3
+        state "Đã sửa feedback (nội bộ)" as A4
+        state "Đã gửi video (khách)" as A5
+        state "Đã nhận feedback (khách)" as A6
+        state "Đã sửa feedback (khách)" as A7
+
+        A2 --> A3 : admin chốt feedback-done
+        A4 --> A3 : admin mở vòng feedback mới
+        A3 --> A4 : editor confirm-fix
+        A4 --> A2 : re-upload Mux READY
+        A4 --> A5 : admin approve-send
+        A2 --> A5 : admin approve-send (không cần sửa)
+        A5 --> A2 : re-upload sau khi đã gửi khách
+        A5 --> A6 : guest request changes
+        A6 --> A7 : editor confirm client fix
+        A7 --> A5 : admin gửi lại khách
+    }
+
+    [*] --> DangDoiGiao : createTask / batch không assignee
+    [*] --> NhanTask : createTask / batch có assignee
+    DangDoiGiao --> NhanTask : assignTask admin / claimTask marketplace
+    NhanTask --> DangDoiGiao : unassign hoặc sys-revoke (xóa assignee)
+    NhanTask --> DangThucHien : editor start (isUserStart)
+    DaNhanTask --> DangThucHien : editor start (variant)
+    DangThucHien --> RevisionSt : editor nộp productLink (isUserDelivery)
+    RevisionSt --> DangThucHien : admin resume sau feedback
+    DangThucHien --> A2 : upload bản dựng - Mux READY
+    RevisionSt --> A2 : upload bản dựng - Mux READY
+    DangThucHien --> QuaHan : cron check-deadline (whitelist cronOverdueEligible)
+    QuaHan --> DangThucHien : admin/editor chỉnh tay (FSM off)
+    RevisionSt --> HoanTat : admin complete
+    ReviewModule --> HoanTat : confirmTaskHoanTat (drawer review)
+    DangThucHien --> DaHuy : admin cancel (auto isArchived true)
+    DaHuy --> NhanTask : restoreCancelledTask có assignee
+    DaHuy --> DangDoiGiao : restoreCancelledTask không assignee
+    HoanTat --> RevisionSt : admin reopen (chỉ admin - guard terminal H3)
+    HoanTat --> [*]
+
+%% ═══ NGUỒN STATUS THẬT (string tự do, không enum) ═══
+%% 14 status hợp lệ: VALID_TASK_STATUSES src/lib/task-statuses.ts:18-39
+%%   'Đang đợi giao', 'Nhận task', 'Đã nhận task', 'Đang thực hiện',
+%%   'Đã nộp video (nội bộ)', 'Đang sửa feedback (nội bộ)', 'Đã sửa feedback (nội bộ)',
+%%   'Đã gửi video (khách)', 'Đã nhận feedback (khách)', 'Đã sửa feedback (khách)',
+%%   'Revision', 'Quá hạn', 'Hoàn tất', 'Đã hủy'
+%% Default schema: Task.status @default("Đang thực hiện") prisma/schema.prisma:336
+%% Tạo task: status = assignee ? 'Nhận task' : 'Đang đợi giao' — src/actions/admin-actions.ts:232, src/actions/velox-batch-actions.ts:218
+%% Giao / thu hồi: src/actions/task-management-actions.ts:137,147 ('Đang đợi giao'), :178 ('Nhận task')
+%% Claim marketplace: src/actions/claim-actions.ts:187 ('Nhận task'), :248 (return -> 'Đang đợi giao')
+%% Editor start/delivery + admin resume/reject/complete (điều kiện isUserStart/isUserDelivery/...):
+%%   src/actions/task-actions.ts:232-243; pool-reset :133; auto-archive 'Đã hủy' :143
+%% Restore: src/actions/task-actions.ts:567 ('Nhận task' | 'Đang đợi giao')
+%% Cron quá hạn: src/app/api/cron/check-deadline/route.ts:41,158 ('Quá hạn', whitelist OVERDUE_ELIGIBLE_STATUSES src/lib/task-statuses.ts:128)
+%% Auto-transition 6 status video: STATUS_TRANSITIONS src/lib/task-statuses.ts:199-218 (predecessor map, canAutoTransition :221)
+%% Chốt hoàn tất từ review: src/app/api/review/tasks/[taskId]/confirm-complete/route.ts:13 -> confirmTaskHoanTat -> updateTaskStatus 'Hoàn tất'
+%% LƯU Ý: FSM validateTransition DISABLED (luôn true) src/lib/fsm-config.ts:122-125 — admin đổi status tự do;
+%%   guard còn lại: non-admin không vào/ra terminal ('Hoàn tất'/'Đã hủy') và không vào client-facing (A5-A7) — src/actions/task-actions.ts:84-97
+%% Payroll: SALARY_COMPLETED_STATUS = 'Hoàn tất', SALARY_PENDING_STATUSES derive từ TASK_STATUS_META — src/lib/task-statuses.ts:116-119

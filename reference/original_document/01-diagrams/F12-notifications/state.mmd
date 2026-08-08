@@ -1,0 +1,37 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Notification tồn tại trong DB" as TonTai {
+        state "Chưa đọc (isRead=false, isArchived=false)" as ChuaDoc
+        state "Đã đọc (isRead=true, isArchived=false)" as DaDoc
+        state "Đã lưu trữ (isArchived=true, isRead=true)" as DaLuuTru
+
+        [*] --> ChuaDoc : createNotificationInternal - notification.create
+        ChuaDoc --> DaDoc : markNotificationRead / markAllNotificationsRead
+        ChuaDoc --> DaLuuTru : archiveNotification (set cả isRead=true)
+        DaDoc --> DaLuuTru : archiveNotification
+        DaLuuTru --> [*] : clearAllArchived - deleteMany isArchived=true
+        --
+        state "Email chưa gửi (emailSentAt=null)" as EmailChuaGui
+        state "Email đã gửi (emailSentAt=Date)" as EmailDaGui
+
+        [*] --> EmailChuaGui : mặc định khi tạo
+        EmailChuaGui --> EmailDaGui : claimForEmail (realtime)
+        EmailChuaGui --> EmailDaGui : sendDigestEmails (cron HOURLY/DAILY)
+        EmailChuaGui --> EmailChuaGui : SKIP (pref OFF / chờ digest / quiet hours)
+    }
+
+%% Nguồn status THẬT trong code (không có enum status riêng - vòng đời là 3 cờ boolean/timestamp):
+%% - isRead (Boolean, default false): prisma/schema.prisma:1248
+%% - isArchived (Boolean, default false): prisma/schema.prisma:1249
+%% - emailSentAt (DateTime?, null = chưa gửi): prisma/schema.prisma:1257
+%% - Tạo: src/actions/notification-actions.ts:30 (notification.create, isRead/isArchived mặc định false)
+%% - isRead=true: src/actions/notification-actions.ts:188 (markNotificationRead), :201 (markAllNotificationsRead updateMany)
+%% - isArchived=true + isRead=true: src/actions/notification-actions.ts:220-223 (archiveNotification)
+%% - Xóa vĩnh viễn: src/actions/notification-actions.ts:232 (clearAllArchived deleteMany where isArchived=true)
+%% - emailSentAt set realtime: src/lib/notification-email.ts:107-113 (claimForEmail updateMany where emailSentAt null)
+%% - emailSentAt set bởi digest cron: src/lib/notification-email.ts:553-556 (updateMany sau khi gửi digest)
+%% - Nhánh SKIP không đổi trạng thái: src/lib/notification-email.ts:349 (OFF), :355 (digest chờ cron), :362 (quiet hours)
+%% - pushSentAt (schema.prisma:1256) KHÔNG bao giờ được ghi trong src/ - không phải state thực tế

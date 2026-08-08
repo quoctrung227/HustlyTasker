@@ -1,0 +1,35 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Chưa đăng nhập (không có cookie session)" as ChuaDangNhap
+    state "Phiên admin bình thường (cookie session = JWT admin, TTL 30 ngày)" as PhienAdmin
+    state "Đang nhập vai (cookie session = JWT target với isImpersonating true, originalAdminId, impersonationExpiresAt. Cookie admin_session = JWT admin gốc. Cả hai TTL 2 giờ)" as DangNhapVai
+    state "Phiên admin khôi phục (cookie session = JWT admin từ admin_session, expiry 7 ngày. admin_session bị xóa)" as PhienKhoiPhuc
+    state "Buộc đăng nhập lại (admin_session mất hoặc hết hạn — cả hai cookie bị xóa)" as BuocDangNhapLai
+
+    [*] --> ChuaDangNhap
+    ChuaDangNhap --> PhienAdmin: login / loginWithProfile
+    PhienAdmin --> DangNhapVai: startImpersonation qua guard, createImpersonationSession + audit auth.impersonation_started
+    DangNhapVai --> PhienKhoiPhuc: stopImpersonation, stopImpersonationSession khôi phục admin_session + audit auth.impersonation_ended
+    DangNhapVai --> BuocDangNhapLai: hết TTL 2 giờ, JWT exp chết cả hai cookie (banner countdown về 0 tự gọi onStop)
+    DangNhapVai --> BuocDangNhapLai: stopImpersonation nhưng admin_session không còn, cookie session bị xóa
+    PhienKhoiPhuc --> PhienAdmin: tiếp tục làm việc như phiên admin thường
+    PhienAdmin --> ChuaDangNhap: logout
+    BuocDangNhapLai --> ChuaDangNhap: về trang login
+    ChuaDangNhap --> [*]
+
+%% Nguồn status THẬT trong code (flow P5 không có model Session trong prisma/schema.prisma —
+%% "Session" là cặp cookie JWT, các trạng thái trên là trạng thái thực của cặp cookie):
+%% - login/loginWithProfile TTL 30 ngày: src/lib/auth.ts:6-7 (DEFAULT_SESSION_DAYS=30), :16-49
+%% - createImpersonationSession: src/lib/auth.ts:76-117
+%%   * expires = Date.now() + 2*60*60*1000 (2 giờ): auth.ts:77
+%%   * JWT exp 2h (AUDIT HT-019): auth.ts:83, :96
+%%   * claim isImpersonating / originalAdminId / impersonationExpiresAt: auth.ts:91-93
+%%   * cookie admin_session (standby): auth.ts:101, cookie session bị ghi đè: auth.ts:110
+%% - stopImpersonationSession: src/lib/auth.ts:119-141
+%%   * restore expiry 7 ngày: auth.ts:122, fallback delete session: auth.ts:136, delete admin_session: auth.ts:140
+%% - audit auth.impersonation_started / auth.impersonation_ended: src/actions/impersonation-actions.ts:93-100, :115-122
+%%   (action string khai báo tại src/lib/audit-log.ts:52-53)
+%% - banner countdown gọi onStop khi secondsLeft = 0: src/components/admin/ImpersonationBanner.tsx:38-41

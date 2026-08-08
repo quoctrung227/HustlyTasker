@@ -1,0 +1,34 @@
+# =============================================================================
+# Caddyfile — reverse proxy cho HustlyTasker API
+# Mount vào container caddy tại /etc/caddy/Caddyfile (xem docker-compose.yml).
+# Caddy TỰ xin + gia hạn cert Let's Encrypt cho domain bên dưới — điều kiện:
+#   1. DNS A record api.hustlytasker.xyz -> IP VPS (proxy CDN phải TẮT lúc xin cert lần đầu)
+#   2. Port 80 + 443 mở trên ufw (vps-setup.md mục 2)
+# =============================================================================
+
+api.hustlytasker.xyz {
+	# Email nhận cảnh báo hết hạn cert từ Let's Encrypt
+	tls admin@hustlytasker.xyz
+
+	encode zstd gzip
+
+	# Body limit: API chỉ nhận JSON — file video đi THẲNG lên R2 qua presigned
+	# URL (browser PUT trực tiếp, không qua server — giữ nguyên kiến trúc
+	# src/lib/review/r2.ts của app hiện tại). 50MB đủ dư cho mọi payload JSON
+	# + ảnh comment-attachment nếu route đó vẫn nhận multipart.
+	request_body {
+		max_size 50MB
+	}
+
+	# `api` = tên service trong docker-compose.yml, resolve qua DNS nội bộ compose
+	reverse_proxy api:8080 {
+		# 2 route download-zip cũ có maxDuration 300s trên Vercel
+		# (vercel.json:15-20) — giữ timeout tương đương để stream zip lớn
+		transport http {
+			response_header_timeout 300s
+		}
+	}
+
+	# Ẩn version server
+	header -Server
+}

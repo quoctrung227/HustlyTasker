@@ -1,0 +1,95 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin (Velox)
+    participant Panel as ConnectorsPanel (Settings tab Connectors)
+    participant Modal as AddTaskModal / VeloxMultiHookMapEditor
+    participant Auth as GET /api/integrations/[provider]/authorize
+    participant Provider as Google / Dropbox OAuth
+    participant CB as GET /api/integrations/[provider]/callback
+    participant Scan as POST /api/integrations/scan-folder?v=4
+    participant Lib as cloud-scanner + velox v4
+    participant DB as Prisma (Neon)
+
+    rect rgb(235, 240, 250)
+    note over Admin, DB: Pha 1 — OAuth connect Drive/Dropbox
+    Admin->>Panel: bấm Connect (handleConnect)
+    Panel->>Auth: redirect kèm workspaceId
+    alt Không có session
+        Auth-->>Panel: 401 Unauthorized
+    else Thiếu workspaceId
+        Auth-->>Panel: 400 Missing workspaceId
+    else Thiếu CLIENT_ID env
+        Auth-->>Panel: 500 integration not configured
+    else Hợp lệ
+        Auth->>Provider: redirect consent (state = base64url userId+workspaceId+nonce)
+        Provider->>CB: redirect ?code=...&state=...
+        alt Thiếu code/state hoặc state hỏng
+            CB-->>Panel: redirect error=google_drive_failed (Dropbox trả 400 JSON)
+        else Session không khớp state.userId
+            CB-->>Panel: redirect errorUrl (Dropbox 401 session mismatch)
+        else Đổi token thất bại (tokenRes not ok)
+            CB->>Provider: POST oauth2/token exchange
+            Provider-->>CB: lỗi
+            CB-->>Panel: redirect error=..._failed
+        else Thành công
+            CB->>Provider: POST oauth2/token exchange
+            Provider-->>CB: access_token + refresh_token
+            CB->>Provider: GET userinfo / get_current_account (lấy email)
+            CB->>DB: integrationToken.upsert (encryptToken AES-256-GCM)
+            DB-->>CB: row lưu xong
+            CB-->>Panel: redirect ?tab=connectors&connected=[provider]
+        end
+    end
+    end
+
+    rect rgb(235, 250, 240)
+    note over Admin, DB: Pha 2 — Scan folder footage (Velox V4)
+    Admin->>Modal: dán link folder + bấm quét (runScan / seedHookGraphFromVelox)
+    Modal->>Scan: POST { url, workspaceId }
+    alt Không có session
+        Scan-->>Modal: 401 Unauthorized
+    else Body/url/workspaceId thiếu
+        Scan-->>Modal: 400 Thiếu URL / workspaceId
+    else verifyWorkspaceAccess ném SECURITY_VIOLATION
+        Scan-->>Modal: 403 không có quyền workspace
+    else limitDb quá 10 req/60s
+        Scan-->>Modal: 429 + Retry-After
+    else parseCloudLink trả null
+        Scan-->>Modal: 400 URL không hợp lệ
+    else Chưa có IntegrationToken cho provider
+        Scan->>DB: integrationToken.findUnique
+        DB-->>Scan: null
+        Scan-->>Modal: 401 requiresConnection=true
+    else refreshTokenIfNeeded thất bại
+        Scan->>DB: integrationToken.findUnique
+        DB-->>Scan: tokenRow (hết hạn, không refresh được)
+        Scan-->>Modal: 401 requiresConnection=true (kết nối lại)
+    else Đường thành công
+        Scan->>DB: integrationToken.findUnique
+        DB-->>Scan: tokenRow
+        Scan->>Lib: refreshTokenIfNeeded (decrypt, refresh nếu cần 5 phút)
+        Lib->>DB: update accessToken mới (nếu refresh)
+        Scan->>Lib: recursiveScanFolder (Dropbox/Drive API)
+        alt Provider API lỗi
+            Lib-->>Scan: throw err
+            Scan-->>Modal: 429 rate / 404 not_found / 403 quyền / 500 khác
+        else Quét xong
+            Lib-->>Scan: RawScanTree
+            Scan->>Lib: rawTreeToScanInput rồi runEngineV4
+            Lib-->>Scan: VeloxScanResult (+ scannedAt)
+            Scan-->>Modal: 200 { ...result, provider, apiVersion v4 }
+            Modal-->>Admin: veloxMapToHookGraph / bubbleChange hiện Multi-Hook Map
+        end
+    end
+    end
+
+%% Nguồn (file:line):
+%% handleConnect: src/components/settings/ConnectorsPanel.tsx:90-93
+%% authorize guards: google-drive/authorize/route.ts:7-20, dropbox/authorize/route.ts:7-20 (401/400/500)
+%% state base64url: authorize/route.ts:22-28 (cả 2 provider)
+%% callback branches: google-drive/callback/route.ts:31-57 (redirect error), 64 (session mismatch), 85-92 (exchange fail), 126 (upsert), 155 (connected)
+%% dropbox/callback/route.ts:27-33 (400), 62-67 (401 mismatch), 88-92 (exchange fail), 127 (upsert), 154 (connected)
+%% scan guards: scan-folder/route.ts:62-68 (401), 73-95 (400), 100-110 (403), 116-122 (429), 127-136 (400 parse), 141-162 (401 requiresConnection), 167-181 (401 refresh fail)
+%% scan v4 path: scan-folder/route.ts:198-246 (recursiveScanFolder:214, rawTreeToScanInput:229, runEngineV4:236)
+%% error mapping catch: scan-folder/route.ts:305-346 (429/404/403/500)
+%% UI callers: AddTaskModal.tsx:496 (seedHookGraphFromVelox), VeloxMultiHookMapEditor.tsx:99 (runScan)

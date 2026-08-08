@@ -1,0 +1,147 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    Payroll {
+        String id PK "uuid - bảng lương tháng"
+        String userId FK "UK cùng month, year, workspaceId"
+        Int month
+        Int year
+        Decimal baseSalary
+        Decimal bonus
+        Decimal totalAmount
+        String status "String default UNPAID"
+        DateTime paidAt
+        String workspaceId FK
+        String profileId FK "nullable"
+    }
+
+    PayrollLock {
+        String id PK "uuid - chốt sổ kỳ lương"
+        Int month "UK cùng year, workspaceId"
+        Int year
+        Boolean isLocked
+        String lockedBy "scalar userId"
+        String workspaceId FK
+        String profileId FK "nullable"
+    }
+
+    MonthlyBonus {
+        String id PK "uuid - thưởng xếp hạng doanh thu"
+        String userId FK "UK cùng month, year, workspaceId"
+        Int month
+        Int year
+        Int rank
+        Decimal revenue
+        Decimal bonusAmount
+        Decimal bonusPercent "snapshot config lúc tính"
+        String workspaceId FK
+        String profileId FK "nullable"
+    }
+
+    BonusConfig {
+        String id PK "cuid - dùng 1 config mỗi profile"
+        String profileId FK "UK Cascade"
+        Boolean top1Enabled
+        Decimal top1Percent
+        Boolean top2Enabled
+        Decimal top2Percent
+        Boolean top3Enabled
+        Decimal top3Percent
+    }
+
+    Invoice {
+        String id PK "uuid"
+        String invoiceNumber UK
+        Int clientId FK "required"
+        String createdBy "scalar"
+        InvoiceStatus status "enum DRAFT, SENT, PAID, OVERDUE, VOID"
+        Decimal subtotalAmount
+        Decimal depositDeducted "gồm cả customPrepaid"
+        Decimal clientDepositDeducted "nullable - số THẬT SỰ trừ depositBalance, void phải refund số này"
+        Decimal taxPercent
+        Decimal totalDue
+        Json billingSnapshot
+        Json clientSnapshot
+        String workspaceId FK "nullable"
+        String clientUserId FK "nullable - User"
+        String profileId FK "nullable"
+    }
+
+    InvoiceItem {
+        String id PK "uuid"
+        String invoiceId FK "Cascade"
+        String taskId FK "nullable"
+        String description
+        Int quantity
+        Decimal unitPrice
+        Decimal amount
+    }
+
+    Payment {
+        String id PK "uuid - sổ thu tiền, độc lập với invoice"
+        Int clientId "scalar - KHÔNG relation, action layer tự enforce scope"
+        String workspaceId "scalar"
+        String profileId "scalar"
+        String invoiceId "scalar - ghi nhận thì mark invoice PAID"
+        Decimal amount
+        DateTime paidAt
+        String method "free text"
+        String recordedById "scalar - staff ghi sổ"
+    }
+
+    BillingProfile {
+        String id PK "uuid - tài khoản thụ hưởng xuất invoice"
+        String profileName
+        String beneficiaryName
+        String bankName
+        String accountNumber
+        String swiftCode
+        Boolean isDefault
+        String profileId FK "nullable"
+    }
+
+    User {
+        String id PK "stub - chi tiết ở erd-auth"
+    }
+    Workspace {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+    Profile {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+    Task {
+        String id PK "stub - chi tiết ở erd-task"
+        String invoiceId FK "nullable"
+        InvoiceTaskStatus invoiceStatus "enum UNBILLED, INVOICED"
+    }
+    Client {
+        Int id PK "stub - chi tiết ở erd-crm"
+        Decimal depositBalance
+    }
+
+    User ||--o{ Payroll : "lương tháng"
+    Workspace ||--o{ Payroll : "scope"
+    Profile |o--o{ Payroll : "profileId nullable"
+    Workspace ||--o{ PayrollLock : "chốt sổ"
+    User ||--o{ MonthlyBonus : "thưởng hạng"
+    Workspace ||--o{ MonthlyBonus : "scope"
+    Profile ||--o| BonusConfig : "1-1 Cascade"
+    Client ||--o{ Invoice : "clientId required"
+    Workspace |o--o{ Invoice : "nullable"
+    User |o--o{ Invoice : "clientUser nullable"
+    Invoice ||--o{ InvoiceItem : "Cascade"
+    Task |o--o{ InvoiceItem : "taskId nullable"
+    Invoice |o--o{ Task : "Task.invoiceId nullable"
+    Profile |o--o{ BillingProfile : "profileId nullable"
+    Client |o..o{ Payment : "scalar-FK clientId"
+    Invoice |o..o{ Payment : "scalar-FK invoiceId"
+    User |o..o{ Payment : "scalar-FK recordedBy"
+    User |o..o{ PayrollLock : "scalar-FK lockedBy"
+
+%% Nguồn: prisma/schema.prisma — Payroll:310-329, PayrollLock:478-492 (1-N MonthlyRank về ở erd-misc),
+%% MonthlyBonus:457-476, BonusConfig:1499-1512, Invoice:752-785, InvoiceItem:787-797,
+%% Payment:805-821 (scalar-only chủ đích, comment :799-804), BillingProfile:735-750.
+%% Chu kỳ lương: UK userId+month+year+workspaceId lặp ở Payroll/MonthlyBonus/PerformanceMetric/MonthlyRank.
+%% Phân nhóm theo docs/system-audit/00-discovery/parts/03-models.md mục 1.3.

@@ -1,0 +1,168 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class TaskDetailRoute {
+        <<component>>
+        +dispatcher desktop TaskDetailModal / mobile TaskDetailMobile
+    }
+    class TaskCommentColumn {
+        <<component>>
+        +load() getTaskActivityFeed
+        +onPost(body, visibility, parentId)
+        +onEdit onDelete onReact
+        +onAssign onResolve onReopen
+        +useSupabaseChannel(getTaskCommentChannel)
+    }
+    class TaskCommentThread {
+        <<component>>
+        +items ThreadItem[]
+        +canInternalToggle canAssign
+        +skin dark
+    }
+    class SharePortalClient {
+        <<component>>
+        +getCommentFeed maps getCommentFeedViaToken
+        +postComment maps postCommentViaToken
+        +reactComment maps toggleReactionViaToken
+    }
+
+    class TaskCommentActions {
+        <<server actions>>
+        -staffCtx(workspaceId)
+        -taskInWorkspace(taskId, workspaceId)
+        -buildTaskMentionUsers(taskId)
+        -resolveMentions(body, taskId)
+        -broadcastFeedChanged(taskId, commentId)
+        +getTaskActivityFeed(taskId, workspaceId)
+        +createTaskComment(taskId, workspaceId, input)
+        +editTaskComment(commentId, workspaceId, body)
+        +deleteTaskComment(commentId, workspaceId)
+        +toggleTaskCommentReaction(commentId, workspaceId, emoji)
+        +assignTaskComment(commentId, workspaceId, assigneeUserId)
+        +resolveTaskComment(commentId, workspaceId)
+        +reopenTaskComment(commentId, workspaceId)
+        +markTaskCommentsRead(taskId, workspaceId)
+        +getTaskUnreadCounts(workspaceId, taskIds)
+        +getTaskMentionTargets(taskId, workspaceId, q)
+    }
+    class SharePortalActions {
+        <<server actions>>
+        -findScopedTask(token, taskId, select)
+        +getCommentFeedViaToken(token, taskId)
+        +postCommentViaToken(token, taskId, body, parentId)
+        +toggleReactionViaToken(token, commentId, emoji)
+    }
+
+    class Security {
+        <<lib>>
+        +verifyWorkspaceAccess(workspaceId, MEMBER)
+    }
+    class ShareLinkAuth {
+        <<lib>>
+        +resolveShareToken(token)
+        +getRequestIp()
+    }
+    class Sanitize {
+        <<lib>>
+        +sanitizeClientText(text, FEEDBACK_MAX_LEN)
+    }
+    class NotificationActions {
+        <<server actions>>
+        +createNotificationInternal(input)
+    }
+    class NotificationBroadcast {
+        <<lib>>
+        +broadcastNotificationToUser(userId, payload)
+        +broadcastToTopic(channel, FEED_CHANGED, payload)
+    }
+    class AuditLib {
+        <<lib>>
+        +audit(entry)
+    }
+
+    class TaskComment {
+        <<model>>
+        +id taskId
+        +authorType STAFF or CLIENT
+        +authorUserId viaShareLinkId clientId
+        +visibility CommentVisibility
+        +body mentions editedAt isDeleted
+        +parentId
+        +actionAssignedToId actionAssignedById actionAssignedAt
+        +actionResolvedAt actionResolvedById
+        +spawnedTaskId pinnedAt pinnedById
+    }
+    class CommentVisibility {
+        <<enum>>
+        INTERNAL
+        CLIENT
+    }
+    class TaskCommentReadState {
+        <<model>>
+        +userId taskId lastReadAt
+        +unique userId_taskId
+    }
+    class TaskCommentReaction {
+        <<model>>
+        +commentId emoji
+        +userId staff reactor
+        +viaShareLinkId client reactor
+    }
+    class Task {
+        <<model>>
+        +id workspaceId title
+        +assigneeId assignedById
+        +clientId profileId
+    }
+    class AuditLog {
+        <<model>>
+        +action targetType Task targetId
+        +actorUserId
+    }
+    class ClientShareLink {
+        <<model>>
+        +id tokenHash clientId
+        +revokedAt expiresAt
+    }
+
+    TaskDetailRoute *-- TaskCommentColumn : mount trong task drawer
+    TaskCommentColumn *-- TaskCommentThread : render feed + composer
+    TaskCommentColumn ..> TaskCommentActions : gọi server actions
+    SharePortalClient ..> SharePortalActions : gọi token actions
+
+    TaskCommentActions ..> Security : staffCtx verifyWorkspaceAccess
+    TaskCommentActions ..> Sanitize : sanitizeClientText
+    TaskCommentActions ..> NotificationActions : notify mention assign resolve
+    TaskCommentActions ..> NotificationBroadcast : broadcastFeedChanged
+    TaskCommentActions ..> AuditLib : task.comment_added ...
+    TaskCommentActions ..> TaskComment : CRUD + soft delete
+    TaskCommentActions ..> TaskCommentReadState : upsert lastReadAt
+    TaskCommentActions ..> TaskCommentReaction : toggle theo userId
+    TaskCommentActions ..> AuditLog : merge activity vào feed
+
+    SharePortalActions ..> ShareLinkAuth : resolveShareToken
+    SharePortalActions ..> Sanitize : sanitizeClientText
+    SharePortalActions ..> NotificationActions : notify Manager assignedById
+    SharePortalActions ..> AuditLib : audit via share_link
+    SharePortalActions ..> TaskComment : create ép visibility CLIENT
+    SharePortalActions ..> TaskCommentReaction : toggle theo viaShareLinkId
+
+    TaskComment --> Task : taskId Cascade
+    TaskComment --> TaskComment : parentId replies Cascade
+    TaskComment o-- TaskCommentReaction : reactions Cascade
+    TaskComment --> CommentVisibility : visibility default CLIENT
+    TaskComment ..> ClientShareLink : viaShareLinkId provenance
+    TaskCommentReadState ..> Task : taskId
+
+%% Nguồn:
+%% src/actions/task-comment-actions.ts:150 staffCtx, :158 taskInWorkspace, :105 buildTaskMentionUsers, :142 resolveMentions, :24 broadcastFeedChanged
+%% src/actions/task-comment-actions.ts:163 getTaskActivityFeed, :244 createTaskComment, :302 editTaskComment, :318 deleteTaskComment, :333 toggleTaskCommentReaction
+%% src/actions/task-comment-actions.ts:369 assignTaskComment, :427 resolveTaskComment, :464 reopenTaskComment, :482 markTaskCommentsRead, :500 getTaskUnreadCounts, :561 getTaskMentionTargets
+%% src/actions/share-portal-actions.ts:480 findScopedTask, :1651 getCommentFeedViaToken, :1703 postCommentViaToken, :1777 toggleReactionViaToken
+%% src/components/tasks/TaskCommentColumn.tsx:20, src/components/tasks/detail-sections/TaskCommentsSection.tsx:20, src/components/tasks/TaskDetailRoute.tsx:54, src/components/portal/share/SharePortalClient.tsx:58-60
+%% src/lib/security.ts:38 verifyWorkspaceAccess, src/lib/share-link-auth.ts resolveShareToken
+%% prisma/schema.prisma:1519 CommentVisibility, :1530 TaskComment, :1579 TaskCommentReadState, :1592 TaskCommentReaction, :572 ClientShareLink

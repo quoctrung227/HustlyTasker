@@ -1,0 +1,94 @@
+sequenceDiagram
+    autonumber
+    participant U as User (Admin hoặc Staff)
+    participant TB as UserHomeTopBar.tsx
+    participant SEL as POST /api/profile/select
+    participant WF as GET /api/workspace/first
+    participant PR as lib/profile-routing.ts
+    participant MW as middleware.ts
+    participant CWM as CreateWorkspaceModal.tsx
+    participant WA as actions/workspace-actions.ts
+    participant SEC as lib/security.ts
+    participant DB as Prisma (Neon Postgres)
+
+    Note over U,DB: Pha 1 — Switch Profile và Workspace sau login
+
+    U->>TB: chọn profile khác (handleProfileSwitch)
+    TB->>SEL: fetch POST body profileId
+    alt thiếu profileId
+        SEL-->>TB: 400 Missing profileId
+    else session không giải mã được (getSession + decrypt fail)
+        SEL-->>TB: 401 Unauthorized Session
+    else session hợp lệ
+        SEL->>DB: user.findUnique + profileAccess.findUnique(userId_profileId)
+        alt không phải profile nhà và không có ProfileAccess
+            SEL-->>TB: 403 Bạn không có quyền truy cập vào Team này
+        else có quyền
+            SEL->>SEL: encrypt JWT mới nhúng sessionProfileId
+            SEL-->>TB: 200 Set-Cookie session + current_profile_id
+            TB->>WF: fetch GET profileId
+            WF->>PR: determineLandingForProfile(userId, profileId, isGlobalAdmin)
+            PR->>DB: profileAccess.findUnique + workspace.findMany kèm members
+            alt role CLIENT
+                PR-->>WF: view portal + workspace mới nhất
+            else không membership nào (chặn dò UUID)
+                PR-->>WF: workspaceId null + view dashboard
+            else có membership
+                PR-->>WF: workspace rank cao nhất + view admin hoặc dashboard
+            end
+            WF-->>TB: JSON workspaceId + view
+            alt view portal hoặc workspaceId null
+                TB->>U: window.location.href = /welcome
+            else có workspace
+                TB->>U: window.location.href = /wsId/admin hoặc /wsId/dashboard
+                U->>MW: request trang đích
+                alt JWT thiếu sessionProfileId
+                    MW-->>U: redirect /login
+                else JWT đủ
+                    MW-->>U: render, kèm rolling refresh cookie nếu còn dưới 50 phần trăm hạn
+                end
+            end
+        end
+    end
+
+    Note over U,DB: Pha 2 — Admin tạo workspace tháng mới rollover
+
+    U->>CWM: bấm Tạo tháng tiếp theo (handleRollover)
+    CWM->>WA: createNextMonthWithRollover(currentWorkspaceId)
+    WA->>SEC: verifyWorkspaceAccess(currentWorkspaceId, ADMIN)
+    alt SECURITY_VIOLATION (no session, LOCKED, sessionVersion cũ, không phải member ADMIN)
+        SEC-->>WA: throw SECURITY_VIOLATION
+        WA-->>CWM: error → toast.error
+    else quyền hợp lệ
+        SEC-->>WA: userId + workspaceRole
+        WA->>DB: workspace.findUnique nguồn → extractPayrollCycle(name)
+        WA->>DB: workspace.findFirst trùng tên Tháng M/YYYY ACTIVE
+        alt tháng mới đã tồn tại
+            WA-->>CWM: error Workspace đã tồn tại
+        else vượt giới hạn 10 workspace OWNER
+            WA-->>CWM: error Bạn đã đạt giới hạn 10 Workspace
+        else hợp lệ
+            WA->>DB: task.findMany status notIn (Hoàn tất, Đã hủy) isArchived false
+            WA->>DB: $transaction workspace.create + workspaceMember.create OWNER + task.createMany
+            alt transaction lỗi (timeout 30s hoặc DB error)
+                DB-->>WA: throw
+                WA-->>CWM: error Lỗi khi tạo tháng mới
+            else thành công
+                DB-->>WA: newWorkspaceId + copied count
+                WA->>DB: audit workspace.created (rolledFrom, tasksCopied)
+                WA-->>CWM: success + workspaceId + name + tasksCopied
+                CWM->>U: toast + router.push /newWsId/admin
+            end
+        end
+    end
+
+%% Nguồn (file:line, verify 2026-08-02):
+%% - src/components/dashboard/UserHomeTopBar.tsx:94-119 — handleProfileSwitch: POST /api/profile/select rồi GET /api/workspace/first, view portal hoặc null → /welcome
+%% - src/app/api/profile/select/route.ts:6-101 — 400 (:12), decrypt fallback body token (:18-24), 401 (:27), check user.profileId + ProfileAccess (:43-55), 403 (:58), re-sign JWT sessionProfileId (:66-88), 500 (:100)
+%% - src/app/api/workspace/first/route.ts:12-33 — 401 (:15), 400 Missing profileId (:20), gọi determineLandingForProfile (:26)
+%% - src/lib/profile-routing.ts:29-100 — CLIENT → portal (:39-46), chặn outsider dò workspace UUID (:82-85), rank ROLE_PRIORITY OWNER 4 > ADMIN 3 > MEMBER 2 > GUEST 1 (:10-15,87-99)
+%% - src/middleware.ts:94-99 — /admin /dashboard thiếu sessionProfileId → redirect /login; :138-163 rolling refresh cookie
+%% - src/components/workspace/CreateWorkspaceModal.tsx:41-62 — handleRollover gọi createNextMonthWithRollover, thành công → router.push /wsId/admin (:55)
+%% - src/actions/workspace-actions.ts:383-530 — verifyWorkspaceAccess ADMIN (:389), dup guard (:410-416), cap 10 OWNER (:419-424), task.findMany notIn SALARY_COMPLETED_STATUS + Đã hủy (:427-441), $transaction create + createMany timeout 30000 (:453-513), audit (:515), lỗi → Lỗi khi tạo tháng mới (:526-529)
+%% - src/lib/security.ts:38-147 — verifyWorkspaceAccess throw SECURITY_VIOLATION (:57,:68,:80,:89,:129,:147)
+%% - SALARY_COMPLETED_STATUS = Hoàn tất — src/lib/task-statuses.ts:95,119

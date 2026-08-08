@@ -1,0 +1,229 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class ReviewPlayerShell {
+        <<component src-components-review-player>>
+        workspaceId
+        assetId
+        currentUserId
+        isAdmin
+        unresolvedCount
+    }
+    class ReviewFlowActions {
+        <<component src-components-review-player>>
+        assetId
+        unresolvedCount
+    }
+    class TeamActionsLib {
+        <<client lib-review-team-actions.ts>>
+        apiSetAssetStatus(id, statusId, rowVersion)
+        apiConfirmTaskComplete(taskId)
+        apiMarkFeedbackDone(assetId)
+        apiConfirmFix(assetId)
+        apiApproveAndSend(assetId)
+        fetchStatusOptions()
+    }
+    class ReviewApiRoutes {
+        <<route app-api-review>>
+        PUT assets-id-status
+        POST assets-id-approve-send
+        POST assets-id-confirm-fix
+        POST assets-id-feedback-done
+        GET POST versions-id-comments
+        POST DELETE comments-id-resolve
+        POST assets-id-share
+        POST tasks-taskId-confirm-complete
+    }
+    class RouteAuth {
+        <<lib-review-route-auth.ts>>
+        withReviewRoute(handler)
+        withShareRoute(handler)
+    }
+    class AccessGuard {
+        <<lib-review-access.ts>>
+        requireReviewAccess(workspaceId, admin)
+        ReviewAccessError 401 403
+    }
+    class StatusService {
+        <<lib-review-status.ts>>
+        getReviewStatusOptions()
+        setAssetStatus(assetId, statusId, expectedRowVersion)
+    }
+    class TaskSyncService {
+        <<lib-review-task-sync.ts>>
+        confirmTaskHoanTat(taskId)
+        markFeedbackDone(assetId)
+        confirmFixDone(assetId)
+        approveInternalAndSendToClient(assetId)
+        syncTaskFromReviewEvent(taskId, wsId, target)
+        syncTaskOnChangesRequested(taskId, wsId)
+        revokeClientExposureOnNewVersion(taskId, assetId, wsId)
+    }
+    class CommentsService {
+        <<lib-review-comments.ts>>
+        listComments(versionId, opts)
+        createComment(versionId, input)
+        setResolved(commentId, resolved)
+        addReaction(commentId, emoji)
+    }
+    class SharesService {
+        <<lib-review-shares.ts>>
+        getOrCreatePrimaryShareForAsset(assetId)
+        createShareLink(input)
+        setShareRevoked(id, revoked)
+        shareUrl(slug)
+    }
+    class StatusMapConfig {
+        <<lib-review-status-map.ts>>
+        REVIEW_STATUS_MAP
+        approved HoanTat
+        submitted A2
+        sentToClient A5
+        isApprovedTaskStatus(statusId)
+    }
+    class TaskStatusesLib {
+        <<lib-task-statuses.ts>>
+        VALID_TASK_STATUSES
+        STATUS_TRANSITIONS
+        canAutoTransition(current, target)
+        isTerminalStatus(status)
+        isValidStatus(s)
+    }
+    class TaskActions {
+        <<actions-task-actions.ts>>
+        updateTaskStatus(taskId, status, wsId, .., version)
+    }
+    class NotifyService {
+        <<lib-review notify.ts guest-notify.ts>>
+        notifyManagerOfReviewFlip(input)
+        notifyGuestsOfAsset(assetId, event) Resend
+    }
+    class ActivityLog {
+        <<lib-review-activity.ts>>
+        recordActivity(tx, input)
+        REVIEW_ACTIVITY types
+    }
+
+    class ReviewAsset {
+        <<Prisma model>>
+        id
+        folderId
+        workspaceId
+        taskId nullable
+        statusId nullable
+        rowVersion
+        currentVersionId
+        deletedAt
+    }
+    class ReviewVersion {
+        <<Prisma model>>
+        id
+        assetId
+        versionNumber
+        pipelineStatus
+        muxPlaybackId
+        commentCount
+        durationMs
+    }
+    class ReviewComment {
+        <<Prisma model>>
+        id
+        versionId
+        parentId
+        body
+        timecodeMs
+        durationMs
+        annotation Json
+        isInternal
+        resolvedAt
+        authorId or guestSessionId
+    }
+    class ShareLink {
+        <<Prisma model>>
+        id
+        slug
+        workspaceId
+        taskId
+        allowComments
+        allowDownload
+        passwordHash
+        expiresAt
+        revokedAt
+    }
+    class ShareLinkItem {
+        <<Prisma model>>
+        shareLinkId
+        folderId xor assetId
+        sortIndex
+    }
+    class ReviewActivity {
+        <<Prisma model no FK>>
+        id
+        type
+        workspaceId
+        taskId
+        assetId
+        actorUserId
+        meta Json
+    }
+    class Task {
+        <<Prisma model>>
+        id
+        status free String
+        assigneeId
+        version
+        clientReview
+        productLink
+        isArchived
+    }
+
+    ReviewPlayerShell *-- ReviewFlowActions
+    ReviewPlayerShell ..> TeamActionsLib : gọi fetch
+    ReviewFlowActions ..> TeamActionsLib : apiApproveAndSend v.v.
+    TeamActionsLib ..> ReviewApiRoutes : HTTP fetch
+    ReviewApiRoutes ..> RouteAuth : bọc withReviewRoute
+    ReviewApiRoutes ..> StatusService : status route
+    ReviewApiRoutes ..> TaskSyncService : approve-send confirm-fix feedback-done confirm-complete
+    ReviewApiRoutes ..> CommentsService : comments resolve
+    ReviewApiRoutes ..> SharesService : share route
+    StatusService ..> AccessGuard : requireReviewAccess
+    TaskSyncService ..> AccessGuard : requireReviewAccess
+    CommentsService ..> AccessGuard : requireReviewAccess
+    SharesService ..> AccessGuard : requireReviewAccess
+    TaskSyncService ..> StatusMapConfig : đọc target status
+    TaskSyncService ..> TaskStatusesLib : canAutoTransition isTerminalStatus
+    TaskSyncService ..> TaskActions : delegateFlip
+    TaskSyncService ..> SharesService : bridge P4 tạo share
+    TaskSyncService ..> NotifyService : manager + guest email
+    TaskSyncService ..> ActivityLog : safeRecordActivity
+    StatusService ..> ActivityLog : STATUS_CHANGED
+    StatusService ..> TaskStatusesLib : isValidStatus
+    TaskActions ..> Task : ghi status version
+    StatusService ..> ReviewAsset : update statusId rowVersion
+    CommentsService ..> ReviewComment : create resolve
+    SharesService ..> ShareLink : get-or-create
+    TaskSyncService ..> Task : clientReview productLink
+
+    ReviewAsset "1" o-- "*" ReviewVersion : versions
+    ReviewAsset "0..1" --> "1" ReviewVersion : currentVersion head
+    ReviewVersion "1" *-- "*" ReviewComment : comments
+    ReviewComment "0..1" o-- "*" ReviewComment : replies 1 cấp
+    ShareLink "1" *-- "*" ShareLinkItem : items
+    ShareLinkItem "*" --> "0..1" ReviewAsset : trỏ vào stack
+    ReviewAsset "*" --> "0..1" Task : taskId
+    ReviewActivity ..> ReviewAsset : assetId lỏng lẻo
+    ReviewActivity ..> Task : taskId lỏng lẻo
+
+%% Nguồn (file:line):
+%% ReviewPlayerShell: src/app/[workspaceId]/team/asset/[assetId]/page.tsx:33, src/components/review/player/ReviewPlayerShell.tsx:852 (mount ReviewFlowActions)
+%% TeamActionsLib: src/lib/review/team-actions.ts:167,183,190,195,200
+%% Routes: src/app/api/review/assets/[id]/status/route.ts:18 · approve-send/route.ts:15 · confirm-fix/route.ts:15 · feedback-done/route.ts:13 · versions/[id]/comments/route.ts:13,30 · comments/[id]/resolve/route.ts:13,18 · assets/[id]/share/route.ts:14 · tasks/[taskId]/confirm-complete/route.ts:13
+%% RouteAuth: src/lib/review/route-auth.ts:21 · AccessGuard: src/lib/review/access.ts:32
+%% StatusService: src/lib/review/status.ts:22,34 · TaskSyncService: src/lib/review/task-sync.ts:26,90,158,272,298,377,452
+%% CommentsService: src/lib/review/comments.ts:224,282,493,518 · SharesService: src/lib/review/shares.ts:197,293,695
+%% StatusMapConfig: src/lib/review/status-map.ts:8 · TaskStatusesLib: src/lib/task-statuses.ts:18,199,221,156
+%% Prisma models: prisma/schema.prisma:1684 (ReviewAsset), 1721 (ReviewVersion), 1781 (ReviewComment), 1867 (ShareLink), 1905 (ShareLinkItem), 1989 (ReviewActivity), 331 (Task)

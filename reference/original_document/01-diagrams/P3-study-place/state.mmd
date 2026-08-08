@@ -1,0 +1,49 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "New (chưa có row StudyPlaceProgress hoặc attempts = 0)" as New
+    state "Started (attempts > 0, repetition < 2, masteredAt null)" as Started
+    state "Learning (repetition >= 2, masteredAt null)" as Learning
+    state "Mastered (masteredAt khác null)" as Mastered
+
+    [*] --> New: user mở StudyPlace lần đầu
+
+    New --> Started: review lần đầu (upsert create) - mọi quality
+    Started --> Started: quality <= 2 (lapse, repetition về 0) hoặc quality >= 3 khi repetition mới = 1
+    Started --> Learning: quality >= 3 lần nữa (repetition đạt 2)
+    Learning --> Learning: quality = 3 (repetition tăng nhưng chưa mastered) hoặc quality >= 4 khi repetition < 4
+    Learning --> Started: quality <= 2 (lapse, repetition về 0)
+    Learning --> Mastered: quality >= 4 và repetition >= 4 (set masteredAt)
+    Mastered --> Mastered: ôn lại quality >= 4 (masteredAt set lại)
+    Mastered --> Learning: ôn lại quality = 3 (masteredAt về null, repetition vẫn >= 2)
+    Mastered --> Started: ôn lại quality <= 2 (lapse, repetition về 0, masteredAt về null)
+
+    New --> [*]: resetStudyPlaceProgressAction deleteMany
+    Started --> New: reset (deleteMany row)
+    Learning --> New: reset (deleteMany row)
+    Mastered --> New: reset (deleteMany row)
+
+    note right of Started
+        Lịch ôn nextReviewAt theo SM-2 rút gọn
+        quality <= 1 - ôn lại sau 20 phút
+        quality = 2 - interval 1 ngày
+        quality >= 3 - interval 1-2, 3-6 ngày rồi nhân easeFactor (tối đa 365 ngày)
+    end note
+
+%% Nguồn status THẬT (không phải enum DB - là nhãn derive từ row StudyPlaceProgress):
+%% masteryLabel trả về đúng 4 chuỗi 'New' | 'Started' | 'Learning' | 'Mastered':
+%%   src/components/study-place/StudyPlaceBoard.tsx:94-100
+%%   - masteredAt != null -> 'Mastered' (:96)
+%%   - repetition >= 2 -> 'Learning' (:97)
+%%   - attempts > 0 -> 'Started' (:98)
+%%   - còn lại -> 'New' (:95, :99)
+%% Chuyển trạng thái do computeNextStudyProgress: src/lib/study-place.ts:91-150
+%%   - quality <= 1: lapses+1, nextReviewAt +20 phút, repetition = 0 (:118-120)
+%%   - quality = 2: lapses+1, intervalDays = 1 (:121-124)
+%%   - quality >= 3: repetition = base.repetition + 1, interval theo SM-2 (:125-134)
+%%   - masteredAt = now khi quality >= 4 và repetition >= 4 (:135)
+%%   - update upsert ghi đè masteredAt = next.masteredAt (có thể về null): src/actions/study-place-actions.ts:120-123
+%% Reset xóa row -> về New: src/actions/study-place-actions.ts:211-218
+%% Row lưu tại model StudyPlaceProgress: prisma/schema.prisma:1447-1473

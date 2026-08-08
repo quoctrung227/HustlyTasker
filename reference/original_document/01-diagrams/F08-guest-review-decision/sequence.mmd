@@ -1,0 +1,140 @@
+sequenceDiagram
+    autonumber
+    actor G as Khách (guest reviewer)
+    participant Page as page.tsx /r/[slug] (RSC)
+    participant UI as GuestReviewApp (client)
+    participant API as Routes /api/r/[slug]/*
+    participant Auth as share-auth.ts
+    participant Svc as share-decision.ts
+    participant Sync as task-sync.ts
+    participant DB as Prisma / Neon
+    participant Mail as Resend (notifyReview, notifyGuestsOfAsset)
+    participant Ing as Inngest reviewShareDecision
+
+    G->>Page: GET /r/slug
+    Page->>Auth: resolveShareGate(slug, cookies)
+    Auth->>DB: shareLink.findUnique(slug) + items
+    alt slug sai hoặc revokedAt
+        Auth-->>Page: not_found / revoked
+        Page-->>G: GateScreen unavailable (không phân biệt được)
+    else expiresAt quá hạn
+        Auth-->>Page: expired
+        Page-->>G: GateScreen expired
+    else có passwordHash, chưa unlock
+        Auth-->>Page: password
+        Page-->>G: PasswordGate
+        G->>API: POST /api/r/slug/unlock (password)
+        API->>DB: limitDb 5/60s failClosed
+        alt quá rate limit
+            API-->>G: 429 RATE_LIMITED
+        else bcrypt.compare sai
+            API-->>G: 403 FORBIDDEN Incorrect password
+        else đúng
+            API->>Auth: mintUnlockToken(share)
+            API-->>G: 200 + cookie rv_unlock_slug (JWT HS256)
+        end
+    else ok
+        Page->>DB: buildGuestShareContent(share)
+        Page-->>G: render GuestReviewApp
+    end
+
+    Note over G,UI: Xem video qua playback-token / view-url, comment theo timecode + annotation
+
+    G->>UI: gửi comment
+    UI->>API: POST /api/r/slug/comments
+    API->>DB: limitDb 10/60s và 60/3600s
+    API->>Auth: requireShare rồi resolveGuestForWrite
+    alt không session, không guest input, link không có client
+        Auth-->>UI: 401 UNAUTHORIZED
+        G->>UI: nhập name + email (IdentityModal)
+        UI->>API: POST /api/r/slug/identity
+        API->>Auth: createGuestSession (lưu sha256 token)
+        API-->>UI: 201 + cookie rv_guest_slug
+    end
+    API->>DB: createGuestComment (ReviewComment, commentCount +1)
+    API-->>UI: 201 comment DTO
+
+    G->>UI: bấm Approve / Request changes
+    UI->>UI: submitDecision() gọi ensureIdentity('decision')
+    UI->>API: POST /api/r/slug/decision (versionId, decision, note)
+    API->>DB: limitDb r decision 5/60s
+    alt quá rate limit
+        API-->>UI: 429 RATE_LIMITED
+    end
+    API->>Auth: requireShare(slug)
+    alt gate fail
+        Auth-->>UI: 404 SHARE_NOT_FOUND / 410 REVOKED / 410 EXPIRED / 401 PASSWORD_REQUIRED
+    end
+    API->>API: parseBody(guestDecisionSchema)
+    alt body sai schema
+        API-->>UI: 400 VALIDATION
+    end
+    API->>Auth: getGuestSession / createGuestSession
+    alt không session và body không có guest
+        API-->>UI: 401 UNAUTHORIZED Please add your name and email
+    end
+    API->>Svc: submitGuestDecision(share, guest, input)
+    Svc->>DB: assertVersionInShare(share, versionId)
+    alt version không thuộc share
+        Svc-->>UI: 404 NOT_FOUND
+    else asset không có taskId / task cancelled-archived / chưa ở phase khách
+        Svc-->>UI: 403 DECISIONS_DISABLED
+    else pipelineStatus khác READY hoặc reviewState DRAFT
+        Svc-->>UI: 409 STATE_INVALID
+    else hợp lệ
+        Svc->>DB: tx flip reviewVersion.reviewState + reviewAsset.statusId (REVIEW_STATUS_MAP) + recordActivity
+        alt thua race (updateMany count 0)
+            Svc->>DB: đọc lại reviewState
+            alt đã ở đúng target
+                Svc-->>UI: 200 idempotent (note vẫn được lưu)
+            else khác target
+                Svc-->>UI: 409 STATE_INVALID trang sẽ refresh
+            end
+        end
+        opt note của request_changes
+            Svc->>DB: persistDecisionNote tạo ReviewComment (public, internal nếu allowComments=false)
+        end
+        opt isHead - hiệu ứng ĐỒNG BỘ (video-fix 3-4-5)
+            Svc->>DB: subscribeGuestOnDecision(email, assetId)
+            alt decision request_changes
+                Svc->>Sync: syncTaskOnChangesRequested(taskId)
+                Sync->>DB: task.status A5 sang A6 Đã nhận feedback (khách), fallback Revision + clientReview=CHANGES
+                Svc->>Mail: notifyReview VIDEO_CHANGES_REQUESTED (editor + manager)
+                Svc->>Mail: notifyGuestsOfAsset feedback_received (ack khách)
+            else decision approve
+                Svc->>DB: task.updateMany clientReview=APPROVED (guard isArchived + status cũ)
+                Svc->>Mail: notifyReview VIDEO_REVIEW_APPROVED (editor + manager)
+                Svc->>Mail: notifyGuestsOfAsset approved
+            end
+            Svc->>Ing: inngest.send review/decision.recorded
+            alt gửi event lỗi
+                Svc->>Svc: log share.decision.event_send_failed (khách vẫn nhận 200)
+            end
+        end
+        API-->>UI: 200 reviewState + message (+ set cookie rv_guest nếu vừa tạo)
+        UI-->>G: toast Approved / Changes requested
+    end
+
+    Note over Ing: Backup BẤT ĐỒNG BỘ, retries 4, idempotent
+    Ing->>DB: step load-state (reviewState + isHead)
+    alt superseded (state đã đổi hoặc không còn head)
+        Ing-->>Ing: skip, log share_decision.superseded
+    else còn hiệu lực
+        alt request_changes
+            Ing->>Sync: step sync-task-revision (no-op nếu route đã chuyển)
+        else approve
+            Ing->>DB: step settle-client-review (clientReview=APPROVED, guard isArchived)
+        end
+        Ing->>DB: step task-feed-audit (task.client_approved / task.client_changes_requested)
+    end
+
+%% Nguồn: src/app/r/[slug]/page.tsx:22-58 (gate chain RSC)
+%% src/lib/review/share-auth.ts:76-109 (resolveShareGate/requireShare 404-410-410-401), 154-187 (guest session)
+%% src/app/api/r/[slug]/unlock/route.ts:21-53 (bcrypt + failClosed rate limit)
+%% src/app/api/r/[slug]/identity/route.ts:35-63, comments/route.ts:36-70 (resolveGuestForWrite 401)
+%% src/app/api/r/[slug]/decision/route.ts:34-68 (rate limit 5/60, inline identity)
+%% src/lib/review/share-decision.ts:127-398 (submitGuestDecision: gate 403 DECISIONS_DISABLED,
+%%   409 STATE_INVALID, tx flip, persistDecisionNote, sync effects, inngest.send)
+%% src/lib/review/task-sync.ts:158-196 (syncTaskOnChangesRequested A5->A6 / legacy Revision)
+%% src/lib/review/inngest.ts:657-749 (reviewShareDecision: load-state, superseded skip,
+%%   sync-task-revision, settle-client-review, task-feed-audit)

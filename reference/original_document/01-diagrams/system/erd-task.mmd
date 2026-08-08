@@ -1,0 +1,133 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    Task {
+        String id PK "uuid - đơn vị công việc trung tâm"
+        String title
+        String status "String TỰ DO default Đang thực hiện - KHÔNG enum"
+        String type "default Short form"
+        DateTime deadline "nullable"
+        Decimal value "lương editor"
+        Decimal jobPriceUSD "giá khách - chỉ admin thấy"
+        Decimal wageVND
+        Decimal profitVND
+        Decimal exchangeRate "default 25300"
+        String assigneeId FK "nullable - User"
+        String assignedById FK "nullable SetNull - admin giao task"
+        Int clientId FK "nullable SetNull - xóa client không mất task"
+        Int projectId FK "nullable"
+        String invoiceId FK "nullable"
+        InvoiceTaskStatus invoiceStatus "enum UNBILLED, INVOICED"
+        String workspaceId FK "nullable"
+        String profileId FK "nullable"
+        String assignedAgencyId FK "nullable"
+        String clientUserId FK "nullable"
+        ClaimSource claimSource "enum ADMIN, MARKET"
+        String clientReview "nullable - AWAITING, APPROVED, CHANGES"
+        Boolean isArchived
+        Boolean isPenalized
+        Int version "optimistic lock"
+        String currentVersionId "legacy Stream experiment - luôn null"
+    }
+
+    TaskRawFootage {
+        String id PK "uuid - Multi-Hook Map Velox v4"
+        String taskId FK "UK Cascade - 1-1 với Task"
+        RawFootageDisplayType displayType "enum PER_LINK, BATCH, MULTI_HOOK_MAP"
+        Json veloxMap "auto-scan seed"
+        Json manualGraph "whiteboard node graph"
+        String sourceFolderUrl
+        DateTime scannedAt
+    }
+
+    TaskComment {
+        String id PK "uuid - chat ClickUp-style trên task"
+        String taskId FK "Cascade"
+        String parentId FK "self nullable Cascade - reply thread"
+        String authorType "STAFF hoặc CLIENT"
+        String authorUserId "scalar - null nếu client ẩn danh"
+        String viaShareLinkId "scalar - provenance client"
+        Int clientId "scalar"
+        CommentVisibility visibility "enum INTERNAL, CLIENT - INTERNAL không ra portal"
+        String body
+        String mentions "array userId được mention"
+        Boolean isDeleted "soft-delete"
+        String actionAssignedToId "scalar - action item"
+        DateTime actionResolvedAt
+        String spawnedTaskId "scalar - task spawn từ message"
+        DateTime pinnedAt
+    }
+
+    TaskCommentReadState {
+        String id PK "cuid - con trỏ đã đọc"
+        String userId "scalar - UK cùng taskId"
+        String taskId "scalar"
+        DateTime lastReadAt
+    }
+
+    TaskCommentReaction {
+        String id PK "uuid"
+        String commentId FK "Cascade"
+        String emoji
+        String userId "scalar - staff reactor"
+        String viaShareLinkId "scalar - client reactor"
+    }
+
+    TagCategory {
+        String id PK "uuid"
+        String name
+        String profileId FK "Cascade"
+        String userId FK "Cascade"
+        String workspaceId FK "Cascade"
+    }
+
+    TaskTag {
+        String id PK "uuid - N-N task tag"
+        String taskId FK "Cascade - UK cùng tagCategoryId"
+        String tagCategoryId FK "Cascade"
+    }
+
+    PerformanceMetric {
+        String id PK "uuid"
+        String userId FK "UK cùng month, year, workspaceId"
+        Int month
+        Int year
+        Decimal revenue
+        Float onTimeRate
+        Float score
+        String classification "String default NORMAL"
+        String workspaceId FK
+        String profileId FK "nullable"
+    }
+
+    User {
+        String id PK "stub - chi tiết ở erd-auth"
+    }
+    Workspace {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+
+    User |o--o{ Task : "assignee nullable"
+    User |o--o{ Task : "assignedBy SetNull"
+    Workspace |o--o{ Task : "workspaceId nullable"
+    Task ||--o| TaskRawFootage : "1-1 Cascade"
+    Task ||--o{ TaskComment : "Cascade"
+    TaskComment |o--o{ TaskComment : "replies parentId Cascade"
+    TaskComment ||--o{ TaskCommentReaction : "Cascade"
+    Task ||--o{ TaskTag : "Cascade"
+    TagCategory ||--o{ TaskTag : "Cascade"
+    Workspace ||--o{ TagCategory : "Cascade"
+    User ||--o{ TagCategory : "Cascade"
+    User ||--o{ PerformanceMetric : "chỉ số tháng"
+    Workspace ||--o{ PerformanceMetric : "scope"
+    User |o..o{ TaskCommentReadState : "scalar-FK userId"
+    Task |o..o{ TaskCommentReadState : "scalar-FK taskId"
+    User |o..o{ TaskComment : "scalar-FK authorUserId"
+
+%% Nguồn: prisma/schema.prisma — Task:331-421, TaskRawFootage:432-455, TaskComment:1530-1573,
+%% TaskCommentReadState:1579-1587 (không có relation Prisma), TaskCommentReaction:1592-1602,
+%% TagCategory:1170-1187, TaskTag:1189-1200, PerformanceMetric:697-717.
+%% Task còn FK sang Client/Project/Invoice/Agency/Profile — vẽ ở erd-crm, erd-finance, erd-tenant.
+%% Phân nhóm theo docs/system-audit/00-discovery/parts/03-models.md mục 1.2 + 1.7.

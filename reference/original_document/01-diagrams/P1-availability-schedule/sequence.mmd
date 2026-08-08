@@ -1,0 +1,90 @@
+sequenceDiagram
+    autonumber
+    actor Editor as Editor (staff)
+    actor Admin as Admin
+    participant Page as UserSchedulePage dashboard schedule
+    participant Grid as OptimisticGrid (client)
+    participant SA as schedule-actions.ts
+    participant Sec as security.ts verifyWorkspaceAccess
+    participant DB as Prisma (Neon Postgres)
+    participant APage as AdminSchedulePage admin schedule
+    participant MC as MissionControlCalendarPage mc lich
+    participant AA as availability-actions.ts
+
+    Editor->>Page: GET workspaceId dashboard schedule
+    Page->>Page: getSession()
+    alt không có session
+        Page-->>Editor: redirect /login
+    else role là CLIENT
+        Page-->>Editor: redirect dashboard
+    else session hợp lệ
+        Page->>DB: scheduleRule.findMany và scheduleException.findMany (userId của mình)
+        DB-->>Page: rules và exceptions tuần này
+        Page-->>Grid: render items RULE BLOCK ADD
+    end
+
+    Editor->>Grid: kéo rê chọn khung giờ nhiều ngày
+    Grid->>Grid: dispatch useOptimistic op ADD (tô màu ngày)
+    Grid->>SA: createBatchScheduleExceptions(workspaceId, profileId, userId, entries)
+    SA->>Sec: validateAccess gọi verifyWorkspaceAccess(workspaceId, MEMBER)
+    alt không phải member workspace
+        Sec-->>SA: throw SECURITY_VIOLATION
+        SA-->>Grid: lỗi
+        Grid-->>Editor: toast lỗi và rollback optimistic
+    else MEMBER sửa lịch của người khác
+        SA-->>Grid: throw Bạn không có quyền thay đổi lịch của người khác
+        Grid-->>Editor: toast lỗi
+    else được phép (ADMIN OWNER hoặc tự sửa lịch mình)
+        SA->>DB: $transaction scheduleException.create mỗi entry (type BLOCK hoặc ADD, updatedById là caller)
+        alt DB lỗi
+            DB-->>SA: PrismaClientError
+            SA-->>Grid: lỗi
+            Grid-->>Editor: toast lỗi
+        else tạo thành công
+            DB-->>SA: danh sách created
+            SA->>SA: revalidatePath admin schedule và dashboard schedule
+            SA-->>Grid: count
+            Grid-->>Editor: giữ ô đã tô (xác nhận optimistic)
+        end
+    end
+
+    Admin->>APage: GET workspaceId admin schedule
+    APage->>APage: getSession()
+    alt không có session hoặc role CLIENT
+        APage-->>Admin: redirect /login hoặc dashboard
+    else session hợp lệ
+        APage->>DB: user.findMany staff của profile
+        APage->>DB: scheduleRule và scheduleException (userId in staffIds)
+        DB-->>APage: matrix cả team
+        APage-->>Admin: OptimisticGrid readOnly true (mobile dùng MobileScheduleView)
+    end
+
+    Admin->>MC: GET workspaceId mc lich
+    MC->>Sec: verifyProfileAdminAccess(workspaceId)
+    alt không phải admin profile
+        Sec-->>MC: throw
+        MC-->>Admin: redirect dashboard
+    else là admin
+        MC->>AA: getAdminAvailabilityWeek(todayKey, workspaceId)
+        AA->>Sec: verifyWorkspaceAccess(workspaceId, ADMIN)
+        alt không đủ quyền ADMIN workspace
+            Sec-->>AA: throw SECURITY_VIOLATION
+            AA-->>MC: object error (page catch về null, fallback vnWeekKeys)
+        else ADMIN ok
+            AA->>DB: dailyAvailability.findMany(profileId, workspaceId, date in tuần)
+            DB-->>AA: records schedule EMPTY FREE BUSY TENTATIVE
+            AA-->>MC: weekStartKey, days, users rows
+        end
+        MC-->>Admin: McCalendarBoard đếm ca rảnh theo ngày
+    end
+
+%% Nguồn (file:line):
+%% Page load + guard: src/app/[workspaceId]/dashboard/schedule/page.tsx:20-28 (getSession, CLIENT redirect, resolveActiveProfileId)
+%% Đọc rule exception: dashboard/schedule/page.tsx:43-52
+%% Drag và gọi action: src/components/schedule/OptimisticGrid.tsx:278 (createBatchScheduleExceptions), 87-94 (useOptimistic)
+%% createBatchScheduleExceptions: src/actions/schedule-actions.ts:165-199 ($transaction:179, revalidatePath:196-197)
+%% validateAccess: schedule-actions.ts:12-32 (MEMBER chỉ sửa lịch mình:28, ADMIN OWNER sửa mọi người:20)
+%% verifyWorkspaceAccess: src/lib/security.ts:38 (throw SECURITY_VIOLATION:57)
+%% AdminSchedulePage: src/app/[workspaceId]/admin/schedule/page.tsx:22-31 (guard), 43-74 (staff+rules+exceptions), 120 (mobile), 177-183 (readOnly)
+%% mc/lich: src/app/[workspaceId]/mc/lich/page.tsx:45 (verifyProfileAdminAccess), 62 (getAdminAvailabilityWeek catch null), 79 (fallback vnWeekKeys)
+%% getAdminAvailabilityWeek: src/actions/availability-actions.ts:216-279 (verifyWorkspaceAccess ADMIN:219, dailyAvailability.findMany:242)

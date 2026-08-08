@@ -1,0 +1,243 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    ReviewFolder {
+        String id PK "uuid - cây thư mục vô hạn cấp module Tệp"
+        String workspaceId "scalar-FK Workspace"
+        String parentId FK "self nullable RESTRICT"
+        String name "UK partial SQL tay: parentId + lower(name) WHERE sống"
+        String path "materialized path, index varchar_pattern_ops"
+        Int depth
+        Int rowVersion "optimistic lock"
+        String systemKey UK "nullable - idempotency auto-folder"
+        String clientId "scalar-FK Client - cấp client/sub-brand"
+        String taskId "scalar-FK Task - cấp video title"
+        String createdById "scalar-FK User, null = system"
+        Int itemCount "denormalized"
+        BigInt totalSizeBytes "denormalized recursive"
+        DateTime deletedAt "trash 30 ngày"
+        String deleteBatchId
+        Boolean orphanedFromPurge
+    }
+
+    ReviewAsset {
+        String id PK "uuid - version stack, card user thấy"
+        String folderId FK "RESTRICT"
+        String workspaceId "scalar-FK"
+        String taskId "scalar-FK Task - null = free upload"
+        String clientId "scalar-FK Client denormalized"
+        String name "UK partial SQL tay: folderId + lower(name) WHERE sống"
+        ReviewMediaKind mediaKind "enum IMAGE, VIDEO"
+        String statusId "chuỗi status task đọc động - nullable"
+        String currentVersionId FK "UK nullable SetNull - head của stack"
+        String createdById "scalar-FK User"
+        Int rowVersion
+        DateTime deletedAt
+        String deleteBatchId
+    }
+
+    ReviewVersion {
+        String id PK "uuid - 1 file vật lý = 1 version"
+        String assetId FK "Cascade - UK cùng versionNumber (race-safe)"
+        Int versionNumber "append-only"
+        String workspaceId "scalar-FK denormalized"
+        String fileName
+        BigInt sizeBytes
+        ReviewPipelineStatus pipelineStatus "enum UPLOADING, UPLOADED, PROCESSING, READY, FAILED"
+        ReviewState reviewState "enum DRAFT, AWAITING_REVIEW, CHANGES_REQUESTED, APPROVED"
+        String r2Key "bản gốc trên R2"
+        String muxAssetId UK "nullable - video only"
+        String muxPlaybackId "SIGNED policy"
+        Int durationMs
+        Int fpsNumerator "fps rational cho SMPTE timecode"
+        Int fpsDenominator
+        String uploaderId "scalar-FK User"
+        Int commentCount
+        DateTime deletedAt
+    }
+
+    ReviewComment {
+        String id PK "uuid - comment trên 1 VERSION"
+        String versionId FK "Cascade"
+        String parentId FK "self nullable Cascade - reply 1 cấp"
+        String body
+        Int timecodeMs "null = comment chung"
+        Int durationMs "null = point, set = range"
+        Json annotation "vẽ SVG shapes 0..1"
+        Boolean isInternal "default TRUE - team only"
+        String authorId "scalar-FK User - XOR guestSessionId (CHECK SQL)"
+        String guestSessionId FK "nullable SetNull"
+        String guestName "snapshot tên guest"
+        String shareLinkId "scalar provenance"
+        DateTime resolvedAt "Mark as Complete"
+        String resolvedById "scalar-FK User"
+        DateTime deletedAt
+    }
+
+    CommentAttachment {
+        String id PK "uuid - ảnh đính kèm comment"
+        String commentId FK "Cascade"
+        String r2Key
+        String mimeType "CHECK SQL: chỉ image"
+        BigInt sizeBytes
+    }
+
+    CommentReaction {
+        String id PK "uuid"
+        String commentId FK "Cascade"
+        String emoji "UK cùng commentId + reactorKey"
+        String userId "scalar-FK User"
+        String guestSessionId FK "nullable Cascade"
+        String reactorKey "u:userId hoặc g:guestSessionId - XOR unique"
+    }
+
+    ShareLink {
+        String id PK "uuid - link guest /r/slug, KHÁC ClientShareLink"
+        String slug UK "nanoid 12"
+        String workspaceId "scalar-FK"
+        String taskId "scalar-FK Task - null = tạo từ Team"
+        Boolean allowComments
+        Boolean allowDownload
+        Boolean downloadOnlyWhenApproved
+        Boolean showAllVersions "false = chỉ thấy currentVersion"
+        String passwordHash "bcrypt, null = link mở"
+        DateTime expiresAt
+        DateTime revokedAt "kill-switch"
+        String createdById "scalar-FK User"
+        Int rowVersion
+        Int viewCount
+    }
+
+    ShareLinkItem {
+        String id PK "uuid - nội dung link: folder XOR asset (CHECK SQL)"
+        String shareLinkId FK "Cascade - UK cùng folderId, UK cùng assetId"
+        String folderId FK "nullable Cascade"
+        String assetId FK "nullable Cascade"
+        Int sortIndex
+    }
+
+    GuestSession {
+        String id PK "uuid - 1 trình duyệt guest x 1 link"
+        String shareLinkId FK "Cascade"
+        String tokenHash UK "sha256, raw trong HttpOnly cookie"
+        String name "bắt buộc trước comment đầu"
+        String email "bắt buộc"
+        DateTime emailVerifiedAt "PIN double-opt-in FR-11"
+        DateTime lastSeenAt
+    }
+
+    GuestEmailVerification {
+        String id PK "cuid - PIN 6 số đang chờ"
+        String email "lowercase"
+        String codeHash "SHA-256"
+        String shareLinkId "scalar - KHÔNG relation"
+        Int attempts "khóa tại 5"
+        DateTime expiresAt "10 phút"
+        DateTime consumedAt
+    }
+
+    GuestSubscription {
+        String id PK "cuid - guest theo dõi 1 asset"
+        String email "UK cùng assetId - sống sót rotate slug"
+        String assetId FK "Cascade"
+        String shareLinkId "scalar - slug mới nhất cho email link"
+        String guestSessionId "scalar best-effort"
+        DateTime verifiedAt "double-opt-in"
+        DateTime unsubscribedAt "soft"
+        String unsubscribeToken UK
+    }
+
+    ReviewActivity {
+        String id PK "uuid - event log append-only"
+        String type "String tự do - mở rộng không cần migration"
+        String workspaceId "scalar"
+        String taskId "scalar"
+        String assetId "scalar"
+        String versionId "scalar"
+        String commentId "scalar"
+        String shareLinkId "scalar"
+        String actorUserId "scalar - null khi guest/system"
+        String guestName "snapshot"
+        Json meta
+    }
+
+    UploadSession {
+        String id PK "uuid - sổ multipart upload R2"
+        String versionId FK "Cascade"
+        String idempotencyKey UK "nullable"
+        String r2UploadId
+        Int partsTotal
+        Int partsDone
+        DateTime expiresAt "24h - janitor abort"
+        DateTime completedAt
+        DateTime abortedAt
+    }
+
+    WebhookEvent {
+        String id PK "id = event id của Mux - dedupe redelivery"
+        String provider "mux"
+        String type "video.asset.ready ..."
+        Json payload
+        DateTime processedAt "null = Inngest chưa xong"
+    }
+
+    RateLimitBucket {
+        String key PK "vd share:unlock:slug:ip"
+        DateTime windowStart
+        Int count
+    }
+
+    Task {
+        String id PK "stub - chi tiết ở erd-task"
+    }
+    User {
+        String id PK "stub - chi tiết ở erd-auth"
+    }
+    Client {
+        Int id PK "stub - chi tiết ở erd-crm"
+    }
+    Workspace {
+        String id PK "stub - chi tiết ở erd-tenant"
+    }
+
+    ReviewFolder |o--o{ ReviewFolder : "parentId RESTRICT"
+    ReviewFolder ||--o{ ReviewAsset : "folderId RESTRICT"
+    ReviewAsset ||--o{ ReviewVersion : "versions Cascade"
+    ReviewVersion |o--o| ReviewAsset : "currentVersion SetNull"
+    ReviewVersion ||--o{ ReviewComment : "Cascade"
+    ReviewComment |o--o{ ReviewComment : "replies Cascade"
+    ReviewComment ||--o{ CommentAttachment : "Cascade"
+    ReviewComment ||--o{ CommentReaction : "Cascade"
+    GuestSession |o--o{ ReviewComment : "guest author SetNull"
+    GuestSession |o--o{ CommentReaction : "guest reactor Cascade"
+    ShareLink ||--o{ ShareLinkItem : "Cascade"
+    ReviewFolder |o--o{ ShareLinkItem : "folderId Cascade"
+    ReviewAsset |o--o{ ShareLinkItem : "assetId Cascade"
+    ShareLink ||--o{ GuestSession : "Cascade"
+    ReviewAsset ||--o{ GuestSubscription : "Cascade"
+    ReviewVersion ||--o{ UploadSession : "Cascade"
+
+    Workspace |o..o{ ReviewFolder : "scalar-FK"
+    Task |o..o{ ReviewFolder : "scalar-FK"
+    Client |o..o{ ReviewFolder : "scalar-FK"
+    Task |o..o{ ReviewAsset : "scalar-FK"
+    Client |o..o{ ReviewAsset : "scalar-FK"
+    User |o..o{ ReviewAsset : "scalar-FK createdBy"
+    User |o..o{ ReviewVersion : "scalar-FK uploader"
+    User |o..o{ ReviewComment : "scalar-FK author"
+    Task |o..o{ ShareLink : "scalar-FK"
+    User |o..o{ ShareLink : "scalar-FK createdBy"
+    ShareLink |o..o{ GuestEmailVerification : "scalar-FK"
+    ShareLink |o..o{ GuestSubscription : "scalar-FK slug mới nhất"
+    Workspace |o..o{ ReviewActivity : "scalar-FK - log không FK chủ đích"
+    ReviewAsset |o..o{ ReviewActivity : "scalar-FK"
+
+%% Nguồn: prisma/schema.prisma:1616-2056 — ReviewFolder:1640, ReviewAsset:1684, ReviewVersion:1721,
+%% ReviewComment:1781, CommentAttachment:1827, CommentReaction:1846, ShareLink:1867, ShareLinkItem:1905,
+%% GuestSession:1926, GuestEmailVerification:1951, GuestSubscription:1968, ReviewActivity:1989,
+%% UploadSession:2016, WebhookEvent:2040, RateLimitBucket:2052.
+%% Cross-module FK (Task/User/Client/Workspace) là SCALAR chủ đích (P0, comment :1604-1613) — vẽ bằng nét đứt.
+%% Constraint thêm bằng SQL tay p0_add_review_module.sql: 2 partial unique lower(name), 5 CHECK (author XOR, reactor XOR, share item XOR, range needs timecode, attachment image-only).
+%% Phân nhóm theo docs/system-audit/00-discovery/parts/03-models.md mục 1.8.

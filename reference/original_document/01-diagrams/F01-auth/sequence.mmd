@@ -1,0 +1,130 @@
+sequenceDiagram
+    autonumber
+    actor U as Người dùng
+    participant UI as Trang auth (signup, login, forgot-password)
+    participant API as Route /api/auth/*
+    participant ACT as Server actions (signupAction, loginAction, password-reset)
+    participant LIB as Lib (auth.ts, google-auth.ts, otp.ts, rate-limit-upstash)
+    participant DB as Prisma (Neon Postgres)
+    participant MAIL as Resend (sendEmail)
+    participant GG as Google OAuth
+
+    Note over U,MAIL: GIAI ĐOẠN 1 — Đăng ký (POST /api/auth/signup)
+    U->>UI: điền form đăng ký (email, password, username, acceptTos)
+    UI->>API: POST /api/auth/signup
+    API->>ACT: signupAction(input)
+    ACT->>LIB: checkBotId + checkSignupIp (5/h) + checkSignupEmail (3/h)
+    alt honeypot có giá trị hoặc email đã tồn tại
+        ACT-->>API: 200 GENERIC_SIGNUP_RESPONSE (anti-enumeration, pad 600ms)
+    else bị rate limit
+        ACT-->>API: 429 kèm retryAfter
+    else validation fail (ToS, displayName, username trùng, email, HIBP password)
+        ACT-->>API: 400 kèm errors theo field
+    else hợp lệ
+        ACT->>DB: $transaction tạo Profile + User + Workspace OWNER + ProfileAccess + EmailVerificationToken TTL 24h
+        ACT->>MAIL: sendEmail(buildVerifyEmailEmail) fire-and-forget
+        ACT-->>API: 200 GENERIC_SIGNUP_RESPONSE
+    end
+    API-->>UI: JSON kết quả
+
+    Note over U,DB: GIAI ĐOẠN 2 — Xác thực email qua link token
+    U->>API: GET /api/auth/verify-email?token=raw
+    API->>DB: findFirst EmailVerificationToken (tokenHash, purpose EMAIL_VERIFICATION, usedAt null, còn hạn)
+    alt token không hợp lệ, đã dùng hoặc hết hạn
+        API-->>U: redirect /login?verifyEmail=error
+    else token hợp lệ
+        API->>DB: updateMany usedAt + User.emailVerified=true + auditLog
+        API-->>U: redirect /login?verifyEmail=success
+    end
+
+    Note over U,DB: GIAI ĐOẠN 3 — Đăng nhập bằng mật khẩu (loginAction)
+    U->>UI: /login nhập emailOrUsername + password (+ rememberMe)
+    UI->>ACT: loginAction(formData) qua useActionState
+    ACT->>LIB: checkLoginIp(ip) Upstash 10/phút
+    alt bị rate limit theo IP
+        ACT->>DB: logLoginAttempt(failReason rate_limited)
+        ACT-->>UI: error Quá nhiều yêu cầu
+    else tiếp tục
+        ACT->>DB: findFirst User theo email hoặc findUnique theo username
+        alt user không tồn tại, đang khoá, không có password (Google-only), sai password, role LOCKED
+            ACT->>DB: bumpFailedAttempts (5 sai trong 15 phút thì khoá 15 phút) + logLoginAttempt
+            ACT-->>UI: GENERIC_AUTH_ERROR (chống enumeration, pad 100-300ms)
+        else role CLIENT
+            ACT-->>UI: error tài khoản khách đã thay bằng link chia sẻ
+        else đăng nhập thành công
+            ACT->>DB: resetLockoutOnSuccess + logLoginAttempt(success) + auditLog auth.login_success
+            ACT->>LIB: loginWithProfile(sessionPayload) set cookie session JWT 30 ngày
+            ACT->>DB: findFirst Workspace mới nhất của profile
+            ACT-->>U: redirect safeNextPath hoặc /wsId/admin
+        end
+    end
+
+    Note over U,GG: GIAI ĐOẠN 4 — Đăng nhập Google OAuth
+    U->>UI: bấm GoogleSignInButton
+    UI->>API: GET /api/auth/google/authorize
+    API-->>U: 302 tới accounts.google.com + cookie g_oauth_state (5 phút)
+    U->>GG: chọn tài khoản, đồng ý scope openid email profile
+    GG-->>API: GET /api/auth/google/callback?code=...&state=...
+    alt thiếu code hoặc state khác cookie (CSRF)
+        API-->>U: redirect /login?error=google
+    else state hợp lệ
+        API->>GG: exchangeCodeForToken(code) rồi fetchGoogleUserInfo(accessToken)
+        alt email Google chưa verified
+            API-->>U: redirect /login?error=google_unverified
+        else email đã verified
+            API->>DB: findOrCreateGoogleUser (googleId, link theo email, hoặc tạo mới)
+            alt role LOCKED hoặc CLIENT
+                API-->>U: redirect /login?error=account_locked hoặc error=client_account
+            else user hợp lệ
+                API->>LIB: loginWithProfile(sessionPayload)
+                API-->>U: redirect /wsId/admin
+            end
+        end
+    end
+
+    Note over U,MAIL: GIAI ĐOẠN 5 — Quên mật khẩu (3 bước OTP)
+    U->>UI: /forgot-password nhập email
+    UI->>API: POST /api/auth/forgot-password
+    API->>ACT: requestPasswordResetOtp(email)
+    ACT->>LIB: checkOtpIp (10/h) + checkOtpEmail (3/h)
+    alt IP vượt rate limit
+        ACT-->>API: 429 kèm Retry-After
+    else email không tồn tại, role LOCKED, hoặc cooldown 60s
+        ACT-->>API: 200 GENERIC_OTP_RESPONSE (không leak)
+    else hợp lệ
+        ACT->>DB: invalidate OTP cũ + create PasswordResetOTP (hash SHA-256, TTL 10 phút)
+        ACT->>MAIL: sendEmail(buildPasswordResetOtpEmail)
+        ACT-->>API: 200 GENERIC_OTP_RESPONSE
+    end
+    U->>UI: nhập OTP 6 số
+    UI->>API: POST /api/auth/verify-otp
+    API->>ACT: verifyPasswordResetOtp(email, otp)
+    ACT->>DB: findFirst PasswordResetOTP còn hiệu lực (purpose PASSWORD_RESET)
+    alt OTP sai (updateMany attemptCount+1, lần thứ 5 set invalidatedAt)
+        ACT-->>API: 400 GENERIC_INVALID
+    else OTP đúng
+        ACT->>DB: $transaction consume OTP + tạo resetToken EmailVerificationToken purpose PASSWORD_RESET TTL 5 phút
+        ACT-->>API: 200 kèm resetToken (raw, trả 1 lần)
+    end
+    U->>UI: nhập mật khẩu mới 2 lần
+    UI->>API: POST /api/auth/reset-password
+    API->>ACT: resetPasswordWithToken(resetToken, newPassword)
+    alt password yếu hoặc dính HIBP
+        ACT-->>API: 400 kèm lỗi validate
+    else token không hợp lệ, hết hạn hoặc đã dùng (optimistic lock)
+        ACT-->>API: 400 liên kết không hợp lệ hoặc đã được sử dụng
+    else thành công
+        ACT->>DB: $transaction set usedAt + User.password mới (bcrypt 12) + sessionVersion tăng 1 + reset lockout
+        ACT->>MAIL: sendEmail(buildPasswordChangedEmail) cảnh báo bảo mật
+        ACT-->>API: 200 Mật khẩu đã cập nhật, đăng nhập lại
+    end
+    API-->>UI: JSON kết quả
+
+%% Nguồn code thật:
+%% - signup route: src/app/api/auth/signup/route.ts:16 - signupAction: src/actions/signup-actions.ts:107 (honeypot :112, botid :178, rate limit :188,:202, HIBP :213, silent-exists :227, transaction :242, sendEmail :350)
+%% - verify-email: src/app/api/auth/verify-email/route.ts:14 (verifyToken), GET :79 redirect /login?verifyEmail=...
+%% - loginAction: src/actions/auth-actions.ts:168 (checkLoginIp :210, lookup :230, lockout :253, google-only :272, compare :287, LOCKED :303, CLIENT :363, loginWithProfile :382, redirect :394)
+%% - Google: authorize src/app/api/auth/google/authorize/route.ts:14 (state cookie :32), callback src/app/api/auth/google/callback/route.ts:27 (CSRF :38, unverified :49, findOrCreateGoogleUser :54, LOCKED/CLIENT :66-67, loginWithProfile :98)
+%% - forgot: src/app/api/auth/forgot-password/route.ts:12 - requestPasswordResetOtp: src/actions/password-reset-actions.ts:65 (cooldown :106, create :135, sendEmail :168)
+%% - verify-otp: src/app/api/auth/verify-otp/route.ts:11 - verifyPasswordResetOtp: src/actions/password-reset-actions.ts:178 (attempt lock :229, transaction :254)
+%% - reset: src/app/api/auth/reset-password/route.ts:12 - resetPasswordWithToken: src/actions/password-reset-actions.ts:293 (transaction :336, sessionVersion :354, mail :389)

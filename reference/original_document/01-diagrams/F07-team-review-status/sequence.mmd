@@ -1,0 +1,91 @@
+sequenceDiagram
+    autonumber
+    participant U as Admin hoặc Editor
+    participant UI as ReviewPlayerShell + ReviewFlowActions
+    participant API as API /api/review/* (withReviewRoute)
+    participant CM as comments.ts
+    participant TS as task-sync.ts
+    participant TA as updateTaskStatus (task-actions.ts)
+    participant SH as shares.ts
+    participant DB as Prisma / Neon
+    participant NT as notify.ts + guest-notify.ts (Resend)
+
+    U->>UI: Mở /[workspaceId]/team/asset/[assetId]
+    UI->>API: GET versions/[id]/comments (polling, listComments)
+    API->>CM: listComments(versionId, opts)
+    CM->>DB: reviewComment.findMany theo versionId
+    DB-->>UI: danh sách comment + markers timecode
+
+    alt Chưa đăng nhập hoặc LOCKED/CLIENT
+        API-->>UI: 401 UNAUTHORIZED / 403 FORBIDDEN (requireReviewAccess ném ReviewAccessError)
+    end
+
+    U->>UI: Comment theo timecode + annotation
+    UI->>API: POST versions/[id]/comments (createComment)
+    API->>CM: createComment(versionId, input)
+    alt Version chưa READY
+        CM-->>UI: 409 STATE_INVALID (not_ready)
+    else Body + annotation + attachment đều rỗng, hoặc startFrame ngoài phạm vi
+        CM-->>UI: 400 VALIDATION_ERROR
+    else Hợp lệ
+        CM->>DB: $transaction tạo ReviewComment + tăng commentCount
+        DB-->>UI: 201 comment mới
+    end
+
+    U->>UI: Bấm Duyệt và gửi khách (F10)
+    UI->>API: POST assets/[id]/approve-send (apiApproveAndSend)
+    API->>TS: approveInternalAndSendToClient(assetId)
+    TS->>DB: loadAssetTaskContext (asset + task)
+    alt Asset không tồn tại / đã xoá
+        TS-->>UI: 404 NOT_FOUND
+    else Asset chưa gắn task
+        TS-->>UI: 409 STATE_INVALID (no_task)
+    else Task đã archive (Đã hủy)
+        TS-->>UI: 409 STATE_INVALID (archived)
+    else Không phải admin workspace
+        TS-->>UI: 403 FORBIDDEN (Chỉ người quản lý mới duyệt gửi khách)
+    else canAutoTransition(current, A5) = false
+        TS-->>UI: 409 STATE_INVALID (Task chưa sẵn sàng để duyệt gửi khách)
+    else Hợp lệ
+        TS->>TA: delegateFlip(taskId, Đã gửi video (khách), version)
+        TA->>DB: Task.status = A5, version+1, StatusHistory
+        alt updateTaskStatus trả về error
+            TA-->>TS: error RBAC/lock
+            TS-->>UI: 403 FORBIDDEN hoặc 409 STATE_INVALID
+        else Flip thành công
+            TS->>DB: safeRecordActivity TASK_SENT_TO_CLIENT (best-effort)
+            TS->>SH: getOrCreatePrimaryShareForAsset(assetId) — bridge P4
+            SH->>DB: advisory lock + get-or-create ShareLink /r/[slug] (CLIENT_BOARD)
+            TS->>DB: Task.clientReview = AWAITING, productLink = link /r/
+            TS->>NT: notifyGuestsOfAsset(version_sent) — email Resend
+            alt Bridge lỗi (DB/share/email)
+                TS->>TS: reviewLog task_sync.bridge_failed (không 500, flip A5 đã commit)
+            end
+            TS-->>UI: 200 ok, status = Đã gửi video (khách)
+        end
+    end
+
+    U->>UI: Editor bấm Đã sửa xong (F9)
+    UI->>API: POST assets/[id]/confirm-fix (apiConfirmFix)
+    API->>TS: confirmFixDone(assetId)
+    alt Không phải admin và không phải assignee
+        TS-->>UI: 403 FORBIDDEN (Chỉ người được giao task mới xác nhận đã sửa)
+    else Task không ở A3 hoặc A6
+        TS-->>UI: 409 STATE_INVALID (Task không ở trạng thái đang sửa feedback)
+    else Hợp lệ
+        TS->>TA: delegateFlip → A4 (nội bộ) hoặc A7 (khách)
+        TA->>DB: Task.status = A4/A7
+        TS->>DB: resolve mọi comment gốc còn mở của asset (best-effort)
+        TS->>NT: notifyManagerOfReviewFlip (in-app + email manager)
+        TS-->>UI: 200 ok, status mới
+    end
+
+%% Nguồn (file:line):
+%% Player page: src/app/[workspaceId]/team/asset/[assetId]/page.tsx:19-43 · ReviewFlowActions mount: ReviewPlayerShell.tsx:852
+%% Client wrappers: src/lib/review/team-actions.ts:190 (apiMarkFeedbackDone), :195 (apiConfirmFix), :200 (apiApproveAndSend)
+%% withReviewRoute 401/403/502/500: src/lib/review/route-auth.ts:21-42 · requireReviewAccess: src/lib/review/access.ts:32-70
+%% Comments: src/app/api/review/versions/[id]/comments/route.ts:13,30 · createComment lỗi 409 not_ready :284, 400 rỗng :291, 400 startFrame :313 (src/lib/review/comments.ts)
+%% approve-send: src/app/api/review/assets/[id]/approve-send/route.ts:15 → approveInternalAndSendToClient src/lib/review/task-sync.ts:377-423
+%% loadAssetTaskContext 404/409: task-sync.ts:209-238 · delegateFlip → updateTaskStatus: task-sync.ts:241-253
+%% Bridge P4: task-sync.ts:403-421 (getOrCreatePrimaryShareForAsset shares.ts:293, clientReview=AWAITING, notifyGuestsOfAsset guest-notify.ts:90)
+%% confirm-fix: src/app/api/review/assets/[id]/confirm-fix/route.ts:15 → confirmFixDone task-sync.ts:298-369 (403 :301, 409 :311, resolve round :321-333, notifyManagerOfReviewFlip notify.ts:83)

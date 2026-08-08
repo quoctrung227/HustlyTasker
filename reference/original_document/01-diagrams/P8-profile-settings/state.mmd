@@ -1,0 +1,24 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "ACTIVE" as Active
+    state "SOFT_DELETED" as SoftDeleted
+
+    [*] --> Active : createProfileForUser tạo Profile (status mặc định ACTIVE)
+    Active --> Active : updateProfileSettings đổi name banner logo portalAccent (chỉ OWNER)
+    Active --> SoftDeleted : deleteProfileAction (OWNER) đặt deletedAt + hardDeleteAfter 30 ngày
+    SoftDeleted --> Active : restoreProfileAction (OWNER) xóa deletedAt + hardDeleteAfter
+    SoftDeleted --> [*] : cron hard-delete-profiles chạy khi quá hardDeleteAfter (profile.delete cascade workspaces)
+
+%% Object: Profile (vòng đời branding/settings của flow P8 — object chính có lifecycle rõ nhất)
+%% Status THẬT trong code (string, không enum):
+%% - "ACTIVE" (default): prisma/schema.prisma:25 — status String @default("ACTIVE")
+%% - "SOFT_DELETED": prisma/schema.prisma:22-24 (comment ACTIVE | SOFT_DELETED)
+%% Transitions:
+%% - Tạo mới: src/actions/profile-actions.ts:232-274 (createProfileForUser — profile.create + ProfileAccess role OWNER)
+%% - Cập nhật settings (không đổi status): src/actions/profile-actions.ts:319-379 (updateProfileSettings — guard isSessionLive + getProfileRole === OWNER)
+%% - ACTIVE -> SOFT_DELETED: src/actions/profile-actions.ts:385-424 (deleteProfileAction dòng 399-406 set status SOFT_DELETED, deletedAt, hardDeleteAfter = now + 30 ngày, PROFILE_HARD_DELETE_GRACE_DAYS:280)
+%% - SOFT_DELETED -> ACTIVE: src/actions/profile-actions.ts:429-465 (restoreProfileAction dòng 441-448 set status ACTIVE, deletedAt null, hardDeleteAfter null)
+%% - Hard delete: src/app/api/cron/hard-delete-profiles/route.ts:82 (prisma.profile.delete — cascade)

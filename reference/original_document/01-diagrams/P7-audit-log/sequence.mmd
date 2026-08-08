@@ -1,0 +1,98 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin (OWNER hoặc ADMIN)
+    participant AdminPage as AdminAuditLogPage (admin/audit-log/page.tsx)
+    participant McPage as MissionControlAuditPage (mc/audit/page.tsx)
+    participant Viewer as AuditLogViewer (client component)
+    participant Act as AuditActions (src/actions/audit-actions.ts)
+    participant Sec as SecurityLib (src/lib/security.ts)
+    participant DB as Prisma (model AuditLog)
+    actor AnyUser as Người dùng bất kỳ
+    participant GErr as GlobalError (src/app/global-error.tsx)
+    participant Route as LogClientErrorRoute (api/log-client-error/route.ts)
+    participant VLog as Vercel Runtime Logs (console.error)
+
+    Admin->>AdminPage: GET /workspaceId/admin/audit-log
+    AdminPage->>AdminPage: getSession()
+    alt Chưa đăng nhập (không có session)
+        AdminPage-->>Admin: redirect /login
+    else Có session
+        AdminPage->>Act: Promise.all — getWorkspaceAuditLogs + getAuditLogActionTypes + getAuditLogActors
+        Act->>Sec: verifyWorkspaceAccess(workspaceId, ADMIN) — mỗi action tự guard
+        alt Session hết hiệu lực hoặc tài khoản LOCKED (401)
+            Sec--xAct: throw SECURITY_VIOLATION Unauthorized / tài khoản bị khoá / phiên hết hiệu lực
+            Act--xAdminPage: Promise.all reject
+            AdminPage-->>Admin: redirect /workspaceId/admin
+        else Không đủ quyền ADMIN trên workspace (403 IDOR)
+            Sec--xAct: throw SECURITY_VIOLATION IDOR Blocked / không đủ quyền
+            Act--xAdminPage: Promise.all reject
+            AdminPage-->>Admin: redirect /workspaceId/admin
+        else Quyền hợp lệ (workspaceRole OWNER hoặc ADMIN)
+            Sec-->>Act: access (workspaceRole, profileRole)
+            Act->>Act: clamp pageSize 1..100, build where theo filters
+            Act->>DB: auditLog.count(where)
+            Act->>DB: auditLog.findMany include actor, orderBy createdAt desc, skip-take
+            DB-->>Act: rows
+            Act->>Act: redactSensitive — password, token, secret thành REDACTED
+            Act->>Act: serialize BigInt thành string, Date thành ISO
+            Act-->>AdminPage: AuditLogResult + actionTypes + actors
+            alt isMobileDevice() true
+                AdminPage-->>Admin: render MobileAuditLog (mobile dispatcher)
+            else Desktop
+                AdminPage-->>Admin: render AuditLogViewer
+            end
+        end
+    end
+
+    opt Lọc và phân trang trên client
+        Admin->>Viewer: chọn filter action, actor, khoảng ngày hoặc đổi trang
+        Viewer->>Act: getWorkspaceAuditLogs(workspaceId, filters, page, 25)
+        Act->>Sec: verifyWorkspaceAccess(workspaceId, ADMIN) — guard lại mỗi lần gọi
+        alt Guard ném lỗi
+            Act--xViewer: reject
+            Viewer->>Viewer: catch — giữ nguyên dữ liệu đang hiển thị
+        else Thành công
+            Act-->>Viewer: logs + total + totalPages
+            Viewer-->>Admin: cập nhật bảng
+        end
+    end
+
+    opt Lối vào Mission Control /workspaceId/mc/audit
+        Admin->>McPage: GET
+        McPage->>Sec: verifyProfileAdminAccess(workspaceId)
+        alt Không phải OWNER hoặc ADMIN (cả workspace lẫn profile)
+            Sec--xMcPage: throw SECURITY_VIOLATION không có quyền quản trị
+            McPage-->>Admin: redirect /workspaceId/dashboard
+        else Hợp lệ
+            McPage->>Act: cùng 3 actions như trang admin
+            Act-->>McPage: AuditLogResult + actionTypes + actors
+            McPage-->>Admin: McShell bọc AuditLogViewer (tái sử dụng)
+        end
+    end
+
+    AnyUser->>GErr: React tree crash — global error boundary bắt lỗi
+    GErr->>GErr: console.error GlobalError (message, digest, stack)
+    GErr->>Route: POST /api/log-client-error (message, digest, stack, url, userAgent) keepalive
+    Note over Route: Không auth, không rate-limit — lỗi phải báo cáo được cả khi /login crash
+    Route->>Route: req.json() — parse hỏng thì fallback object rỗng (validation mềm)
+    Route->>Route: cắt chuỗi message 500, digest 64, stack 2000, url 500, UA 300 ký tự
+    alt Xử lý thành công
+        Route->>VLog: console.error ClientError — payload JSON có cấu trúc
+        Route-->>GErr: 200 (ok true)
+    else Lỗi nội bộ endpoint
+        Route->>VLog: console.error ClientError-LogEndpoint failed
+        Route-->>GErr: 500 (ok false)
+    end
+    Note over GErr,VLog: KHÔNG ghi DB — không tạo ErrorLog, chỉ vào Vercel logs
+    GErr->>GErr: fetch .catch — lỗi mạng bị nuốt, người dùng vẫn thấy trang lỗi + nút Thử lại
+
+%% Nguồn (file:line):
+%% AdminAuditLogPage: src/app/[workspaceId]/admin/audit-log/page.tsx:12 (getSession :18-19, Promise.all 3 actions :26-30, catch redirect /admin :31-33, isMobileDevice dispatcher :38)
+%% MissionControlAuditPage: src/app/[workspaceId]/mc/audit/page.tsx:22 (verifyProfileAdminAccess :26, catch redirect /dashboard :26,35-37)
+%% getWorkspaceAuditLogs: src/actions/audit-actions.ts:49 (guard :55, clamp :58, count :83, findMany :90-105, redactSensitive :114-127, serialize :130-146)
+%% getAuditLogActionTypes :163 / getAuditLogActors :180 — cùng guard verifyWorkspaceAccess ADMIN (:164, :181)
+%% verifyWorkspaceAccess: src/lib/security.ts:38 (no session :56-58, LOCKED :67-69, sessionVersion :79-81, workspace không tồn tại :88-90, IDOR :145-148, thiếu role :150-153)
+%% verifyProfileAdminAccess: src/lib/security.ts:180-191
+%% AuditLogViewer.fetchLogs: src/components/workspace/AuditLogViewer.tsx:144-169 (catch giữ nguyên data :164-166)
+%% GlobalError: src/app/global-error.tsx:25-50 (console.error :27, fetch POST :35-46, catch nuốt lỗi mạng :46)
+%% LogClientErrorRoute POST: src/app/api/log-client-error/route.ts:17 (json fallback :19, slice :20-24, console.error :27-34, 200 :36, 500 :37-40; không auth/không DB :12-15)

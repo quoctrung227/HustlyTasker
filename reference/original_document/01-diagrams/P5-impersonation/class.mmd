@@ -1,0 +1,151 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class LivePresenceBoard {
+        <<client component>>
+        +workspaceId from useParams
+        +presence any[]
+        +impersonatingId string
+        +handleImpersonate(userId)
+        +fetchData()
+    }
+
+    class ImpersonationBannerLayout {
+        <<client component layout>>
+        +username string
+        +workspaceId string
+        +handleStop()
+    }
+
+    class ImpersonationBannerWrapper {
+        <<client component admin>>
+        +impersonatedUsername string
+        +expiresAtIso string
+        +workspaceId string
+        +handleStop()
+    }
+
+    class ImpersonationBannerAdmin {
+        <<client component countdown>>
+        +impersonatedUsername string
+        +expiresAtIso string
+        +secondsLeft number
+        +onStop()
+    }
+
+    class ImpersonationActions {
+        <<server action>>
+        +startImpersonation(targetUserId, workspaceId)
+        +stopImpersonation(workspaceId)
+    }
+
+    class SecurityLib {
+        <<lib security.ts>>
+        +verifyWorkspaceAccess(workspaceId, requiredRole)
+    }
+
+    class AuthLib {
+        <<lib auth.ts>>
+        +getSession()
+        +createImpersonationSession(originalUser, targetUser)
+        +stopImpersonationSession()
+    }
+
+    class AuditLogLib {
+        <<lib audit-log.ts>>
+        +audit(opts) non-throwing
+    }
+
+    class JwtSessionCookie {
+        <<cookie JWT không phải model DB>>
+        +cookie session
+        +cookie admin_session standby
+        +isImpersonating bool
+        +originalAdminId string
+        +impersonationExpiresAt ISO
+        +exp 2h TTL
+    }
+
+    class User {
+        <<Prisma model>>
+        +id String
+        +username String
+        +nickname String
+        +role UserRole
+        +email String
+        +sessionVersion Int
+    }
+
+    class Workspace {
+        <<Prisma model>>
+        +id String
+        +profileId String
+        +status String
+    }
+
+    class WorkspaceMember {
+        <<Prisma model>>
+        +userId String
+        +workspaceId String
+        +role String default MEMBER
+    }
+
+    class ProfileAccess {
+        <<Prisma model>>
+        +userId String
+        +profileId String
+        +role ProfileRole
+        +grantedAt DateTime
+    }
+
+    class AuditLog {
+        <<Prisma model>>
+        +id BigInt
+        +workspaceId String
+        +actorUserId String
+        +action String
+        +targetType String
+        +targetId String
+        +ipAddress String
+        +userAgent String
+    }
+
+    LivePresenceBoard ..> ImpersonationActions : gọi startImpersonation
+    ImpersonationBannerLayout ..> ImpersonationActions : gọi stopImpersonation
+    ImpersonationBannerWrapper ..> ImpersonationActions : gọi stopImpersonation
+    ImpersonationBannerWrapper --> ImpersonationBannerAdmin : render với onStop
+
+    ImpersonationActions ..> SecurityLib : guard ADMIN
+    ImpersonationActions ..> AuthLib : tạo và gỡ session
+    ImpersonationActions ..> AuditLogLib : ghi audit
+    ImpersonationActions ..> WorkspaceMember : check target là member
+    ImpersonationActions ..> ProfileAccess : check role OWNER ADMIN elsewhere
+    ImpersonationActions ..> Workspace : lấy profileId
+    ImpersonationActions ..> User : load target user
+
+    AuthLib ..> JwtSessionCookie : encrypt 2h set cookie
+    AuditLogLib ..> AuditLog : prisma create
+    SecurityLib ..> User : check LOCKED sessionVersion
+    SecurityLib ..> ProfileAccess : resolve workspaceRole
+    SecurityLib ..> WorkspaceMember : fallback membership
+
+    WorkspaceMember --> User : userId
+    WorkspaceMember --> Workspace : workspaceId
+    ProfileAccess --> User : userId
+    AuditLog --> Workspace : workspaceId
+    AuditLog --> User : actorUserId
+
+%% Nguồn code thật:
+%% - src/actions/impersonation-actions.ts:9 startImpersonation, :109 stopImpersonation
+%% - src/lib/auth.ts:76 createImpersonationSession (TTL 2h, cookie admin_session + session), :119 stopImpersonationSession
+%% - src/lib/security.ts:38 verifyWorkspaceAccess
+%% - src/lib/audit-log.ts:153 audit (action auth.impersonation_started / auth.impersonation_ended)
+%% - src/components/admin/analytics/LivePresenceBoard.tsx:21 handleImpersonate
+%% - src/components/layout/ImpersonationBanner.tsx:7 (banner ở [workspaceId]/layout.tsx:170)
+%% - src/components/admin/ImpersonationBannerWrapper.tsx:22 + src/components/admin/ImpersonationBanner.tsx:26 (countdown, dùng ở admin/dashboard layout)
+%% - prisma/schema.prisma:57 Workspace, :110 WorkspaceMember, :125 User, :266 ProfileAccess, :861 AuditLog
+%% - "Session" của flow P5 là JWT cookie (không có model Session trong schema.prisma)

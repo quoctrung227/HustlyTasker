@@ -1,0 +1,34 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Chưa kết nối (không có row IntegrationToken)" as ChuaKetNoi
+    state "Đang OAuth (consent tại provider)" as DangOAuth
+    state "Đã kết nối - token còn hạn" as DaKetNoi
+    state "Hết hạn / sắp hết hạn (dưới 5 phút)" as HetHan
+    state "Cần kết nối lại (requiresConnection)" as CanKetNoiLai
+
+    [*] --> ChuaKetNoi
+    ChuaKetNoi --> DangOAuth: handleConnect - GET authorize
+    DangOAuth --> ChuaKetNoi: từ chối consent / đổi token thất bại - redirect error
+    DangOAuth --> DaKetNoi: callback upsert (create) - encryptToken
+    DaKetNoi --> HetHan: expiresAt nhỏ hơn now + 5 phút
+    HetHan --> DaKetNoi: refreshTokenIfNeeded OK - update accessToken + expiresAt
+    HetHan --> CanKetNoiLai: refresh thất bại (không có refreshToken / provider lỗi)
+    CanKetNoiLai --> DangOAuth: user bấm Connect lại - callback upsert (update)
+    DaKetNoi --> ChuaKetNoi: disconnectIntegration - revoke + delete row
+    CanKetNoiLai --> ChuaKetNoi: disconnectIntegration - revoke + delete row
+    ChuaKetNoi --> [*]
+
+%% Vòng đời IntegrationToken (object chính của flow P2).
+%% Model KHÔNG có cột status — các state trên là điều kiện THẬT trong code:
+%% - "Chưa kết nối": prisma.integrationToken.findUnique trả null → 401 requiresConnection (src/app/api/integrations/scan-folder/route.ts:141-162)
+%% - "Đang OAuth": GET authorize dựng state base64url {userId, workspaceId, nonce} rồi redirect consent (google-drive/authorize/route.ts:22-40, dropbox/authorize/route.ts:22-39)
+%% - Từ chối/đổi token thất bại: google-drive/callback/route.ts:31-36,85-92 (redirect error=google_drive_failed); dropbox/callback/route.ts:27-33,88-92 (400 / error=dropbox_failed)
+%% - "Đã kết nối": integrationToken.upsert create/update (google-drive/callback/route.ts:126-150, dropbox/callback/route.ts:127-151); provider = "dropbox" | "google_drive" (prisma/schema.prisma:1378)
+%% - "Hết hạn / sắp hết hạn": isExpiredOrSoon = expiresAt <= now + 5 phút (src/lib/integration-tokens.ts:36-38)
+%% - Refresh OK: prisma.integrationToken.update accessToken + expiresAt (src/lib/integration-tokens.ts:99-105)
+%% - Refresh thất bại: throw (integration-tokens.ts:46-48,81-86) → scan-folder trả 401 requiresConnection:true (scan-folder/route.ts:170-181)
+%% - Disconnect: revoke best-effort tại provider rồi prisma.integrationToken.delete (src/actions/integration-actions.ts:88-109)
+%% - Unique key 1 row/user/workspace/provider: prisma/schema.prisma:1389

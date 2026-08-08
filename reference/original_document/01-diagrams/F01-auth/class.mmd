@@ -1,0 +1,192 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class User {
+      +String id
+      +String username
+      +String email
+      +String password nullable
+      +String googleId nullable
+      +String authProvider
+      +UserRole role
+      +Boolean emailVerified
+      +Int failedLoginAttempts
+      +DateTime lockedUntil nullable
+      +Int sessionVersion
+      +DateTime lastLoginAt
+      +String lastLoginIp
+    }
+
+    class Session {
+      +String id
+      +String userId
+      +String ipAddress
+      +DateTime startTime
+      +DateTime endTime nullable
+    }
+
+    class EmailVerificationToken {
+      +String tokenHash unique
+      +String purpose EMAIL_VERIFICATION hoặc PASSWORD_RESET
+      +String email
+      +DateTime expiresAt
+      +DateTime usedAt nullable
+    }
+
+    class PasswordResetOTP {
+      +String otpHash
+      +String purpose PASSWORD_RESET
+      +Int attemptCount
+      +DateTime expiresAt
+      +DateTime consumedAt nullable
+      +DateTime invalidatedAt nullable
+    }
+
+    class LoginAttempt {
+      +String emailTried
+      +Boolean success
+      +String failReason
+      +String ipAddress
+    }
+
+    class SignupPage {
+      +fetch POST api auth signup
+    }
+    class LoginPage {
+      +useActionState loginAction
+    }
+    class GoogleSignInButton {
+      +link GET api auth google authorize
+    }
+    class ForgotPasswordPage {
+      +StepEmail StepOtp StepPassword
+    }
+
+    class ApiAuthSignup {
+      +POST(req)
+    }
+    class ApiAuthVerifyEmail {
+      +GET(req)
+      +POST(req)
+      +verifyToken(rawToken)
+    }
+    class ApiAuthVerifyOtp {
+      +POST(req)
+    }
+    class ApiAuthForgotPassword {
+      +POST(req)
+    }
+    class ApiAuthResetPassword {
+      +POST(req)
+    }
+    class ApiAuthGoogleAuthorize {
+      +GET()
+    }
+    class ApiAuthGoogleCallback {
+      +GET(req)
+    }
+
+    class SignupActions {
+      +signupAction(input)
+    }
+    class AuthActions {
+      +loginAction(prevState, formData)
+      +logoutAction()
+      +safeNextPath(raw)
+    }
+    class PasswordResetActions {
+      +requestPasswordResetOtp(email)
+      +verifyPasswordResetOtp(email, otp)
+      +resetPasswordWithToken(rawToken, newPassword)
+    }
+
+    class AuthLib {
+      +login(userData, opts)
+      +loginWithProfile(userData, profileId, opts)
+      +logout()
+      +getSession()
+    }
+    class GoogleAuthLib {
+      +getGoogleRedirectUri()
+      +exchangeCodeForToken(code)
+      +fetchGoogleUserInfo(accessToken)
+      +findOrCreateGoogleUser(info)
+    }
+    class OtpLib {
+      +generateOtp()
+      +hashOtp(otp)
+      +verifyOtp(otp, hash)
+      +generateRandomToken()
+      +hashToken(raw)
+    }
+    class RateLimitUpstash {
+      +checkLoginIp(ip)
+      +checkSignupIp(ip)
+      +checkSignupEmail(email)
+      +checkOtpIp(ip)
+      +checkOtpEmail(email)
+    }
+    class EmailLib {
+      +sendEmail(to, subject, html)
+    }
+
+    SignupPage ..> ApiAuthSignup : POST body email password username
+    ApiAuthSignup ..> SignupActions : signupAction
+    SignupActions ..> RateLimitUpstash : checkSignupIp checkSignupEmail
+    SignupActions ..> OtpLib : generateRandomToken hashToken
+    SignupActions ..> EmailLib : gửi mail verify link
+    SignupActions --> User : tạo User Profile Workspace OWNER
+    SignupActions --> EmailVerificationToken : tạo token TTL 24h
+
+    ApiAuthVerifyEmail --> EmailVerificationToken : updateMany usedAt
+    ApiAuthVerifyEmail --> User : set emailVerified true
+
+    LoginPage ..> AuthActions : loginAction qua form action
+    LoginPage *-- GoogleSignInButton
+    AuthActions ..> RateLimitUpstash : checkLoginIp 10 mỗi phút
+    AuthActions ..> AuthLib : loginWithProfile set cookie JWT
+    AuthActions --> User : compare bcrypt, lockout 5 fail 15p
+    AuthActions --> LoginAttempt : logLoginAttempt mỗi lần thử
+
+    GoogleSignInButton ..> ApiAuthGoogleAuthorize : redirect
+    ApiAuthGoogleAuthorize ..> GoogleAuthLib : getGoogleRedirectUri
+    ApiAuthGoogleCallback ..> GoogleAuthLib : exchange code, userinfo, findOrCreate
+    ApiAuthGoogleCallback ..> AuthLib : loginWithProfile
+    GoogleAuthLib --> User : find googleId, link email, tạo mới
+
+    ForgotPasswordPage ..> ApiAuthForgotPassword : bước 1 email
+    ForgotPasswordPage ..> ApiAuthVerifyOtp : bước 2 OTP 6 số
+    ForgotPasswordPage ..> ApiAuthResetPassword : bước 3 password mới
+    ApiAuthForgotPassword ..> PasswordResetActions : requestPasswordResetOtp
+    ApiAuthVerifyOtp ..> PasswordResetActions : verifyPasswordResetOtp
+    ApiAuthResetPassword ..> PasswordResetActions : resetPasswordWithToken
+    PasswordResetActions ..> RateLimitUpstash : checkOtpIp checkOtpEmail
+    PasswordResetActions ..> OtpLib : generateOtp hashOtp verifyOtp
+    PasswordResetActions ..> EmailLib : mail OTP và mail đổi mật khẩu
+    PasswordResetActions --> PasswordResetOTP : tạo, đếm attempt, consume
+    PasswordResetActions --> EmailVerificationToken : resetToken PASSWORD_RESET TTL 5p
+    PasswordResetActions --> User : đổi password, tăng sessionVersion
+
+    User o-- Session : sessions
+    User o-- EmailVerificationToken : userId cascade
+    User o-- PasswordResetOTP : userId cascade
+    User o-- LoginAttempt : userId setnull
+
+%% Nguồn code thật:
+%% - User: prisma/schema.prisma:125 (password String? :136, googleId :137, emailVerified :158, failedLoginAttempts :163, lockedUntil :164, sessionVersion :170)
+%% - Session: prisma/schema.prisma:963 (session làm việc analytics; phiên đăng nhập thật là cookie JWT trong src/lib/auth.ts)
+%% - EmailVerificationToken: prisma/schema.prisma:1305 (purpose :1311)
+%% - PasswordResetOTP: prisma/schema.prisma:1327
+%% - LoginAttempt: prisma/schema.prisma:1351 (failReason :1357)
+%% - SignupPage: src/app/signup/page.tsx:24,49 - LoginPage: src/app/login/page.tsx:9,10 - ForgotPasswordPage: src/app/forgot-password/page.tsx:19
+%% - ApiAuthSignup: src/app/api/auth/signup/route.ts:16 - ApiAuthVerifyEmail: src/app/api/auth/verify-email/route.ts:79,90,14
+%% - ApiAuthVerifyOtp: src/app/api/auth/verify-otp/route.ts:11 - ApiAuthForgotPassword: src/app/api/auth/forgot-password/route.ts:12
+%% - ApiAuthResetPassword: src/app/api/auth/reset-password/route.ts:12
+%% - ApiAuthGoogleAuthorize: src/app/api/auth/google/authorize/route.ts:14 - ApiAuthGoogleCallback: src/app/api/auth/google/callback/route.ts:27
+%% - SignupActions.signupAction: src/actions/signup-actions.ts:107 - AuthActions.loginAction: src/actions/auth-actions.ts:168, logoutAction :404
+%% - PasswordResetActions: src/actions/password-reset-actions.ts:65,178,293
+%% - AuthLib: src/lib/auth.ts:16,32,51,65 - GoogleAuthLib: src/lib/google-auth.ts:52,85,149

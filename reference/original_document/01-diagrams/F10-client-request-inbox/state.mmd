@@ -1,0 +1,32 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "NEW - mới gửi, hiện badge chờ xử lý" as NEW
+    state "REVIEWING - định nghĩa trong enum, chưa có code nào set" as REVIEWING
+    state "ACCEPTED - đã duyệt, terminal" as ACCEPTED
+    state "REJECTED - từ chối kèm rejectionNote" as REJECTED
+
+    [*] --> NEW : submitClientRequestViaToken tạo request status NEW
+
+    NEW --> ACCEPTED : acceptClientRequest tạo Task status Đang đợi giao + gán taskId
+    NEW --> ACCEPTED : markRequestAccepted luồng Quét bảng Velox, không gán taskId
+    NEW --> REJECTED : rejectClientRequest lưu rejectionNote
+
+    REVIEWING --> ACCEPTED : guard chỉ chặn khi đã ACCEPTED
+    REVIEWING --> REJECTED : guard chỉ chặn khi đã ACCEPTED
+
+    REJECTED --> ACCEPTED : code cho phép, accept chỉ từ chối khi status = ACCEPTED
+
+    ACCEPTED --> [*]
+    REJECTED --> [*]
+
+%% Nguồn status THẬT (enum ClientRequestStatus, prisma/schema.prisma:625-630): NEW, REVIEWING, ACCEPTED, REJECTED
+%% [*] -> NEW: src/actions/share-portal-actions.ts:1426 (create status 'NEW', default @default(NEW) schema.prisma:658)
+%% NEW -> ACCEPTED: src/actions/client-request-actions.ts:150-153 (acceptClientRequest, sau khi task.create :124 với Task.status 'Đang đợi giao' = 'Đang đợi giao' :128)
+%% NEW -> ACCEPTED (Velox): src/actions/client-request-actions.ts:208-211 (markRequestAccepted, không tạo task, không taskId)
+%% NEW -> REJECTED: src/actions/client-request-actions.ts:180-183 (rejectClientRequest, rejectionNote sanitize :179)
+%% Guard terminal ACCEPTED: accept từ chối nếu status === 'ACCEPTED' (:108), reject từ chối nếu status === 'ACCEPTED' (:177), markRequestAccepted no-op nếu ACCEPTED (:206)
+%% REVIEWING: có trong enum và trong filter inbox (client-request-actions.ts:54 status in NEW REVIEWING) + label portal 'Under review' (share-portal-actions.ts:1814) nhưng KHÔNG có code nào ghi status REVIEWING — trạng thái chưa được sử dụng bởi writer nào
+%% REJECTED -> ACCEPTED: hợp lệ theo guard (:108 chỉ chặn ACCEPTED), tuy UI inbox mặc định không hiện request REJECTED (:54)

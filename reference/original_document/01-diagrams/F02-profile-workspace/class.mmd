@@ -1,0 +1,138 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class Profile {
+        +String id
+        +String name
+        +String status
+        +DateTime deletedAt
+        +DateTime hardDeleteAfter
+        +Json settings
+    }
+
+    class Workspace {
+        +String id
+        +String name
+        +String description
+        +String profileId
+        +String status
+        +Boolean marketplaceOpen
+        +DateTime deletedAt
+        +DateTime hardDeleteAfter
+    }
+
+    class WorkspaceMember {
+        +String id
+        +String userId
+        +String workspaceId
+        +String role
+        +DateTime joinedAt
+    }
+
+    class ProfileAccess {
+        +String id
+        +String userId
+        +String profileId
+        +ProfileRole role
+        +DateTime grantedAt
+        +Int clientId
+    }
+
+    class User {
+        +String id
+        +String username
+        +UserRole role
+        +Int sessionVersion
+    }
+
+    class UserHomeTopBar {
+        +handleProfileSwitch(newProfileId)
+    }
+
+    class ProfileWorkspaceSwitcher {
+        +handleWorkspaceSwitch(newWsId)
+        +handleOpenCreateModal()
+    }
+
+    class CreateWorkspaceModal {
+        +handleCreate()
+        +handleRollover()
+    }
+
+    class WelcomePage {
+        +render WelcomeClient
+    }
+
+    class ProfileActionsServer {
+        +checkProfileAccess(profileId)
+        +selectProfile(profileId)
+        +getAvailableProfiles()
+        +getMyProfilesAndWorkspaces()
+        +createProfileForUser(name)
+    }
+
+    class ApiProfileSelect {
+        +POST re-sign JWT sessionProfileId
+    }
+
+    class ApiWorkspaceFirst {
+        +GET landing cho profile
+    }
+
+    class ProfileRoutingLib {
+        +determineLandingForProfile(userId, profileId, isGlobalAdmin)
+    }
+
+    class WorkspaceActionsServer {
+        +createWorkspaceAction(formData)
+        +createNextMonthWithRollover(currentWorkspaceId)
+        +getWorkspacesForProfile(profileId)
+        +deleteWorkspaceAction(workspaceId)
+        +restoreWorkspaceAction(workspaceId)
+    }
+
+    class ProfilePermissionsLib {
+        +getProfileRole(userId, profileId)
+        +canCreateWorkspace(userId, profileId)
+        +isProfileOwner(userId, profileId)
+    }
+
+    class SecurityLib {
+        +verifyWorkspaceAccess(workspaceId, minRole)
+    }
+
+    Profile "1" o-- "n" Workspace : profileId
+    Workspace "1" *-- "n" WorkspaceMember : onDelete Cascade
+    Profile "1" *-- "n" ProfileAccess : onDelete Cascade
+    User "1" o-- "n" ProfileAccess : userId
+    User "1" o-- "n" WorkspaceMember : userId
+
+    UserHomeTopBar ..> ApiProfileSelect : fetch POST profileId
+    UserHomeTopBar ..> ApiWorkspaceFirst : fetch GET profileId
+    ProfileWorkspaceSwitcher ..> ProfileActionsServer : getMyProfilesAndWorkspaces()
+    ProfileWorkspaceSwitcher ..> CreateWorkspaceModal : mở modal tạo workspace
+    WelcomePage ..> ProfilePermissionsLib : isProfileOwner()
+    WelcomePage ..> CreateWorkspaceModal : nút tạo workspace đầu tiên
+    CreateWorkspaceModal ..> WorkspaceActionsServer : createWorkspaceAction và createNextMonthWithRollover
+    ApiProfileSelect ..> ProfileAccess : findUnique userId_profileId
+    ApiWorkspaceFirst ..> ProfileRoutingLib : determineLandingForProfile()
+    ProfileRoutingLib ..> ProfileAccess : check role CLIENT
+    ProfileRoutingLib ..> WorkspaceMember : rank role OWNER gt ADMIN gt MEMBER
+    ProfileActionsServer ..> ProfileAccess : findMany theo userId
+    ProfileActionsServer ..> Workspace : findMany theo profileId
+    WorkspaceActionsServer ..> SecurityLib : verifyWorkspaceAccess()
+    WorkspaceActionsServer ..> ProfilePermissionsLib : canCreateWorkspace()
+    WorkspaceActionsServer ..> Workspace : create
+    WorkspaceActionsServer ..> WorkspaceMember : create role OWNER
+
+%% Nguồn (file:line, verify 2026-08-02):
+%% - Model Prisma: prisma/schema.prisma:11 (Profile), :57 (Workspace), :110 (WorkspaceMember), :266 (ProfileAccess), :125 (User), :908 (enum ProfileRole OWNER/ADMIN/USER/CLIENT)
+%% - UI: src/components/dashboard/UserHomeTopBar.tsx:94 (handleProfileSwitch), src/components/layout/ProfileWorkspaceSwitcher.tsx:53,93 (handleWorkspaceSwitch), src/components/workspace/CreateWorkspaceModal.tsx:41 (handleRollover), :64 (handleCreate), src/app/welcome/page.tsx:20 + WelcomeClient.tsx:28
+%% - Server actions: src/actions/profile-actions.ts:12 (checkProfileAccess), :36 (selectProfile), :53 (getAvailableProfiles), :94 (getMyProfilesAndWorkspaces), :232 (createProfileForUser)
+%% - API routes: src/app/api/profile/select/route.ts:6 (POST), src/app/api/workspace/first/route.ts:12 (GET)
+%% - Lib: src/lib/profile-routing.ts:29 (determineLandingForProfile), src/lib/profile-permissions.ts:24,71,142, src/lib/security.ts:38 (verifyWorkspaceAccess)
+%% - Workspace actions: src/actions/workspace-actions.ts:12 (createWorkspaceAction), :134 (getWorkspacesForProfile), :181 (deleteWorkspaceAction), :327 (restoreWorkspaceAction), :383 (createNextMonthWithRollover)

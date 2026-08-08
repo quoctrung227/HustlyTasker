@@ -1,0 +1,54 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Client.status (string trong DB)" as ClientLC {
+        [*] --> ACTIVE : createClient
+        ACTIVE --> SOFT_DELETED : deleteClient — cascade subtree
+        SOFT_DELETED --> ACTIVE : restoreClient — chặn trùng name-path
+        ACTIVE --> MERGED : migration Canonical (mergedIntoId)
+        SOFT_DELETED --> [*] : permanentlyDeleteClient — chặn nếu còn Invoice
+    }
+
+    state "ClientShareLink (suy từ revokedAt / expiresAt — không có cột status)" as LinkLC {
+        state "Đang hoạt động" as DangHoatDong
+        state "Đã thu hồi" as DaThuHoi
+        state "Hết hạn" as HetHan
+        [*] --> DangHoatDong : createClientShareLink — token hiện 1 lần
+        DangHoatDong --> DaThuHoi : revokeClientShareLink set revokedAt
+        DangHoatDong --> HetHan : expiresAt vượt quá now
+        DaThuHoi --> [*] : resolveShareToken null — 404
+        HetHan --> [*] : resolveShareToken null — 404
+    }
+
+    note right of ClientLC
+        ACTIVE còn có vòng tự thân không đổi status —
+        updateClient / mergeClientIntoParent / unmergeClient
+        chỉ đổi name hoặc parentId.
+        Link chỉ mint được khi Client ACTIVE.
+        Client MERGED vẫn được resolveShareToken
+        honor bằng cách đi theo mergedIntoId.
+        Client SOFT_DELETED làm link 404 (uniform).
+    end note
+
+    note right of LinkLC
+        Đang hoạt động có vòng tự thân —
+        mỗi lần guest resolve OK thì
+        accessCount +1 và lastAccessedAt cập nhật.
+    end note
+
+%% NGUỒN STATUS THẬT (file:line):
+%% - Client.status mặc định "ACTIVE": prisma/schema.prisma:546; bộ giá trị
+%%   "ACTIVE" | "SOFT_DELETED" | "MERGED" ghi ở comment prisma/schema.prisma:538-544
+%% - ACTIVE khi tạo: src/actions/crm-actions.ts:134 (client.create, default ACTIVE)
+%% - ACTIVE -> SOFT_DELETED: src/actions/crm-actions.ts:271-274 (deleteClient, updateMany status SOFT_DELETED + deletedAt)
+%% - SOFT_DELETED -> ACTIVE: src/actions/crm-actions.ts:353-356 (restoreClient, updateMany status ACTIVE, deletedAt null, hardDeleteAfter null)
+%% - SOFT_DELETED -> xoá cứng: src/actions/crm-actions.ts:417-455 (permanentlyDeleteClient, guard Invoice:428-434, P2003:450)
+%% - MERGED + mergedIntoId: prisma/schema.prisma:540-544, :552-554; resolveShareToken đi theo mergedIntoId:
+%%   src/lib/share-link-auth.ts:156, :241-244
+%% - ClientShareLink không có cột status — vòng đời suy từ revokedAt/expiresAt:
+%%   prisma/schema.prisma:579-585; tạo: src/actions/share-link-actions.ts:46-89 (client phải ACTIVE:52);
+%%   thu hồi: src/actions/share-link-actions.ts:104-107 (set revokedAt); đã thu hồi thì báo lỗi:102;
+%%   resolve null khi revokedAt:149 / expiresAt:150 / client-profile không ACTIVE:156-157 (share-link-auth.ts);
+%%   telemetry accessCount/lastAccessedAt: src/lib/share-link-auth.ts:262-270

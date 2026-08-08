@@ -1,0 +1,43 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    [*] --> UPLOADING : initiateUpload tạo ReviewVersion + UploadSession
+
+    UPLOADING --> UPLOADED : completeUpload claim atomic (R2 finalize xong)
+    UPLOADED --> UPLOADING : revertFinalizeClaim khi R2 finalize lỗi
+    UPLOADED --> READY : driveCompletion với IMAGE (kèm reviewState AWAITING_REVIEW)
+    UPLOADED --> PROCESSING : driveCompletion với VIDEO + emit review/upload.completed
+    PROCESSING --> READY : applyMuxReady từ webhook video.asset.ready
+    PROCESSING --> FAILED : applyMuxErrored (video.asset.errored) hoặc reject magic-bytes
+    UPLOADED --> FAILED : applyMuxErrored hoặc reconcileStuckUploadedVersion (janitor)
+    UPLOADING --> FAILED : abortUpload (user hủy, sau đó XÓA row) hoặc expireInflightUpload (janitor 24h)
+
+    READY --> [*] : terminal (chỉ rời qua trash/purge P6)
+    FAILED --> [*] : terminal (retry = tạo version mới)
+
+    note right of UPLOADING
+        Browser đang PUT part lên R2
+        qua presigned URL (không qua server)
+    end note
+    note right of PROCESSING
+        Mux đang encode
+        muxAssetId được lưu bởi reviewProcessUpload
+    end note
+    note right of READY
+        muxPlaybackId set, thành currentVersion của asset
+        clear statusId approved cũ (FR-A04)
+    end note
+
+%% Trạng thái THẬT: enum ReviewPipelineStatus, prisma/schema.prisma:1623-1629
+%%   UPLOADING / UPLOADED / PROCESSING / READY / FAILED (field ReviewVersion.pipelineStatus :1735)
+%% Nguồn transition (file:line):
+%% - [*] -> UPLOADING: src/lib/review/upload-service.ts:308-319 (createVersionWithRetry, default UPLOADING)
+%% - UPLOADING -> UPLOADED: upload-service.ts:493-496 (completeUpload claim updateMany)
+%% - UPLOADED -> UPLOADING: upload-service.ts:454-461 (revertFinalizeClaim)
+%% - UPLOADED -> READY (image) / PROCESSING (video): upload-service.ts:390-399 (driveCompletion), emit UPLOAD_COMPLETED :439
+%% - PROCESSING -> READY: src/lib/review/inngest.ts:74-103 (applyMuxReady, flip + currentVersionId)
+%% - PROCESSING/UPLOADED -> FAILED: inngest.ts:213-227 (applyMuxErrored) · reject magic-bytes inngest.ts:390-395
+%% - UPLOADING -> FAILED: upload-service.ts:570-586 (abortUpload, sau flip là DELETE version) · :762-765 (expireInflightUpload)
+%% - UPLOADED -> FAILED (finalize-lost): upload-service.ts:834-838 (reconcileStuckUploadedVersion)

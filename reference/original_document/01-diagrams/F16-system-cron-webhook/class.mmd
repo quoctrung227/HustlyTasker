@@ -1,0 +1,301 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+direction LR
+
+class VercelCron {
+    <<scheduler vercel.json>>
+    send-digest hourly
+    check-deadline hourly
+    cleanup-notifications 02h00 UTC
+    hard-delete-workspaces 03h00 UTC
+    hard-delete-profiles 03h30 UTC
+    auth-cleanup 04h00 UTC
+    review-janitor 20h00 UTC
+}
+
+class CronCheckDeadline {
+    <<route api-cron-check-deadline>>
+    +GET(request)
+    guard CRON_SECRET 401 500
+    dùng OVERDUE_ELIGIBLE_STATUSES
+}
+class CronSendDigest {
+    <<route api-cron-send-digest>>
+    +GET(request)
+    guard CRON_SECRET 401 500
+    DAILY chỉ khi utcHour bằng 1
+}
+class CronCleanupNotifications {
+    <<route api-cron-cleanup-notifications>>
+    +GET(request)
+    archived hơn 30 ngày
+    read hơn 90 ngày
+}
+class CronAuthCleanup {
+    <<route api-cron-auth-cleanup>>
+    +GET(request)
+    -safeEqual(a, b) timingSafeEqual
+}
+class CronHardDeleteProfiles {
+    <<route api-cron-hard-delete-profiles>>
+    +GET(request)
+    grace 30 ngày hardDeleteAfter
+}
+class CronHardDeleteWorkspaces {
+    <<route api-cron-hard-delete-workspaces>>
+    +GET(request)
+    grace 30 ngày hardDeleteAfter
+}
+class CronReviewJanitor {
+    <<route api-cron-review-janitor>>
+    +GET(request)
+    chỉ bắn event không làm nặng
+}
+
+class MuxWebhookRoute {
+    <<route api-webhooks-mux>>
+    +POST(req)
+    -verifyMuxSignature(rawBody, header) HMAC 5min
+    ledger insert-or-ignore P2002
+}
+class CalendarWebhookRoute {
+    <<route api-webhooks-calendar STUB>>
+    +POST(req)
+    validationToken echo
+    TODO map user chưa code thật
+}
+class InngestServeRoute {
+    <<route api-inngest serve>>
+    +GET +POST +PUT
+    maxDuration 800s
+    INNGEST_SIGNING_KEY
+}
+
+class InngestClient {
+    <<lib review-inngest>>
+    id hustlytasker-review
+    +send(name, data)
+    MUX_EVENT_RECEIVED
+    JANITOR_REQUESTED
+    UPLOAD_COMPLETED
+    DECISION_RECORDED
+}
+
+class ReviewMuxWebhookFn {
+    <<Inngest fn review-mux-webhook retries 4>>
+    step load-event
+    step apply
+    step mark-processed
+    -applyMuxReady(versionId, asset)
+    -applyMuxErrored(versionId, msg)
+}
+class ReviewProcessUploadFn {
+    <<Inngest fn review-process-upload retries 4>>
+    step load-version
+    step verify-content magic bytes
+    step ensure-color-tags BT709
+    step create-mux-asset
+    step store-mux-id
+}
+class ReviewJanitorFn {
+    <<Inngest fn review-janitor retries 2>>
+    step abort-expired-uploading
+    step redrive-stuck-uploaded
+    step reconcile-processing
+    step reenqueue-webhooks
+    step purge-expired-trash
+    -reconcileProcessingVersion(versionId, muxAssetId, stale)
+}
+class ReviewShareDecisionFn {
+    <<Inngest fn review-share-decision retries 4>>
+    step load-state latest wins
+    step sync-task-revision
+    step settle-client-review
+    step task-feed-audit
+}
+
+class NotificationEmailLib {
+    <<lib notification-email>>
+    +sendDigestEmails(mode) sent skipped
+    quietHours skip HOURLY
+}
+class EmailLib {
+    <<lib email Resend>>
+    +sendEmail(to, subject, html)
+}
+class MuxLib {
+    <<lib review-mux>>
+    +createMuxAsset(inputUrl, passthrough)
+    +getMuxAsset(id)
+    +deleteMuxAsset(id)
+    +extractReadyMeta(asset)
+}
+class R2Lib {
+    <<lib review-r2>>
+    +presignGetObject(key, expiresIn)
+    +getObjectRange(key, from, to)
+    +deleteObject(key)
+}
+class UploadServiceLib {
+    <<lib review-upload-service>>
+    +driveCompletion(versionId)
+    +expireInflightUpload(sessionId)
+    +reconcileStuckUploadedVersion(versionId)
+}
+class TaskSyncLib {
+    <<lib review-task-sync>>
+    +syncTaskFromReviewEvent(taskId, wsId, status)
+    +syncTaskOnChangesRequested(taskId, wsId)
+    +revokeClientExposureOnNewVersion(taskId, assetId, wsId)
+}
+class PurgeLib {
+    <<lib review-purge>>
+    +purgeExpiredTrash(batchSize) 30 ngày
+}
+
+class Task {
+    status String tự do
+    deadline DateTime
+    assigneeId String
+    clientReview String
+    isArchived Boolean
+}
+class Notification {
+    type NotificationType
+    isRead isArchived Boolean
+    emailSentAt DateTime
+    metadata Json tier 1h 24h
+}
+class NotificationPreference {
+    emailDigestMode HOURLY DAILY
+    emailEnabled Boolean
+    quietHoursStart quietHoursEnd
+}
+class ReviewVersion {
+    pipelineStatus ReviewPipelineStatus
+    reviewState ReviewState
+    muxAssetId muxPlaybackId
+    r2Key errorMessage
+    readyAt deletedAt
+}
+class ReviewAsset {
+    currentVersionId String
+    statusId String
+    rowVersion Int
+}
+class UploadSession {
+    r2UploadId partsDone
+    expiresAt 24h
+    completedAt abortedAt
+}
+class WebhookEvent {
+    id String Mux event id
+    provider type payload
+    processedAt DateTime null là chưa xử lý
+    receivedAt DateTime
+}
+class Profile {
+    status SOFT_DELETED
+    hardDeleteAfter DateTime
+}
+class Workspace {
+    status SOFT_DELETED
+    hardDeleteAfter DateTime
+}
+class EmailVerificationToken {
+    expiresAt DateTime
+}
+class PasswordResetOTP {
+    expiresAt consumedAt
+}
+class LoginAttempt {
+    createdAt giữ 90 ngày
+}
+class AuditLog {
+    action targetType targetId
+    workspaceId SYSTEM khi cron
+}
+
+VercelCron --> CronCheckDeadline : GET hàng giờ
+VercelCron --> CronSendDigest : GET hàng giờ
+VercelCron --> CronCleanupNotifications : GET hàng ngày
+VercelCron --> CronAuthCleanup : GET hàng ngày
+VercelCron --> CronHardDeleteProfiles : GET hàng ngày
+VercelCron --> CronHardDeleteWorkspaces : GET hàng ngày
+VercelCron --> CronReviewJanitor : GET hàng ngày
+
+CronCheckDeadline --> Task : findMany + update Quá hạn
+CronCheckDeadline --> Notification : createNotificationInternal dedup tier
+CronSendDigest --> NotificationEmailLib : sendDigestEmails HOURLY DAILY
+NotificationEmailLib --> NotificationPreference : findMany digestMode
+NotificationEmailLib --> Notification : emailSentAt null rồi updateMany
+NotificationEmailLib --> EmailLib : sendEmail digest
+CronCleanupNotifications --> Notification : deleteMany 30d 90d
+CronAuthCleanup --> EmailVerificationToken : deleteMany expired
+CronAuthCleanup --> PasswordResetOTP : deleteMany expired consumed 7d
+CronAuthCleanup --> LoginAttempt : deleteMany hơn 90d
+CronHardDeleteProfiles --> Profile : delete cascade
+CronHardDeleteProfiles --> AuditLog : audit profile.hard_deleted
+CronHardDeleteWorkspaces --> Workspace : delete cascade
+CronHardDeleteWorkspaces --> AuditLog : audit workspace.hard_deleted
+CronReviewJanitor --> InngestClient : send JANITOR_REQUESTED
+
+MuxWebhookRoute --> WebhookEvent : create ledger idempotent
+MuxWebhookRoute --> InngestClient : send MUX_EVENT_RECEIVED
+UploadServiceLib --> InngestClient : send UPLOAD_COMPLETED driveCompletion
+
+InngestServeRoute --> ReviewMuxWebhookFn : host
+InngestServeRoute --> ReviewProcessUploadFn : host
+InngestServeRoute --> ReviewJanitorFn : host
+InngestServeRoute --> ReviewShareDecisionFn : host
+InngestClient ..> InngestServeRoute : dispatch event
+
+ReviewMuxWebhookFn --> WebhookEvent : load + mark processedAt cuối cùng
+ReviewMuxWebhookFn --> ReviewVersion : flip PROCESSING sang READY FAILED
+ReviewMuxWebhookFn --> ReviewAsset : currentVersionId + clear statusId approved
+ReviewMuxWebhookFn --> TaskSyncLib : syncTaskFromReviewEvent + revoke
+ReviewMuxWebhookFn --> R2Lib : deleteObject retagged key
+
+ReviewProcessUploadFn --> ReviewVersion : guard PROCESSING muxAssetId null
+ReviewProcessUploadFn --> R2Lib : getObjectRange + presignGetObject 24h
+ReviewProcessUploadFn --> MuxLib : createMuxAsset passthrough versionId
+
+ReviewJanitorFn --> UploadSession : quét expiresAt quá hạn
+ReviewJanitorFn --> UploadServiceLib : expireInflightUpload + reconcileStuckUploaded
+ReviewJanitorFn --> ReviewVersion : quét PROCESSING kẹt
+ReviewJanitorFn --> MuxLib : getMuxAsset + deleteMuxAsset kẹt 24h
+ReviewJanitorFn --> WebhookEvent : reenqueue processedAt null 1h..7d
+ReviewJanitorFn --> PurgeLib : purgeExpiredTrash
+
+ReviewShareDecisionFn --> ReviewVersion : load-state reviewState + isHead
+ReviewShareDecisionFn --> Task : settle clientReview APPROVED
+ReviewShareDecisionFn --> TaskSyncLib : syncTaskOnChangesRequested
+ReviewShareDecisionFn --> AuditLog : task.client_approved changes_requested
+
+ReviewVersion o-- ReviewAsset : assetId
+UploadSession --> ReviewVersion : versionId cascade
+NotificationPreference --> Notification : lọc theo userId
+
+%% Nguồn (file:line):
+%% - vercel.json crons: 7 lịch (send-digest 0 * * * *, check-deadline 0 * * * *, cleanup-notifications 0 2 * * *,
+%%   hard-delete-workspaces 0 3 * * *, hard-delete-profiles 30 3 * * *, auth-cleanup 0 4 * * *, review-janitor 0 20 * * *)
+%% - src/app/api/cron/check-deadline/route.ts:14 GET, :41 OVERDUE_ELIGIBLE_STATUSES, :158 status 'Quá hạn'
+%% - src/app/api/cron/send-digest/route.ts:11 GET, :31-37 sendDigestEmails HOURLY/DAILY utcHour===1
+%% - src/app/api/cron/auth-cleanup/route.ts:27 GET, :19 safeEqual timingSafeEqual
+%% - src/app/api/cron/cleanup-notifications/route.ts:11 GET, :35-49 deleteMany
+%% - src/app/api/cron/hard-delete-profiles/route.ts:20 GET, :68 audit, :82 profile.delete
+%% - src/app/api/cron/hard-delete-workspaces/route.ts:20 GET, :67 audit, :76 workspace.delete
+%% - src/app/api/cron/review-janitor/route.ts:13 GET, :31 inngest.send JANITOR_REQUESTED
+%% - src/app/api/webhooks/mux/route.ts:50 POST, :23 verifyMuxSignature, :74 webhookEvent.create, :87 inngest.send
+%% - src/app/api/webhooks/calendar/route.ts:8 POST (stub, TODO :23)
+%% - src/app/api/inngest/route.ts:17 serve(reviewFunctions), :15 maxDuration 800
+%% - src/lib/review/inngest.ts:28 client, :31-41 REVIEW_EVENTS, :64 applyMuxReady, :213 applyMuxErrored,
+%%   :259 reviewMuxWebhook, :341 reviewProcessUpload, :463 reconcileProcessingVersion, :526 reviewJanitor,
+%%   :657 reviewShareDecision, :751 reviewFunctions = 4 fn
+%% - src/lib/review/upload-service.ts:378 driveCompletion, :752 expireInflightUpload, :801 reconcileStuckUploadedVersion
+%% - src/lib/notification-email.ts:464 sendDigestEmails; src/lib/email.ts:26 sendEmail (Resend)
+%% - src/lib/review/purge.ts:236 purgeExpiredTrash
+%% - prisma/schema.prisma:1241 Notification, :1721 ReviewVersion, :2016 UploadSession, :2040 WebhookEvent

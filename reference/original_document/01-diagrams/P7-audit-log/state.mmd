@@ -1,0 +1,52 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    direction TB
+
+    %% AuditLog và ErrorLog đều KHÔNG có cột status/enum — các trạng thái dưới đây
+    %% được SUY từ field thật + hành vi quan hệ (onDelete) trong schema và code.
+
+    state "Vòng đời AuditLog — append-only" as VDAL {
+        state "Đã ghi — bất biến, không update hay delete qua API" as DaGhi
+        state "Actor ẩn danh — actorUserId về null" as AnDanh
+        [*] --> DaGhi : audit() gọi prisma.auditLog.create (không throw, lỗi chỉ console.error)
+        DaGhi --> AnDanh : User actor bị xoá (onDelete SetNull)
+        DaGhi --> [*] : Workspace bị xoá (onDelete Cascade)
+        AnDanh --> [*] : Workspace bị xoá (onDelete Cascade)
+    }
+
+    state "Vòng đời ErrorLog — model không có cột status" as VDEL {
+        state "Tồn tại — frequency mặc định 1, calculatedScore = frequency x penalty" as TonTai
+        note right of TonTai
+            Chỉ bị đọc bởi aggregate, groupBy, findMany
+            khi tính điểm phạt — đọc không đổi trạng thái.
+            Src hiện tại KHÔNG còn đường errorLog.create —
+            bản ghi mới chỉ vào bằng tầng dữ liệu (legacy/seed).
+        end note
+        [*] --> TonTai : bản ghi được tạo (không có đường create trong src hiện tại)
+        TonTai --> [*] : Admin xoá qua removeErrorLog (guard ADMIN)
+        TonTai --> [*] : Task hoặc User hoặc Workspace bị xoá (onDelete Cascade)
+    }
+
+    state "Trạng thái ErrorDictionary theo cột isActive" as VDED {
+        state "Đang hiệu lực — isActive true, xuất hiện trong bảng điểm lỗi" as HoatDong
+        state "Ngừng hiệu lực — isActive false, bị loại khỏi getUserErrorDetails" as NgungHieuLuc
+        [*] --> HoatDong : tạo mã lỗi (isActive mặc định true)
+        HoatDong --> NgungHieuLuc : đổi isActive về false (không có đường code trong src — chỉnh ở tầng dữ liệu)
+        NgungHieuLuc --> HoatDong : bật lại isActive true
+    }
+
+%% Nguồn (file:line):
+%% AuditLog model: prisma/schema.prisma:861-886 — không có cột status; append-only theo doc comment :857-860
+%%   actor relation onDelete SetNull :880 (trạng thái AnDanh suy từ actorUserId nullable :866)
+%%   workspace relation onDelete Cascade :879 (kết thúc vòng đời khi workspace bị xóa)
+%% audit() insert-only, non-throwing: src/lib/audit-log.ts:153-197 (create :174-186, catch console.error :187-196)
+%% AuditActions chỉ đọc (count/findMany/distinct): src/actions/audit-actions.ts:83,90,166,183 — không có update/delete
+%% ErrorLog model: prisma/schema.prisma:1027-1050 — không có cột status; frequency default 1 :1032, calculatedScore = frequency * penalty :1033
+%%   task/user/workspace onDelete Cascade :1039-1043 (kết thúc vòng đời khi cha bị xóa)
+%% removeErrorLog (admin xóa): src/actions/analytics-actions.ts:261-282 (guard ADMIN :263-266, delete :271-273)
+%% Không còn đường errorLog.create/update trong src (grep 2026-08-02) — chỉ aggregate :159, groupBy :108, findMany :208, delete :271
+%% ErrorDictionary.isActive: prisma/schema.prisma:1022 (default true); lọc isActive=true khi tính điểm: src/actions/analytics-actions.ts:104-106
+%%   không có code toggle isActive trong src — transition ở trên là thao tác tầng dữ liệu

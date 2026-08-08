@@ -1,0 +1,217 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction TB
+
+    %% ================= UI layer =================
+    class GuestSharePage {
+        <<RSC src app r slug page.tsx>>
+        +render() GateScreen or GuestReviewApp
+    }
+    class GateScreens {
+        <<component GateScreens.tsx>>
+        +GateScreen(kind unavailable expired)
+        +PasswordGate(slug)
+    }
+    class GuestReviewApp {
+        <<client component GuestReviewApp.tsx>>
+        +submitDecision(decision, note)
+        +ensureIdentity(reason)
+        +refreshContent()
+    }
+
+    %% ================= API routes /api/r/slug =================
+    class GuestApiRoutes {
+        <<route handlers api r slug>>
+        +GET content route.ts
+        +POST unlock route.ts
+        +POST identity route.ts
+        +POST comments route.ts
+        +POST decision route.ts
+    }
+
+    %% ================= Lib / service layer =================
+    class ShareAuthLib {
+        <<lib review share-auth.ts>>
+        +resolveShareGate(slug, cookies)
+        +requireShare(slug, cookies)
+        +getGuestSession(share, cookies)
+        +createGuestSession(share, input)
+        +resolveGuestForWrite(share, cookies, guestInput)
+        +createLinkClientGuestSession(share)
+        +mintUnlockToken(share)
+    }
+    class ShareGuestLib {
+        <<lib review share-guest.ts>>
+        +buildGuestShareContent(share, guestName)
+        +assertVersionInShare(share, versionId)
+        +resolveShareAssets(share)
+    }
+    class ShareCommentsLib {
+        <<lib review share-comments.ts>>
+        +createGuestComment(share, guest, input)
+    }
+    class ShareDecisionService {
+        <<lib review share-decision.ts>>
+        +guestDecisionSchema zod
+        +submitGuestDecision(share, guest, input)
+        -persistDecisionNote(share, guest, version, asset, note)
+    }
+    class TaskSyncService {
+        <<lib review task-sync.ts>>
+        +syncTaskOnChangesRequested(taskId, workspaceId)
+        +syncTaskFromReviewEvent(taskId, workspaceId, target)
+    }
+    class GuestSubscribeLib {
+        <<lib review guest-subscribe.ts>>
+        +subscribeGuestOnDecision(input)
+        +requestGuestPin(input)
+        +verifyGuestPin(input)
+        +unsubscribeGuestByToken(token)
+    }
+    class NotifyLibs {
+        <<lib review notify.ts guest-notify.ts>>
+        +notifyReview(input)
+        +resolveTaskRecipients(taskId)
+        +notifyGuestsOfAsset(input)
+    }
+    class ReviewShareDecisionFn {
+        <<Inngest fn review-share-decision inngest.ts 657>>
+        +step load-state
+        +step sync-task-revision
+        +step settle-client-review
+        +step task-feed-audit
+    }
+
+    %% ================= Prisma models =================
+    class ShareLink {
+        <<Prisma>>
+        +String slug
+        +String workspaceId
+        +String taskId
+        +Boolean allowComments
+        +Boolean allowDownload
+        +Boolean showAllVersions
+        +String passwordHash
+        +DateTime expiresAt
+        +DateTime revokedAt
+        +Int viewCount
+    }
+    class ShareLinkItem {
+        <<Prisma>>
+        +String shareLinkId
+        +String folderId
+        +String assetId
+    }
+    class GuestSession {
+        <<Prisma>>
+        +String shareLinkId
+        +String tokenHash
+        +String name
+        +String email
+        +DateTime emailVerifiedAt
+        +DateTime lastSeenAt
+    }
+    class ReviewAsset {
+        <<Prisma>>
+        +String workspaceId
+        +String taskId
+        +String statusId
+        +String currentVersionId
+        +Int rowVersion
+    }
+    class ReviewVersion {
+        <<Prisma>>
+        +Int versionNumber
+        +ReviewPipelineStatus pipelineStatus
+        +ReviewState reviewState
+        +Int commentCount
+    }
+    class ReviewComment {
+        <<Prisma>>
+        +String body
+        +Int timecodeMs
+        +Json annotation
+        +Boolean isInternal
+        +String guestSessionId
+        +String guestName
+        +String shareLinkId
+    }
+    class GuestEmailVerification {
+        <<Prisma>>
+        +String email
+        +String codeHash
+        +String shareLinkId
+        +Int attempts
+        +DateTime expiresAt
+        +DateTime consumedAt
+    }
+    class GuestSubscription {
+        <<Prisma>>
+        +String email
+        +String assetId
+        +String shareLinkId
+        +DateTime verifiedAt
+        +DateTime unsubscribedAt
+        +String unsubscribeToken
+    }
+    class Task {
+        <<Prisma>>
+        +String status
+        +String clientReview
+        +Boolean isArchived
+        +Int version
+    }
+    class ReviewActivity {
+        <<Prisma append-only>>
+        +String type
+        +String guestSessionId
+        +Json meta
+    }
+
+    %% ================= Model relations =================
+    ShareLink *-- ShareLinkItem : items
+    ShareLink o-- GuestSession : guests
+    ShareLinkItem --> ReviewAsset : assetId
+    ReviewAsset *-- ReviewVersion : versions
+    ReviewAsset o-- GuestSubscription : subscriptions
+    ReviewVersion *-- ReviewComment : comments
+    GuestSession o-- ReviewComment : guestSessionId
+    ReviewAsset --> Task : taskId scalar
+    ShareLink --> Task : taskId scalar
+
+    %% ================= Call relations =================
+    GuestSharePage ..> ShareAuthLib : resolveShareGate + getGuestSession
+    GuestSharePage ..> ShareGuestLib : buildGuestShareContent
+    GuestSharePage ..> GateScreens : gate states
+    GuestSharePage ..> GuestReviewApp : state ok
+    GuestReviewApp ..> GuestApiRoutes : fetch api r slug
+    GuestApiRoutes ..> ShareAuthLib : requireShare + resolveGuestForWrite
+    GuestApiRoutes ..> ShareCommentsLib : POST comments
+    GuestApiRoutes ..> ShareDecisionService : POST decision
+    ShareDecisionService ..> ShareGuestLib : assertVersionInShare
+    ShareDecisionService ..> TaskSyncService : syncTaskOnChangesRequested
+    ShareDecisionService ..> GuestSubscribeLib : subscribeGuestOnDecision
+    ShareDecisionService ..> NotifyLibs : notifyReview + notifyGuestsOfAsset
+    ShareDecisionService ..> ReviewShareDecisionFn : inngest.send DECISION_RECORDED
+    ShareDecisionService ..> ReviewVersion : flip reviewState
+    ShareDecisionService ..> ReviewAsset : statusId theo REVIEW_STATUS_MAP
+    ShareDecisionService ..> ReviewComment : persistDecisionNote
+    ShareDecisionService ..> ReviewActivity : recordActivity
+    ReviewShareDecisionFn ..> TaskSyncService : backup idempotent
+    ReviewShareDecisionFn ..> Task : audit task feed
+    TaskSyncService ..> Task : status A5 to A6 hoặc Revision
+    GuestSubscribeLib ..> GuestEmailVerification : PIN double opt-in
+    GuestSubscribeLib ..> GuestSubscription : đăng ký email
+
+%% Nguồn: docs/system-audit/00-discovery/parts/12-user-flows.md F08
+%% Models: prisma/schema.prisma:1867 ShareLink, 1905 ShareLinkItem, 1926 GuestSession,
+%%   1684 ReviewAsset, 1721 ReviewVersion, 1781 ReviewComment,
+%%   1951 GuestEmailVerification, 1968 GuestSubscription, 1989 ReviewActivity
+%% Services: src/lib/review/share-auth.ts, share-guest.ts, share-comments.ts,
+%%   share-decision.ts:127 submitGuestDecision, task-sync.ts:158 syncTaskOnChangesRequested,
+%%   guest-subscribe.ts:240 subscribeGuestOnDecision, inngest.ts:657 reviewShareDecision
+%% Routes: src/app/api/r/[slug]/{route,unlock,identity,comments,decision}/route.ts
+%% UI: src/app/r/[slug]/page.tsx, src/components/review/share/{GateScreens,GuestReviewApp}.tsx

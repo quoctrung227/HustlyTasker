@@ -1,0 +1,592 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+
+    %% ================= CORE TENANCY =================
+    Profile {
+        string id PK
+        string status
+    }
+    Workspace {
+        string id PK
+        string profileId FK
+        string status
+    }
+    User {
+        string id PK
+        string profileId FK
+        string role
+        int clientId FK
+    }
+    WorkspaceMember {
+        string id PK
+        string userId FK
+        string workspaceId FK
+        string role
+    }
+    ProfileAccess {
+        string id PK
+        string userId FK
+        string profileId FK
+        string role
+    }
+    ProfileAccessRequest {
+        string id PK
+        string userId FK
+        string targetProfileId FK
+        string status
+    }
+    WorkspaceInvitation {
+        string id PK
+        string workspaceId FK
+        string invitedUserId FK
+        string status
+    }
+    Agency {
+        string id PK
+        string ownerId FK
+        string profileId FK
+        string status
+    }
+    PushSubscription {
+        string id PK
+        string userId FK
+        string endpoint
+    }
+
+    %% ================= TASK DOMAIN =================
+    Task {
+        string id PK
+        string workspaceId FK
+        string assigneeId FK
+        string status
+    }
+    TaskRawFootage {
+        string id PK
+        string taskId FK
+        string displayType
+    }
+    TagCategory {
+        string id PK
+        string profileId FK
+        string workspaceId FK
+    }
+    TaskTag {
+        string id PK
+        string taskId FK
+        string tagCategoryId FK
+    }
+    Rating {
+        string id PK
+        string taskId FK
+        string staffId FK
+        string shareLinkId FK
+    }
+    ClientTaskRequest {
+        string id PK
+        int clientId FK
+        string taskId FK
+        string status
+    }
+    TaskComment {
+        string id PK
+        string taskId FK
+        string parentId FK
+        string visibility
+    }
+    TaskCommentReaction {
+        string id PK
+        string commentId FK
+        string emoji
+    }
+    TaskCommentReadState {
+        string id PK
+        string userId
+        string taskId
+    }
+    PriceTemplate {
+        string id PK
+        string workspaceId
+        string name
+    }
+
+    %% ================= CLIENT AND FINANCE =================
+    Client {
+        int id PK
+        int parentId FK
+        string profileId FK
+        string status
+    }
+    ClientShareLink {
+        string id PK
+        int clientId FK
+        string profileId FK
+        string tokenHash
+    }
+    Project {
+        int id PK
+        int clientId FK
+        string workspaceId FK
+    }
+    Invoice {
+        string id PK
+        int clientId FK
+        string status
+    }
+    InvoiceItem {
+        string id PK
+        string invoiceId FK
+        string taskId FK
+    }
+    Payment {
+        string id PK
+        int clientId
+        string workspaceId
+        string invoiceId
+    }
+    BillingProfile {
+        string id PK
+        string profileId FK
+        string bankName
+    }
+    PricingRule {
+        string id PK
+        int clientId FK
+        string workspaceId FK
+        string ruleType
+    }
+
+    %% ================= PAYROLL AND PERFORMANCE =================
+    Payroll {
+        string id PK
+        string userId FK
+        string workspaceId FK
+        string status
+    }
+    MonthlyBonus {
+        string id PK
+        string userId FK
+        string workspaceId FK
+    }
+    PayrollLock {
+        string id PK
+        string workspaceId FK
+        boolean isLocked
+    }
+    MonthlyRank {
+        string id PK
+        string userId FK
+        string payrollLockId FK
+        string rank
+    }
+    PerformanceMetric {
+        string id PK
+        string userId FK
+        string workspaceId FK
+    }
+    BonusConfig {
+        string id PK
+        string profileId FK
+    }
+    ErrorDictionary {
+        string id PK
+        string code
+        int severity
+    }
+    ErrorLog {
+        string id PK
+        string taskId FK
+        string errorId FK
+        string userId FK
+    }
+
+    %% ================= SCHEDULE =================
+    ScheduleRule {
+        string id PK
+        string userId FK
+        string workspaceId FK
+    }
+    ScheduleException {
+        string id PK
+        string userId FK
+        string type
+    }
+    DailyAvailability {
+        string id PK
+        string userId FK
+        datetime date
+    }
+
+    %% ================= TRACKING AND AUDIT =================
+    Session {
+        string id PK
+        string userId FK
+        string workspaceId FK
+    }
+    Event {
+        string id PK
+        string sessionId FK
+        string eventType
+    }
+    UserPresence {
+        string userId PK
+        string status
+    }
+    AuditLog {
+        bigint id PK
+        string workspaceId FK
+        string actorUserId FK
+        string action
+    }
+    LoginAttempt {
+        string id PK
+        string userId FK
+        boolean success
+    }
+
+    %% ================= AUTH AND INTEGRATION =================
+    EmailVerificationToken {
+        string id PK
+        string userId FK
+        string purpose
+    }
+    PasswordResetOTP {
+        string id PK
+        string userId FK
+        string purpose
+    }
+    IntegrationToken {
+        string id PK
+        string userId FK
+        string workspaceId FK
+        string provider
+    }
+
+    %% ================= CHAT AND NOTIFY =================
+    Contact {
+        string id PK
+        string requesterId FK
+        string receiverId FK
+        string status
+    }
+    Notification {
+        string id PK
+        string userId FK
+        string type
+        string taskId
+    }
+    NotificationPreference {
+        string id PK
+        string userId FK
+    }
+
+    %% ================= WIKI AND STUDY =================
+    WikiPage {
+        string id PK
+        string workspaceId FK
+        string parentId FK
+        string authorId FK
+    }
+    Attachment {
+        string id PK
+        string wikiPageId FK
+        string workspaceId
+    }
+    StudyPlaceProgress {
+        string id PK
+        string workspaceId FK
+        string userId FK
+    }
+
+    %% ================= REVIEW MODULE (Mux + R2) =================
+    ReviewFolder {
+        string id PK
+        string parentId FK
+        string workspaceId
+        string path
+    }
+    ReviewAsset {
+        string id PK
+        string folderId FK
+        string taskId
+        string currentVersionId FK
+    }
+    ReviewVersion {
+        string id PK
+        string assetId FK
+        string pipelineStatus
+        string reviewState
+    }
+    ReviewComment {
+        string id PK
+        string versionId FK
+        string authorId
+        string guestSessionId FK
+    }
+    CommentAttachment {
+        string id PK
+        string commentId FK
+        string r2Key
+    }
+    CommentReaction {
+        string id PK
+        string commentId FK
+        string guestSessionId FK
+        string emoji
+    }
+    ShareLink {
+        string id PK
+        string slug
+        string workspaceId
+        string taskId
+    }
+    ShareLinkItem {
+        string id PK
+        string shareLinkId FK
+        string folderId FK
+        string assetId FK
+    }
+    GuestSession {
+        string id PK
+        string shareLinkId FK
+        string tokenHash
+    }
+    GuestEmailVerification {
+        string id PK
+        string email
+        string shareLinkId
+    }
+    GuestSubscription {
+        string id PK
+        string email
+        string assetId FK
+        string shareLinkId
+    }
+    ReviewActivity {
+        string id PK
+        string type
+        string workspaceId
+        string assetId
+    }
+    UploadSession {
+        string id PK
+        string versionId FK
+        string r2UploadId
+    }
+    WebhookEvent {
+        string id PK
+        string provider
+        string type
+        datetime processedAt
+    }
+    RateLimitBucket {
+        string key PK
+        datetime windowStart
+        int count
+    }
+
+    %% ================= RELATIONS - PROFILE HUB =================
+    Profile |o--o{ User : "profileId"
+    Profile |o--o{ Workspace : "profileId"
+    Profile |o--o{ Task : "profileId"
+    Profile |o--o{ Client : "profileId"
+    Profile |o--o{ Project : "profileId"
+    Profile |o--o{ Invoice : "profileId"
+    Profile |o--o{ Payroll : "profileId"
+    Profile |o--o{ MonthlyBonus : "profileId"
+    Profile |o--o{ PayrollLock : "profileId"
+    Profile |o--o{ PerformanceMetric : "profileId"
+    Profile |o--o{ Agency : "profileId"
+    Profile |o--o{ ErrorLog : "profileId"
+    Profile |o--o{ MonthlyRank : "profileId"
+    Profile ||--o{ ScheduleRule : "profileId"
+    Profile ||--o{ ScheduleException : "profileId"
+    Profile ||--o{ DailyAvailability : "profileId"
+    Profile ||--o{ ProfileAccess : "profileId"
+    Profile ||--o{ ProfileAccessRequest : "targetProfile"
+    Profile |o--o{ BillingProfile : "profileId"
+    Profile ||--o{ TagCategory : "profileId"
+    Profile ||--o| BonusConfig : "1-1"
+    Profile ||--o{ ClientShareLink : "profileId"
+
+    %% ================= RELATIONS - WORKSPACE HUB =================
+    Workspace ||--o{ WorkspaceMember : "members"
+    Workspace ||--o{ WorkspaceInvitation : "invites"
+    Workspace |o--o{ Task : "tasks"
+    Workspace |o--o{ Client : "legacy"
+    Workspace ||--o{ ScheduleRule : "rules"
+    Workspace ||--o{ ScheduleException : "exceptions"
+    Workspace ||--o{ DailyAvailability : "availability"
+    Workspace |o--o{ Project : "projects"
+    Workspace |o--o{ Invoice : "invoices"
+    Workspace ||--o{ Payroll : "payrolls"
+    Workspace ||--o{ MonthlyBonus : "bonuses"
+    Workspace ||--o{ PayrollLock : "locks"
+    Workspace ||--o{ PerformanceMetric : "metrics"
+    Workspace ||--o{ ErrorLog : "errorLogs"
+    Workspace ||--o{ MonthlyRank : "ranks"
+    Workspace |o--o{ Rating : "ratings"
+    Workspace |o--o{ Session : "sessions"
+    Workspace |o--o{ AuditLog : "auditLogs"
+    Workspace ||--o{ TagCategory : "tagCategories"
+    Workspace ||--o{ IntegrationToken : "oauthTokens"
+    Workspace ||--o{ PricingRule : "pricingRules"
+    Workspace ||--o{ WikiPage : "wikiPages"
+    Workspace ||--o{ StudyPlaceProgress : "progress"
+
+    %% ================= RELATIONS - USER HUB =================
+    User ||--o{ WorkspaceMember : "memberships"
+    User ||--o{ PushSubscription : "devices"
+    User ||--o{ ProfileAccess : "accesses"
+    User ||--o{ ProfileAccessRequest : "targetUser"
+    User ||--o{ ProfileAccessRequest : "requestedBy"
+    User |o--o{ ProfileAccessRequest : "approvedBy"
+    User ||--o{ Payroll : "payrolls"
+    User |o--o{ Task : "assignee"
+    User |o--o{ Task : "assignedBy"
+    User |o--o{ Task : "clientUser"
+    User |o--o{ Agency : "owner"
+    Agency |o--o{ User : "members"
+    User ||--o{ MonthlyBonus : "bonuses"
+    User ||--o{ PerformanceMetric : "metrics"
+    User |o--o{ Project : "clientUser"
+    User |o--o{ Invoice : "clientUser"
+    User |o--o{ Rating : "asClient"
+    User ||--o{ Rating : "asStaff"
+    User ||--o{ ErrorLog : "editor"
+    User ||--o{ ErrorLog : "detectedBy"
+    User ||--o{ MonthlyRank : "ranks"
+    User |o--o{ Session : "sessions"
+    User |o--o{ Event : "events"
+    User ||--o| UserPresence : "presence"
+    User ||--o| NotificationPreference : "prefs"
+    User ||--o{ ScheduleRule : "rules"
+    User ||--o{ ScheduleException : "exceptions"
+    User ||--o{ DailyAvailability : "availability"
+    User ||--o{ TagCategory : "tags"
+    User |o--o{ AuditLog : "actor"
+    User |o--o{ AuditLog : "targetUser"
+    User |o--o{ WorkspaceInvitation : "invitedUser"
+    User ||--o{ WorkspaceInvitation : "invitedBy"
+    User ||--o{ EmailVerificationToken : "tokens"
+    User ||--o{ PasswordResetOTP : "otps"
+    User |o--o{ LoginAttempt : "attempts"
+    User ||--o{ IntegrationToken : "oauthTokens"
+    User ||--o{ Contact : "requester"
+    User ||--o{ Contact : "receiver"
+    User ||--o{ Notification : "notifications"
+    User ||--o{ WikiPage : "author"
+    User ||--o{ StudyPlaceProgress : "progress"
+    User |o--o{ ClientShareLink : "createdBy"
+    Client |o--o{ User : "portalUsers"
+
+    %% ================= RELATIONS - TASK CLUSTER =================
+    Task ||--o{ ErrorLog : "errors"
+    Task |o--o{ InvoiceItem : "billedIn"
+    Agency |o--o{ Task : "assignedAgency"
+    Client |o--o{ Task : "clientId"
+    Invoice |o--o{ Task : "invoiceId"
+    Project |o--o{ Task : "projectId"
+    Task ||--o{ TaskTag : "tags"
+    Task ||--o| Rating : "rating"
+    Task ||--o| TaskRawFootage : "veloxMap"
+    Task |o--o{ ClientTaskRequest : "spawnedFrom"
+    Task ||--o{ TaskComment : "comments"
+    TagCategory ||--o{ TaskTag : "usages"
+    TaskComment |o--o{ TaskComment : "replies"
+    TaskComment ||--o{ TaskCommentReaction : "reactions"
+
+    %% ================= RELATIONS - CLIENT AND FINANCE =================
+    Client |o--o{ Client : "parentHierarchy"
+    Client |o--o{ Client : "mergedInto"
+    Client ||--o{ Invoice : "invoices"
+    Client ||--o{ Project : "projects"
+    Client |o--o{ ProfileAccess : "clientMembership"
+    Client |o--o{ PricingRule : "rules"
+    Client ||--o{ ClientShareLink : "shareLinks"
+    Client |o--o{ ClientTaskRequest : "requests"
+    ClientShareLink |o--o{ Rating : "ratedVia"
+    Invoice ||--o{ InvoiceItem : "items"
+
+    %% ================= RELATIONS - PAYROLL =================
+    PayrollLock |o--o{ MonthlyRank : "locks"
+    ErrorDictionary ||--o{ ErrorLog : "logs"
+
+    %% ================= RELATIONS - TRACKING WIKI =================
+    Session ||--o{ Event : "events"
+    WikiPage |o--o{ WikiPage : "tree"
+    WikiPage |o--o{ Attachment : "attachments"
+
+    %% ================= RELATIONS - REVIEW MODULE (real FK) =================
+    ReviewFolder |o--o{ ReviewFolder : "tree"
+    ReviewFolder ||--o{ ReviewAsset : "assets"
+    ReviewFolder |o--o{ ShareLinkItem : "sharedAs"
+    ReviewAsset ||--o{ ReviewVersion : "versions"
+    ReviewAsset |o--o| ReviewVersion : "currentVersion"
+    ReviewAsset |o--o{ ShareLinkItem : "sharedAs"
+    ReviewAsset ||--o{ GuestSubscription : "subs"
+    ReviewVersion ||--o{ ReviewComment : "comments"
+    ReviewVersion ||--o{ UploadSession : "uploads"
+    ReviewComment |o--o{ ReviewComment : "replies"
+    ReviewComment ||--o{ CommentAttachment : "attachments"
+    ReviewComment ||--o{ CommentReaction : "reactions"
+    GuestSession |o--o{ ReviewComment : "guestAuthor"
+    GuestSession |o--o{ CommentReaction : "guestReactor"
+    ShareLink ||--o{ ShareLinkItem : "items"
+    ShareLink ||--o{ GuestSession : "guests"
+
+    %% ============ RELATIONS - REVIEW MODULE scalar-FK (dashed, no DB constraint) ============
+    Workspace ||..o{ ReviewFolder : "scalar-FK"
+    Workspace ||..o{ ReviewAsset : "scalar-FK"
+    Workspace ||..o{ ReviewVersion : "scalar-FK"
+    Workspace ||..o{ ShareLink : "scalar-FK"
+    Workspace ||..o{ ReviewActivity : "scalar-FK"
+    Task |o..o{ ReviewFolder : "scalar-FK"
+    Task |o..o{ ReviewAsset : "scalar-FK"
+    Task |o..o{ ShareLink : "scalar-FK"
+    Task |o..o{ ReviewActivity : "scalar-FK"
+    Client |o..o{ ReviewFolder : "scalar-FK"
+    Client |o..o{ ReviewAsset : "scalar-FK"
+    User |o..o{ ReviewFolder : "scalar-FK createdBy"
+    User ||..o{ ReviewAsset : "scalar-FK createdBy"
+    User ||..o{ ReviewVersion : "scalar-FK uploader"
+    User |o..o{ ReviewComment : "scalar-FK author"
+    User ||..o{ ShareLink : "scalar-FK createdBy"
+    ShareLink |o..o{ ReviewComment : "scalar-FK provenance"
+    ShareLink ||..o{ GuestEmailVerification : "scalar-FK"
+    ShareLink ||..o{ GuestSubscription : "scalar-FK"
+    GuestSession |o..o{ GuestSubscription : "scalar-FK"
+    ReviewAsset |o..o{ ReviewActivity : "scalar-FK"
+
+    %% ============ RELATIONS - OTHER scalar-FK (dashed, no DB constraint) ============
+    Client ||..o{ Payment : "scalar-FK"
+    Workspace ||..o{ Payment : "scalar-FK"
+    Invoice |o..o{ Payment : "scalar-FK"
+    Workspace ||..o{ PriceTemplate : "scalar-FK"
+    Workspace ||..o{ ClientTaskRequest : "scalar-FK"
+    User ||..o{ TaskCommentReadState : "scalar-FK"
+    Task ||..o{ TaskCommentReadState : "scalar-FK"
+    Task |o..o{ Notification : "scalar-FK"
+    ClientShareLink |o..o{ TaskComment : "scalar-FK viaShareLink"
+
+%% ============================================================================
+%% NGUỒN: prisma/schema.prisma (2056 dòng, 67 model) — đọc toàn bộ 2026-08-02.
+%% - Đường liền (--) = relation Prisma thật (FK constraint trong Postgres).
+%% - Đường đứt (..) = scalar-FK: cột string/int trỏ id bảng khác, KHÔNG có
+%%   FK constraint (quyết định P0 review module, schema.prisma:1604-1613;
+%%   Payment "scalar-only by design" schema.prisma:799-804; PriceTemplate:1149;
+%%   TaskCommentReadState:1575; Notification.taskId:1251; ClientTaskRequest
+%%   profileId/workspaceId:632-641; TaskComment.viaShareLinkId:1536).
+%% - Status THẬT: Task.status default "Đang thực hiện" (schema.prisma:336);
+%%   ReviewVersion.pipelineStatus enum ReviewPipelineStatus UPLOADING/UPLOADED/
+%%   PROCESSING/READY/FAILED (:1623-1629); ReviewVersion.reviewState enum
+%%   ReviewState DRAFT/AWAITING_REVIEW/CHANGES_REQUESTED/APPROVED (:1631-1637);
+%%   Invoice.status enum InvoiceStatus DRAFT/SENT/PAID/OVERDUE/VOID (:915-921).
+%% - ReviewActivity cố tình KHÔNG có FK (append-only log, schema.prisma:1987-1988);
+%%   ngoài workspaceId/taskId/assetId còn scalar: folderId, versionId, commentId,
+%%   shareLinkId, actorUserId, guestSessionId — lược bớt cạnh để đọc được.
+%% - WebhookEvent (:2040) + RateLimitBucket (:2052) đứng độc lập, không quan hệ.
+%% - Mỗi entity chỉ ghi 2-4 field then chốt theo yêu cầu — không phải đủ cột.
+%% ============================================================================

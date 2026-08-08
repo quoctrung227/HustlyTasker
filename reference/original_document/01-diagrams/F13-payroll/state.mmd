@@ -1,0 +1,36 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Kỳ lương 1 workspace (month year lấy từ workspace.name qua extractPayrollCycle)" as Cycle {
+        state "Record Payroll của TỪNG editor (userId month year workspaceId)" as R {
+            state "UNPAID (default schema — thực tế chưa có record là chưa chi)" as Unpaid
+            state "PAID (đã chi, paidAt được set)" as Paid
+            [*] --> Unpaid
+            Unpaid --> Paid : confirmPayment upsert status PAID (guard sổ chưa khóa)
+            Paid --> Paid : confirmPayment lại để sửa số tiền (guard sổ chưa khóa)
+            Paid --> Unpaid : revertPayment XÓA record (guard sổ chưa khóa, nếu khóa trả PAYROLL_LOCKED)
+        }
+        --
+        state "Sổ khóa PayrollLock của cả cycle" as L {
+            state "Chưa khóa (chưa có lock hoặc isLocked false)" as MoKhoa
+            state "ĐÃ KHÓA (isLocked true, lockedBy admin)" as DaKhoa
+            [*] --> MoKhoa
+            MoKhoa --> DaKhoa : calculateMonthlyBonus tạo MonthlyBonus + MonthlyRank rồi upsert lock CUỐI transaction
+            DaKhoa --> DaKhoa : calculateMonthlyBonus lần nữa bị chặn (Kỳ lương này đã bị khóa)
+            DaKhoa --> DaKhoa : confirmPayment và revertPayment bị chặn PAYROLL_LOCKED
+            DaKhoa --> MoKhoa : revertMonthlyBonus deleteMany bonus + rank + lock (mở khóa sổ)
+        }
+    }
+
+%% NGUỒN STATUS THẬT trong code:
+%% Payroll.status: prisma/schema.prisma:318 — String @default("UNPAID"); code chỉ ghi 'PAID'
+%%   'PAID' + paidAt: src/actions/payroll-actions.ts:74-75 (update) và :88-89 (create)
+%%   Xóa record (về trạng thái chưa chi): src/actions/payroll-actions.ts:204 payroll.delete
+%% PayrollLock.isLocked: prisma/schema.prisma:482 — Boolean @default(false)
+%%   Khóa (isLocked true, bước cuối transaction): src/actions/bonus-actions.ts:400-416 payrollLock.upsert
+%%   Mở khóa (xóa lock): src/actions/bonus-actions.ts:84-86 payrollLock.deleteMany
+%% Guard chặn khi khóa: confirmPayment src/actions/payroll-actions.ts:51-53, revertPayment :186-191,
+%%   calculateMonthlyBonus :151-153 và re-check trong transaction :339-343
+%% Cycle month year: src/lib/payroll-cycle.ts:11 extractPayrollCycle(workspace.name)

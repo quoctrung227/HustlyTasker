@@ -1,0 +1,193 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class SharePage {
+        <<RSC src/app/share/token/page.tsx>>
+        +SharePage(params token)
+        resolveShareToken(token, recordAccess)
+        getShareSnapshot(token)
+        audit(share_link.accessed)
+    }
+
+    class SharePortalClient {
+        <<Client component>>
+        -token string
+        +actions DeliverableActions
+        approve() requestChanges() rate()
+        submitRequest() getRequests()
+        postComment() reactComment()
+        notifyRequest() notifyVerify()
+        invoicePdfUrl() zipUrl()
+        prepareScreening(reviewUrl)
+    }
+
+    class ShareLinkAuth {
+        <<lib share-link-auth.ts>>
+        +resolveShareToken(rawToken, opts) ShareLinkScope
+        +hashShareToken(raw) sha256
+        +getRequestIp()
+        -TOKEN_RX 10..128 chars
+        -limitDb per ip + per tokenHash
+    }
+
+    class SharePortalActions {
+        <<server actions share-portal-actions.ts>>
+        +getShareSnapshot(token)
+        +approveDeliverableViaToken(token, taskId)
+        +approveDeliverablesViaToken(token, taskIds)
+        +requestChangesViaToken(token, taskId, feedback)
+        +submitRatingViaToken(token, taskId, cq, rs, cm, fb)
+        +createTaskViaToken(token, input)
+        +submitClientRequestViaToken(token, input)
+        +createSubClientViaToken(token, input)
+        +getClientRequestsViaToken(token)
+        +getCommentFeedViaToken(token, taskId)
+        +postCommentViaToken(token, taskId, body, parentId)
+        +toggleReactionViaToken(token, commentId, emoji)
+        +requestPortalNotifyEmail(token, email)
+        +verifyPortalNotifyEmail(token, code)
+        +unsubscribePortalNotify(unsubToken)
+        +getActivityViaToken(token, taskId)
+        +ensureScreeningIdentity(token, slug)
+        -findScopedTask(token, taskId, select)
+        -notifyStaff() notifyProfileAdmins()
+    }
+
+    class ShareDocumentActions {
+        <<server actions share-document-actions.ts>>
+        +getDocumentsViaToken(token)
+        +downloadDocumentsViaToken(token, versionIds)
+        -buildClientDocuments(token)
+        -presignGetObject(r2Key)
+    }
+
+    class PortalDerive {
+        <<lib portal-derive.ts>>
+        +deriveClientStatus(status, clientReview)
+        +deriveNeedsYou(task)
+        +isClientFacingPhase(status, clientReview)
+        +needsClientAction(status)
+        +clientLabelOf(status)
+    }
+
+    class InvoicePdfRoute {
+        <<api share/token/invoices/id/pdf>>
+        +GET(token, id)
+        +HEAD() 405
+        limitDb share-invoice-pdf 10 per 300s
+        generateInvoicePDF(payload)
+    }
+
+    class DownloadZipRoute {
+        <<api share/token/download-zip>>
+        +GET(token, folderId, assetIds)
+        limitDb share-zip 12 per 600s
+        archiver store mode from R2
+    }
+
+    class ClientShareLink {
+        +id uuid
+        +tokenHash unique
+        +clientId int
+        +profileId string
+        +revokedAt expiresAt
+        +accessCount lastAccessedAt
+        +canApprove allowDownload
+        +notifyEmail notifyEmailVerifiedAt
+        +notifyEmailPending notifyEmailCodeHash
+        +notifyEmailUnsubToken unique
+    }
+
+    class Task {
+        +id title
+        +status string tự do
+        +clientReview AWAITING APPROVED CHANGES
+        +clientFeedback clientReviewedAt
+        +isArchived version
+        +jobPriceUSD productLink
+        +clientId workspaceId profileId
+        +assigneeId assignedById
+    }
+
+    class ClientTaskRequest {
+        +id profileId workspaceId clientId
+        +viaShareLinkId submittedVia
+        +title videoList desiredType
+        +rawFootage collectFile bRoll refs
+        +status ClientRequestStatus
+        +rejectionNote taskId reviewedAt
+    }
+
+    class Rating {
+        +taskId unique
+        +clientId null qua link
+        +staffId
+        +creativeQuality responsiveness communication
+        +ratedVia SHARE_LINK
+        +shareLinkId
+    }
+
+    class TaskComment {
+        +taskId authorType CLIENT
+        +visibility CLIENT forced
+        +body parentId isDeleted
+        +viaShareLinkId
+    }
+
+    class TaskCommentReaction {
+        +commentId emoji
+        +viaShareLinkId
+    }
+
+    class Invoice {
+        +id invoiceNumber status
+        +subtotalAmount taxAmount totalDue
+        +billingSnapshot clientSnapshot
+        +filePath clientId workspaceId
+        +items InvoiceItem
+    }
+
+    class Client {
+        +id name status
+        +parentId profileId
+        +mergedIntoId
+    }
+
+    SharePage --> ShareLinkAuth : resolveShareToken
+    SharePage --> SharePortalActions : getShareSnapshot
+    SharePage --> SharePortalClient : render props
+    SharePortalClient ..> SharePortalActions : gọi 17 server action với token
+    SharePortalClient ..> ShareDocumentActions : documents + download
+    SharePortalClient ..> InvoicePdfRoute : invoicePdfUrl href
+    SharePortalClient ..> DownloadZipRoute : zipUrl href
+    SharePortalActions --> ShareLinkAuth : mỗi action re-resolve token
+    SharePortalActions --> PortalDerive : deriveClientStatus + R5 gate
+    ShareDocumentActions --> ShareLinkAuth : resolveShareToken
+    InvoicePdfRoute --> ShareLinkAuth : resolveShareToken
+    DownloadZipRoute --> ShareLinkAuth : resolveShareToken
+    SharePortalActions --> Task : updateMany pinned status
+    SharePortalActions --> ClientTaskRequest : create status NEW
+    SharePortalActions --> Rating : create ratedVia SHARE_LINK
+    SharePortalActions --> TaskComment : create visibility CLIENT
+    SharePortalActions --> TaskCommentReaction : toggle
+    SharePortalActions --> ClientShareLink : notifyEmail OTP fields
+    SharePortalActions --> Invoice : read whitelist bank
+    InvoicePdfRoute --> Invoice : findFirst scoped
+    ClientShareLink o-- Client : clientId
+    Task o-- Client : clientId
+    ClientTaskRequest o-- Client : clientId
+    Invoice o-- Client : clientId
+    Rating --> Task : taskId unique
+    TaskComment --> Task : taskId
+    TaskCommentReaction --> TaskComment : commentId
+    Rating --> ClientShareLink : shareLinkId
+
+    %% Nguồn: src/app/share/[token]/page.tsx:16-53 · src/components/portal/share/SharePortalClient.tsx:48-91
+    %% src/actions/share-portal-actions.ts:165,480,765,855,1011,1082,1182,1350,1460,1651,1703,1777,582,626,684
+    %% src/actions/share-document-actions.ts:461,466 · src/lib/share-link-auth.ts:73 · src/lib/portal-derive.ts:40-96
+    %% src/app/api/share/[token]/invoices/[id]/pdf/route.ts:51 · src/app/api/share/[token]/download-zip/route.ts:87
+    %% prisma/schema.prisma: ClientShareLink:572, ClientTaskRequest:632, Rating:928, Task.clientReview:385

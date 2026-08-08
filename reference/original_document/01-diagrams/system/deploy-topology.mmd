@@ -1,0 +1,38 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+  %% Deploy topology thật — bằng chứng: package.json:10 (postinstall prisma db push),
+  %% vercel.json (functions + crons), nixpacks.toml ("Vercel ignores this file"),
+  %% parts/01-stack-deploy.md. Không có .github/workflows nào trong repo.
+
+  subgraph DEV["Máy dev (Windows)"]
+    SRC["Repo git (blazing-station)\nnhánh main + nhánh claude/*"]
+    ELECTRON["electron/ — desktop wrapper\nnext build standalone (ELECTRON_DESKTOP=1)\ncron-scheduler mirror 6/7 job"]
+    MCP["mcp-server/ — MCP stdio\nPrisma truy DB TRỰC TIẾP"]
+  end
+
+  subgraph VERCEL["Vercel (KHÔNG có CI/CD riêng trong repo)"]
+    BUILD["Build: npm install\n→ postinstall: prisma generate && prisma db push\n(DDL áp vào Neon NGAY LÚC BUILD)\n→ next build --webpack"]
+    PREVIEW["Preview deployment\n(push nhánh bất kỳ)"]
+    PROD["Production hustlytasker.xyz\n(merge vào main)"]
+    CRON["7 Vercel Cron\nsend-digest / check-deadline / cleanup-notifications\nhard-delete-workspaces / hard-delete-profiles\nauth-cleanup / review-janitor"]
+    PYFN["api/*.py Python Functions\n(orphan nhưng VẪN deploy — vercel.json:3)"]
+  end
+
+  subgraph DATA["Neon Postgres"]
+    NEON_MAIN[("DB prod ep-autumn-flower\n(nhận db push từ MỌI build)")]
+    NEON_TEST[("TEST branch ep-frosty-forest\n(.env.test — harness QA)")]
+  end
+
+  SRC -->|git push nhánh| PREVIEW
+  SRC -->|merge main| PROD
+  PREVIEW --> BUILD
+  PROD --> BUILD
+  BUILD -->|prisma db push| NEON_MAIN
+  PROD --> CRON
+  PROD --> PYFN
+  ELECTRON -.->|"chạy local, gọi HTTP cron\n+ DB qua connection string"| NEON_MAIN
+  MCP -.->|"Prisma client trực tiếp"| NEON_MAIN
+  SRC -.->|"npx tsx scripts/test-*.ts\n(harness tay, không gate build)"| NEON_TEST

@@ -1,0 +1,110 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin (OWNER hoặc ADMIN của profile)
+    participant UI as CRM UI admin/crm/page.tsx + ShareLinkSection.tsx
+    participant CRM as crm-actions.ts
+    participant SL as share-link-actions.ts
+    participant Guard as security.ts + profile-permissions.ts
+    participant DB as Prisma (Neon Postgres)
+    participant AUD as audit-log.ts
+    actor Guest as Khách (không cần tài khoản)
+    participant Portal as /share/[token] + share-link-auth.ts
+
+    Note over Admin,DB: Nhánh A — cây client/sub-client
+    Admin->>UI: mở Quản lý Khách hàng
+    UI->>CRM: getClients(workspaceId)
+    CRM->>Guard: verifyFinanceAccess(workspaceId)
+    alt không có quyền finance/profile-admin
+        Guard--xCRM: throw Forbidden
+        CRM-->>UI: success false - Failed to fetch clients
+    else có quyền
+        CRM->>DB: client.findMany parentId null, status ACTIVE, include subsidiaries
+        DB-->>CRM: cây client + project + task theo workspace
+        CRM-->>UI: data clients
+    end
+
+    Admin->>UI: tạo client hoặc sub-client
+    UI->>CRM: createClient(name, parentId, workspaceId)
+    CRM->>Guard: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt không phải ADMIN workspace
+        Guard--xCRM: throw
+        CRM-->>UI: Failed to create client
+    else là ADMIN
+        CRM->>DB: pg_advisory_xact_lock theo profile (withClientNameLock)
+        CRM->>DB: check parent ACTIVE + findDuplicateName (NFC lowercase)
+        alt parent đã vào Thùng rác
+            CRM-->>UI: Khách hàng chính không còn hoạt động
+        else trùng tên cùng cấp trong profile
+            CRM-->>UI: Khách hàng đã tồn tại trong profile
+        else hợp lệ
+            CRM->>DB: client.create(name, parentId)
+            CRM-->>UI: success true + revalidatePath admin/crm
+        end
+    end
+
+    Note over Admin,Portal: Nhánh B — phát hành ClientShareLink
+    Admin->>UI: mở modal Link chia sẻ rồi bấm Tạo link
+    UI->>SL: createClientShareLink(clientId, workspaceId)
+    SL->>Guard: getSession + isSessionLive + canManageShareLinks
+    alt chưa đăng nhập
+        SL-->>UI: Unauthorized
+    else session hết hiệu lực hoặc tài khoản LOCKED
+        SL-->>UI: Phiên đăng nhập đã hết hiệu lực
+    else không phải OWNER/ADMIN của profile
+        SL-->>UI: Chỉ OWNER/ADMIN của profile mới được quản lý link
+    else qua gate
+        SL->>DB: client.findFirst id + profileId + status ACTIVE
+        alt client không thuộc profile hoặc đã xoá/gộp
+            SL-->>UI: Khách hàng không tồn tại trong profile này
+        else client ACTIVE
+            SL->>SL: randomBytes(9) base64url + hashShareToken SHA-256
+            SL->>DB: clientShareLink.create(tokenHash, clientId, profileId)
+            SL->>AUD: audit share_link.created
+            SL-->>UI: url /share/rawToken — hiển thị đúng 1 lần, không lưu bản gốc
+        end
+    end
+
+    Note over Admin,Portal: Nhánh C — thu hồi link
+    Admin->>UI: bấm Thu hồi trên 1 link
+    UI->>SL: revokeClientShareLink(linkId, workspaceId)
+    SL->>Guard: gateShareLinkAdmin(workspaceId)
+    alt gate fail (401/403 như nhánh B)
+        SL-->>UI: error tương ứng
+    else qua gate
+        SL->>DB: clientShareLink.findFirst id + profileId (chống cross-profile)
+        alt link không thuộc profile
+            SL-->>UI: Không tìm thấy link
+        else đã thu hồi trước đó
+            SL-->>UI: Link đã bị thu hồi trước đó
+        else còn hiệu lực
+            SL->>DB: update revokedAt = now
+            SL->>AUD: audit share_link.revoked
+            SL-->>UI: success true — hiệu lực ngay lập tức
+        end
+    end
+
+    Note over Guest,Portal: Hệ quả — mọi request public re-resolve token
+    Guest->>Portal: GET /share/rawToken
+    Portal->>Portal: resolveShareToken(rawToken)
+    Portal->>DB: limitDb share-token-ip 240 req/60s (fail-open)
+    Portal->>DB: clientShareLink.findUnique(tokenHash)
+    alt token sai format / không tồn tại / revokedAt / hết hạn / client hoặc profile không ACTIVE / rate-limited
+        Portal-->>Guest: null — trang 404 đồng nhất (không phân biệt lý do)
+    else token hợp lệ
+        Portal->>DB: limitDb share-token 2000 req/60s theo tokenHash
+        Portal->>DB: client.findMany profile ACTIVE — gom scope theo name-path + sub-brands
+        Portal->>DB: accessCount +1, lastAccessedAt (fire-and-forget)
+        Portal-->>Guest: ShareLinkScope clientIds + toàn bộ workspaceIds của profile
+    end
+
+%% Nguồn (file:line):
+%% - getClients + verifyFinanceAccess: src/actions/crm-actions.ts:14-53, src/lib/security.ts:203
+%% - createClient (guard ADMIN, advisory lock, parent ACTIVE, dup-name): src/actions/crm-actions.ts:113-143
+%% - withClientNameLock pg_advisory_xact_lock: src/actions/crm-actions.ts:95-110
+%% - createClientShareLink: src/actions/share-link-actions.ts:46-89 (randomBytes(9):62, audit:73)
+%% - gateShareLinkAdmin (401 / isSessionLive / canManageShareLinks): src/actions/share-link-actions.ts:25-44
+%% - revokeClientShareLink: src/actions/share-link-actions.ts:91-119
+%% - resolveShareToken (rate limit 2 tang, uniform null/404, name-path scope, telemetry):
+%%   src/lib/share-link-auth.ts:73-281 (TOKEN_RX:38, tier1:128-134, findUnique:136, revoked:149,
+%%   expired:150, client/profile ACTIVE:156-157, tier2:170-173, accessCount:262-270)
+%% - UI modal: src/components/crm/ShareLinkSection.tsx (create:59, revoke:79, reload:51)

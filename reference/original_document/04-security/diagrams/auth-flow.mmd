@@ -1,0 +1,98 @@
+sequenceDiagram
+    autonumber
+    actor U as Nguoi dung / Khach
+    participant BR as Trinh duyet (cookie store)
+    participant MW as middleware.ts (Edge)
+    participant ACT as loginAction (auth-actions.ts)
+    participant JWT as jwt.ts (jose HS256)
+    participant DAL as DAL guards (security.ts)
+    participant LAY as admin/layout.tsx
+    participant SH as share-link-auth.ts (/share)
+    participant RV as review/share-auth.ts (/r)
+    participant DB as Neon Postgres (Prisma)
+
+    Note over U,DB: NHANH A — Dang nhap noi bo (staff/admin) va mint JWT cookie
+    U->>ACT: loginAction(emailOrUsername, password, rememberMe)
+    ACT->>DB: checkLoginIp Upstash 10/phut + lookup User + bcrypt compare
+    alt user khong ton tai / sai pass / LOCKED / CLIENT
+        ACT-->>U: GENERIC_AUTH_ERROR (chong enumeration, pad delay) [auth-actions.ts:303,363]
+    else dang nhap thanh cong
+        ACT->>DB: logLoginAttempt(success) + auditLog auth.login_success
+        ACT->>JWT: loginWithProfile — encrypt({user:{id,role,sessionVersion,sessionProfileId,...}}, 30 ngay) [auth.ts:32]
+        JWT->>BR: Set-Cookie session — httpOnly, sameSite lax, secure(prod), path / , TTL 30d [auth.ts:42-48]
+        ACT-->>U: redirect /wsId/admin
+    end
+
+    Note over U,DB: NHANH B — Moi request da xac thuc di qua middleware (Edge)
+    U->>BR: GET /wsId/admin (kem cookie session)
+    BR->>MW: request
+    MW->>MW: skip /_next + /api + path chua dau cham, set header x-device-type [middleware.ts:9-36]
+    alt khong co cookie va path la /admin hoac /dashboard
+        MW-->>U: redirect /login [middleware.ts:71-75]
+    else co cookie
+        MW->>JWT: decrypt(cookie) — CO Y KHONG check sessionVersion (Edge-cheap, chong CVE-2025-29927) [middleware.ts:78 / auth.ts:56-63]
+        alt role == CLIENT
+            MW-->>U: redirect /login (portal khach da bo) [middleware.ts:88-90]
+        else thieu sessionProfileId khi vao /admin|/dashboard
+            MW-->>U: redirect /login [middleware.ts:94-100]
+        else hop le
+            MW->>MW: rolling refresh — re-issue cookie khi con <15 ngay, BO QUA phien impersonation [middleware.ts:145-163]
+            MW->>LAY: NextResponse.next (forward x-device-type)
+        end
+    end
+
+    Note over LAY,DB: NHANH C — DAL verify la CONG THU HOI THAT (so sessionVersion vs DB)
+    LAY->>DAL: verifyProfileAdminAccess(wsId) -> verifyWorkspaceAccess [security.ts:180,38]
+    DAL->>DB: findUnique User (role, sessionVersion)
+    alt user LOCKED
+        DAL-->>LAY: throw SECURITY_VIOLATION (tai khoan bi khoa) [security.ts:67-69]
+    else JWT.sessionVersion < DB.sessionVersion
+        DAL-->>LAY: throw SECURITY_VIOLATION (phien het hieu luc) [security.ts:79-81]
+    else con hieu luc
+        DAL->>DB: workspace + ProfileAccess -> tinh workspaceRole (OWNER / ADMIN+grantedAt / CLIENT fail-closed / MEMBER) [security.ts:103-142]
+        alt khong du quyen
+            DAL-->>LAY: throw SECURITY_VIOLATION — IDOR Blocked [security.ts:145-153]
+        else OWNER|ADMIN cua workspace hoac profile
+            DAL-->>LAY: OK (workspaceRole, profileRole)
+            LAY-->>U: render trang admin
+        end
+    end
+    Note over LAY,DB: verifyProfileAdminAccess fail -> redirect /wsId/dashboard [admin/layout.tsx:56-66]
+
+    Note over U,DB: NHANH D — Khach portal /share/[token] (token la credential, KHONG session)
+    U->>MW: GET /share/{token}
+    MW-->>U: PUBLIC early-return + X-Robots-Tag noindex + Referrer-Policy no-referrer [middleware.ts:44-55]
+    U->>SH: page/action -> resolveShareToken(rawToken) [share-link-auth.ts:73]
+    SH->>SH: TOKEN_RX 10-128 char, tier1 rate-limit per trusted-IP 240/min (fail-OPEN) [share-link-auth.ts:103,128-134]
+    SH->>DB: findUnique ClientShareLink theo SHA-256 hash-at-rest [share-link-auth.ts:136]
+    alt sai format / khong ton tai / revoked / expired / client|profile chet / rate-limited
+        SH-->>U: tra null -> 404 DONG NHAT (chong enumeration) [share-link-auth.ts:103,148-157]
+    else token that
+        SH->>SH: tier2 rate-limit per token-hash 2000/min (fail-OPEN) [share-link-auth.ts:170-173]
+        SH->>DB: gom scope theo name-path segments trong profile + moi workspace [share-link-auth.ts:190-260]
+        SH-->>U: ShareLinkScope (clientIds, workspaceIds) — chi VIEW
+    end
+
+    Note over U,DB: NHANH E — Guest review /r/[slug] (gate chain hop dong)
+    U->>MW: GET /r/{slug}
+    MW-->>U: PUBLIC + noindex + x-request-id [middleware.ts:57-68]
+    U->>RV: resolveShareGate(slug, cookies) [review/share-auth.ts:76]
+    RV->>DB: findUnique ShareLink theo slug (SLUG_RE nanoid12)
+    alt not_found(404) -> revoked(410) -> expired(410)
+        RV-->>U: gate chain, message not_found==revoked (chong enumeration) [review/share-auth.ts:98-108]
+    else co passwordHash
+        RV->>RV: verifyUnlockCookie(rv_unlock_{slug}) — JWT HS256 REVIEW_COOKIE_SECRET, bind fingerprint pass [review/share-auth.ts:134-144]
+        alt cookie sai/thieu
+            RV-->>U: state password (401) -> user nhap pass (bcrypt) -> mint unlock JWT TTL min(24h, han link) [review/share-auth.ts:120-132]
+        end
+    end
+    RV->>RV: identity — getGuestSession(rv_guest_{slug}) hoac modal Name+Email [review/share-auth.ts:154,336]
+    alt da co cookie guest
+        RV-->>U: GuestSession (DB luu sha256 token 32-byte) [review/share-auth.ts:154-165]
+    else modal input (guest ngoai)
+        RV->>DB: createGuestSession(name,email) [review/share-auth.ts:172-187]
+    else known-client auto-identity
+        RV->>DB: createLinkClientGuestSession — email synthetic @review.invalid, KHONG BAO GIO verified cho sign-off [review/share-auth.ts:309-327]
+    else that su vo danh va link khong co client
+        RV-->>U: 401 UNAUTHORIZED [review/share-auth.ts:355]
+    end

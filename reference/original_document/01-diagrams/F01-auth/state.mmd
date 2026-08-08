@@ -1,0 +1,40 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    %% Vòng đời credential của luồng quên mật khẩu (F01):
+    %% PasswordResetOTP rồi tiếp nối resetToken (EmailVerificationToken purpose=PASSWORD_RESET).
+    %% Model KHÔNG có cột status enum — trạng thái suy ra từ các field thật:
+    %% consumedAt / invalidatedAt / expiresAt / attemptCount (OTP) và usedAt / expiresAt (token).
+
+    state "OTP hoạt động (consumedAt=null, invalidatedAt=null, còn hạn 10 phút)" as OtpHoatDong
+    state "OTP bị vô hiệu (invalidatedAt khác null)" as OtpVoHieu
+    state "OTP hết hạn (quá expiresAt = 10 phút)" as OtpHetHan
+    state "OTP đã dùng (consumedAt khác null)" as OtpDaDung
+    state "Reset token hoạt động (usedAt=null, còn hạn 5 phút)" as TokenHoatDong
+    state "Reset token đã dùng (usedAt khác null)" as TokenDaDung
+    state "Reset token hết hạn (quá expiresAt = 5 phút)" as TokenHetHan
+
+    [*] --> OtpHoatDong : requestPasswordResetOtp tạo OTP hash SHA-256 và gửi email
+    OtpHoatDong --> OtpHoatDong : verifyPasswordResetOtp sai, attemptCount cộng 1 (dưới 5 lần)
+    OtpHoatDong --> OtpVoHieu : sai lần thứ 5, attemptCount đạt OTP_MAX_ATTEMPTS nên set invalidatedAt
+    OtpHoatDong --> OtpVoHieu : user xin OTP mới, OTP cũ bị updateMany set invalidatedAt (superseded)
+    OtpHoatDong --> OtpHetHan : quá 10 phút OTP_TTL_MINUTES, query bỏ qua vì expiresAt
+    OtpHoatDong --> OtpDaDung : OTP đúng, transaction set consumedAt
+    OtpDaDung --> TokenHoatDong : cùng transaction tạo EmailVerificationToken purpose PASSWORD_RESET, trả rawToken 1 lần
+    TokenHoatDong --> TokenDaDung : resetPasswordWithToken set usedAt, đổi password bcrypt 12, sessionVersion cộng 1
+    TokenHoatDong --> TokenHetHan : quá 5 phút RESET_TOKEN_TTL_MINUTES
+    OtpVoHieu --> [*]
+    OtpHetHan --> [*]
+    OtpDaDung --> [*]
+    TokenDaDung --> [*] : mọi JWT cũ bị vô hiệu, user đăng nhập lại
+    TokenHetHan --> [*]
+
+%% Nguồn status thật (field, không phải enum):
+%% - PasswordResetOTP: prisma/schema.prisma:1327 (purpose :1333, expiresAt :1335 TTL 10 phút, attemptCount :1336, consumedAt :1337, invalidatedAt :1338)
+%% - EmailVerificationToken: prisma/schema.prisma:1305 (purpose :1311 giá trị EMAIL_VERIFICATION | PASSWORD_RESET | EMAIL_MIGRATION, usedAt :1314)
+%% - Tạo OTP + invalidate OTP cũ: src/actions/password-reset-actions.ts:125-144 (OTP_TTL_MINUTES=10 :33, OTP_MAX_ATTEMPTS=5 :35)
+%% - Đếm attempt sai + vô hiệu lần 5: src/actions/password-reset-actions.ts:225-240 (optimistic lock updateMany)
+%% - Consume OTP + tạo reset token TTL 5 phút: src/actions/password-reset-actions.ts:249-277 (RESET_TOKEN_TTL_MINUTES=5 :36)
+%% - Dùng reset token (usedAt, password mới, sessionVersion +1): src/actions/password-reset-actions.ts:336-360

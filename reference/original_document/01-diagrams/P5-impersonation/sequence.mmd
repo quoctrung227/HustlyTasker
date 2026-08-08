@@ -1,0 +1,81 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin (OWNER/ADMIN workspace)
+    participant UI as LivePresenceBoard.tsx (admin/analytics + mc/analytics)
+    participant SA as impersonation-actions.ts (server action)
+    participant SEC as lib/security.verifyWorkspaceAccess
+    participant AUTH as lib/auth (cookie JWT)
+    participant AUD as lib/audit-log.audit
+    participant DB as Prisma (Neon Postgres)
+    participant Banner as ImpersonationBanner (layout)
+
+    Admin->>UI: bấm nút Eye trên user đang online
+    UI->>SA: startImpersonation(targetUserId, workspaceId)
+
+    SA->>SEC: verifyWorkspaceAccess(workspaceId, ADMIN)
+    SEC->>DB: user.findUnique (role, sessionVersion)
+    SEC->>DB: workspace.findUnique + profileAccess + workspaceMember
+    alt không có session / user LOCKED / sessionVersion cũ / thiếu quyền ADMIN
+        SEC-->>SA: throw SECURITY_VIOLATION (401/403)
+        SA-->>UI: reject promise
+        UI-->>Admin: catch console.error, tắt spinner (finally)
+    else caller là workspace ADMIN hợp lệ
+        SA->>DB: workspaceMember.findFirst(targetUserId, workspaceId)
+        alt target không thuộc workspace
+            SA-->>UI: throw Người này không thuộc workspace của bạn
+        else target là member
+            SA->>DB: workspace.findUnique(profileId) + profileAccess.findUnique(target)
+            alt target là OWNER (member hoặc profile)
+                SA-->>UI: throw Không thể đóng vai chủ sở hữu Workspace
+            else target là ADMIN và caller không phải OWNER
+                SA-->>UI: throw Chỉ chủ sở hữu mới được đóng vai quản trị viên
+            else qua guard role-rank (AUDIT R6)
+                SA->>DB: profileAccess.findMany + workspaceMember.findMany (các tenant khác)
+                alt target có OWNER/ADMIN ở profile hoặc workspace khác (AUDIT HT-003/004)
+                    SA-->>UI: throw Không thể đóng vai người dùng có quyền quản trị ở nơi khác
+                else target không elevated ở tenant khác
+                    SA->>DB: user.findUnique(targetUserId)
+                    alt target không tồn tại hoặc User.role là ADMIN (legacy global)
+                        SA-->>UI: throw User not found / Không thể đóng vai tài khoản quản trị
+                    else target hợp lệ
+                        SA->>AUTH: createImpersonationSession(session.user, targetUser)
+                        AUTH->>AUTH: encrypt admin JWT TTL 2h, set cookie admin_session
+                        AUTH->>AUTH: encrypt target JWT (isImpersonating, originalAdminId, impersonationExpiresAt) TTL 2h, ghi đè cookie session
+                        SA->>AUD: audit(auth.impersonation_started, targetId)
+                        AUD->>DB: auditLog.create (ip, userAgent)
+                        alt auditLog.create lỗi (vd bảng chưa tồn tại P2021)
+                            AUD-->>SA: nuốt lỗi, console.error, action vẫn tiếp tục
+                        else ghi audit thành công
+                            AUD-->>SA: ok
+                        end
+                        SA->>UI: redirect(/workspaceId)
+                        UI-->>Admin: trang tải lại dưới danh tính target
+                        Banner-->>Admin: hiện banner (session.user.isImpersonating = true)
+                    end
+                end
+            end
+        end
+    end
+
+    Admin->>Banner: bấm Quay lại Quản trị
+    Banner->>SA: stopImpersonation(workspaceId)
+    SA->>AUTH: stopImpersonationSession()
+    alt cookie admin_session còn
+        AUTH->>AUTH: khôi phục cookie session từ admin_session (expiry 7 ngày), xóa admin_session
+    else admin_session mất / hết hạn 2h
+        AUTH->>AUTH: xóa cookie session, xóa admin_session (buộc đăng nhập lại)
+    end
+    opt session.user.id còn đọc được
+        SA->>AUD: audit(auth.impersonation_ended)
+        AUD->>DB: auditLog.create
+    end
+    SA->>Banner: redirect(/workspaceId/admin/analytics)
+    Banner-->>Admin: trở về trang analytics với quyền admin
+
+%% Nguồn code thật:
+%% - UI click: src/components/admin/analytics/LivePresenceBoard.tsx:21-29 handleImpersonate
+%% - startImpersonation: src/actions/impersonation-actions.ts:9-107 (guard ADMIN :14, member check :18-22, OWNER/ADMIN rank :41-44, elevated elsewhere :52-74, target ADMIN :88, redirect :105-106)
+%% - createImpersonationSession: src/lib/auth.ts:76-117 (TTL 2h :77, cookie admin_session :101, cookie session isImpersonating :88-96)
+%% - audit non-throwing: src/lib/audit-log.ts:153-197 (P2021 suppress :192-193)
+%% - stopImpersonation: src/actions/impersonation-actions.ts:109-126, stopImpersonationSession: src/lib/auth.ts:119-141
+%% - banner: src/app/[workspaceId]/layout.tsx:170-175 + src/components/layout/ImpersonationBanner.tsx:16-20

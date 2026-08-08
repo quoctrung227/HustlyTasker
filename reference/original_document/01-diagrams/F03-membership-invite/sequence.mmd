@@ -1,0 +1,107 @@
+sequenceDiagram
+    autonumber
+    actor AD as Admin (ProfileMembersPanel / CrossTeamManager)
+    actor ST as Staff (PendingInvitationsBanner / NotificationItem)
+    participant PMA as inviteToProfileAction (profile-member-actions.ts)
+    participant MA as member-actions.ts
+    participant CT as cross-team-actions.ts
+    participant SEC as verifyWorkspaceAccess (lib/security.ts)
+    participant RL as rate-limit-upstash
+    participant DB as Prisma / Neon
+    participant RS as Resend (sendEmail)
+
+    Note over AD,DB: Giai đoạn 1 - Admin mời thành viên
+    AD->>PMA: inviteToProfileAction(profileId, workspaceId, usernameOrEmail, role)
+    PMA->>PMA: canInviteMember + chỉ OWNER được cấp ADMIN
+    alt caller không phải OWNER/ADMIN profile
+        PMA-->>AD: error Bạn không có quyền mời thành viên
+    else hợp lệ
+        PMA->>MA: inviteToWorkspace(workspaceId, target, role)
+        MA->>SEC: verifyWorkspaceAccess(workspaceId, ADMIN)
+        alt session chết / không đủ quyền
+            SEC-->>AD: throw SECURITY_VIOLATION (401/403)
+        else pass
+            MA->>RL: checkInviteCallerRate(inviterId) 40 mỗi giờ
+            alt vượt rate limit caller
+                MA-->>AD: error gửi lời mời quá nhanh
+            else còn quota
+                MA->>DB: findUserByEmailOrUsername(target)
+                alt target không tồn tại / LOCKED / CLIENT / trùng email nhiều account
+                    MA-->>AD: error tài khoản không hợp lệ
+                else target hợp lệ
+                    MA->>RL: checkInviteRate(workspaceId, targetId) 5 mỗi 24h
+                    MA->>DB: workspaceMember.findUnique kiểm tra đã là member
+                    alt cùng profile với workspace (isSameProfile)
+                        MA->>DB: workspaceMember.create (direct add, không cần accept)
+                    else khác profile
+                        MA->>DB: workspaceInvitation.create hoặc update (status PENDING, expiresAt 14 ngày)
+                    end
+                    MA->>DB: audit(member.invited / member.joined)
+                    MA->>RS: sendEmail buildWorkspaceInvitationEmail
+                    MA->>DB: createNotificationInternal WORKSPACE_INVITATION_RECEIVED
+                    MA-->>AD: success (directAdd true/false, reinvite)
+                end
+            end
+        end
+    end
+
+    Note over ST,DB: Giai đoạn 2 - Staff chấp nhận / từ chối lời mời
+    ST->>MA: acceptWorkspaceInvitation(invitationId)
+    MA->>DB: user.findUnique (role, sessionVersion)
+    alt chưa đăng nhập / LOCKED / CLIENT / sessionVersion cũ
+        MA-->>ST: error tài khoản không đủ điều kiện hoặc phiên hết hiệu lực
+    else session còn sống
+        MA->>DB: workspaceInvitation.findUnique (probe)
+        alt probe không tồn tại hoặc invitedUserId khác session user
+            MA-->>ST: error lời mời không tồn tại / không dành cho tài khoản này
+        else probe stale và không tìm được bản PENDING mới hơn
+            MA-->>ST: error đã hết hạn / DECLINED / ACCEPTED trước đó
+        else có invitation PENDING còn hiệu lực
+            MA->>DB: $transaction updateMany CAS chuyển PENDING sang ACCEPTED
+            alt updated.count bằng 0 (race 2 request)
+                MA-->>ST: error có thao tác khác vừa xử lý lời mời này
+            else CAS thành công
+                alt workspace không ACTIVE hoặc target đang là CLIENT của profile
+                    MA-->>ST: error workspace ngừng hoạt động / gỡ vai trò CLIENT trước
+                else hợp lệ
+                    MA->>DB: workspaceMember.upsert role = invitation.role
+                    MA->>DB: profileAccess.upsert role ADMIN hoặc USER
+                    MA->>DB: audit member.joined + notify inviter WORKSPACE_INVITATION_ACCEPTED
+                    MA-->>ST: success workspaceId + workspaceName
+                end
+            end
+        end
+    end
+    ST->>MA: declineWorkspaceInvitation(invitationId)
+    MA->>DB: update status DECLINED + notify inviter WORKSPACE_INVITATION_DECLINED
+
+    Note over AD,DB: Giai đoạn 3 - Cross-team (du học) xin quyền vào profile khác
+    AD->>CT: requestCrossTeamAccess(userId, targetProfileId, workspaceId)
+    CT->>DB: isSessionLive + getProfileRole(caller, profile gốc của user)
+    alt session chết / caller không phải OWNER/ADMIN team gốc
+        CT-->>AD: error không có quyền gửi yêu cầu du học
+    else đã có access / đã đủ 5 team / đang có request PENDING
+        CT-->>AD: error trùng lặp hoặc vượt giới hạn 5 team
+    else hợp lệ
+        CT->>DB: profileAccessRequest.create (status PENDING)
+        CT-->>AD: success
+    end
+    AD->>CT: approveCrossTeamAccess(requestId, workspaceId) bởi admin team đích
+    CT->>DB: getProfileRole(approver, targetProfileId)
+    alt không phải OWNER/ADMIN team đích
+        CT-->>AD: error không có quyền duyệt yêu cầu vào team này
+    else duyệt
+        CT->>DB: $transaction profileAccess.upsert + request update APPROVED
+        CT-->>AD: success
+    end
+
+%% Nguồn (file:line):
+%% src/actions/profile-member-actions.ts:113-154 (inviteToProfileAction -> inviteToWorkspace)
+%% src/actions/member-actions.ts:303 inviteToWorkspace (guard :309, rate :315/:410, lookup :343,
+%%   LOCKED/CLIENT :367, direct add :488, invitation create :541, notifyInvitee :566)
+%% src/actions/member-actions.ts:617 acceptWorkspaceInvitation (liveness :628-637, probe :644,
+%%   stale fallback :719-749, CAS :756-771, guards :786/:793/:809, upsert :818/:837)
+%% src/actions/member-actions.ts:937 declineWorkspaceInvitation (update DECLINED :969-972)
+%% src/actions/cross-team-actions.ts:11 requestCrossTeamAccess (guards :19/:44/:52/:56/:64, create :76)
+%% src/actions/cross-team-actions.ts:94 approveCrossTeamAccess (guard :109-112, transaction :115-125)
+%% src/lib/security.ts:38 verifyWorkspaceAccess (throw SECURITY_VIOLATION :57/:147/:152)

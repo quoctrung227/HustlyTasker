@@ -1,0 +1,96 @@
+sequenceDiagram
+    autonumber
+    actor Staff as Admin / Editor
+    actor KH as Khách (token portal)
+    participant UI as TaskCommentColumn (task drawer)
+    participant Portal as SharePortalClient (/share/[token])
+    participant TCA as task-comment-actions.ts
+    participant SPA as share-portal-actions.ts
+    participant SEC as security.verifyWorkspaceAccess
+    participant SLA as share-link-auth.resolveShareToken
+    participant DB as Prisma / Neon
+    participant NOTI as notification-actions + broadcast
+
+    Note over Staff, DB: Chiều 1 — staff bình luận INTERNAL/CLIENT
+    Staff->>UI: mở task detail (TaskDetailRoute)
+    UI->>TCA: getTaskActivityFeed(taskId, workspaceId)
+    TCA->>SEC: staffCtx gọi verifyWorkspaceAccess(MEMBER)
+    alt không session / account LOCKED / sessionVersion cũ
+        SEC-->>TCA: throw SECURITY_VIOLATION
+        TCA-->>UI: lỗi (UI giữ feed cũ)
+    else hợp lệ
+        SEC-->>TCA: userId + isAdmin
+        TCA->>DB: taskComment.findMany(isDeleted=false) + auditLog(EVENT_LABELS) + reactions
+        DB-->>TCA: comments + events
+        TCA-->>UI: TaskFeedItem[] (cả INTERNAL lẫn CLIENT)
+        UI->>TCA: markTaskCommentsRead upsert TaskCommentReadState
+    end
+
+    Staff->>UI: gõ bình luận + chọn visibility
+    UI->>TCA: createTaskComment(taskId, workspaceId, body visibility parentId)
+    TCA->>SEC: staffCtx
+    TCA->>DB: taskInWorkspace(taskId, workspaceId)
+    alt task không thuộc workspace
+        TCA-->>UI: success=false Không tìm thấy task
+    else body rỗng sau sanitizeClientText
+        TCA-->>UI: success=false Nội dung trống
+    else parentId không tồn tại hoặc đã xoá
+        TCA-->>UI: success=false Bình luận gốc không tồn tại
+    else hợp lệ
+        TCA->>TCA: resolveMentions(body) qua buildTaskMentionUsers
+        TCA->>DB: taskComment.create(authorType=STAFF, visibility, mentions)
+        opt visibility = INTERNAL
+            TCA->>DB: lọc bỏ target là CLIENT account (fix HT-026)
+        end
+        loop mỗi userId được mention (khác tác giả)
+            TCA->>NOTI: createNotificationInternal(TASK_COMMENT) + broadcastNotificationToUser
+            Note right of NOTI: lỗi notify chỉ console.error, comment vẫn thành công
+        end
+        TCA->>NOTI: broadcastFeedChanged broadcastToTopic(FEED_CHANGED)
+        TCA->>DB: audit task.comment_added
+        TCA-->>UI: success=true id createdAt
+        NOTI-->>UI: realtime FEED_CHANGED, drawer khác refetch feed
+    end
+
+    Note over KH, DB: Chiều 2 — khách bình luận qua token (F09)
+    KH->>Portal: gõ tin nhắn trong /share/[token]
+    Portal->>SPA: postCommentViaToken(token, taskId, body, parentId)
+    SPA->>SLA: resolveShareToken(token)
+    alt token sai / revoked / hết hạn
+        SPA-->>Portal: success=false This link is invalid
+    else quá rate limit 30 msg mỗi giờ
+        SPA-->>Portal: success=false Too many messages
+    else task ngoài scope token (findScopedTask null)
+        SPA-->>Portal: success=false link invalid or item no longer exists
+    else body rỗng
+        SPA-->>Portal: success=false Please write a message
+    else parent không phải comment CLIENT còn sống
+        SPA-->>Portal: success=false comment replied to no longer exists
+    else hợp lệ
+        SPA->>DB: taskComment.create(authorType=CLIENT, visibility ép = CLIENT)
+        alt DB create lỗi
+            SPA-->>Portal: success=false Could not post your comment
+        else tạo thành công
+            SPA->>NOTI: notify Manager (task.assignedById) TASK_COMMENT
+            SPA->>DB: audit task.comment_added (via share_link + ip)
+            SPA-->>Portal: success=true id createdAt
+        end
+    end
+
+    KH->>Portal: xem feed
+    Portal->>SPA: getCommentFeedViaToken(token, taskId)
+    SPA->>SLA: resolveShareToken + findScopedTask
+    alt token hoặc task ngoài scope
+        SPA-->>Portal: [] (feed rỗng)
+    else hợp lệ
+        SPA->>DB: findMany(visibility=CLIENT, isDeleted=false) — INTERNAL bị lọc cứng
+        SPA-->>Portal: ClientFeedItem[] (staff ẩn danh The team, khách là You)
+    end
+
+%% Nguồn:
+%% src/actions/task-comment-actions.ts:163 getTaskActivityFeed, :244-300 createTaskComment (guard 247, sanitize 249-250, parent 256-260, HT-026 274-284, notify 285-294, audit 296, broadcast 297)
+%% src/actions/task-comment-actions.ts:150 staffCtx, :482 markTaskCommentsRead, :24 broadcastFeedChanged
+%% src/actions/share-portal-actions.ts:1703-1769 postCommentViaToken (resolve 1704-1705, rateLimit 1707-1708, findScopedTask 1710-1711, sanitize 1713-1714, parent 1719-1726, create try/catch 1728-1746, notify manager 1749-1760, audit 1762-1766)
+%% src/actions/share-portal-actions.ts:1651-1701 getCommentFeedViaToken (lọc visibility=CLIENT 1657, ẩn danh The team 1685)
+%% src/lib/security.ts:38-81 verifyWorkspaceAccess (throw SECURITY_VIOLATION 57, 68, 80)
+%% src/components/tasks/TaskCommentColumn.tsx:25-44, src/components/portal/share/SharePortalClient.tsx:58-60

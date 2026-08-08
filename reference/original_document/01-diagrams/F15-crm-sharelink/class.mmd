@@ -1,0 +1,162 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class Client {
+        +Int id
+        +String name
+        +Int parentId
+        +String profileId
+        +String status
+        +DateTime deletedAt
+        +DateTime hardDeleteAfter
+        +Int mergedIntoId
+        +ClientTier tier
+        +Decimal depositBalance
+        +Int inputQuality
+        +Int paymentRating
+    }
+    note for Client "status ACTIVE / SOFT_DELETED / MERGED - cây parent-subsidiaries theo parentId"
+
+    class ClientShareLink {
+        +String id
+        +String tokenHash
+        +Int clientId
+        +String profileId
+        +String createdById
+        +DateTime createdAt
+        +DateTime revokedAt
+        +DateTime expiresAt
+        +DateTime lastAccessedAt
+        +Int accessCount
+        +Boolean allowVideoComments
+        +Boolean allowDownload
+        +Boolean showAllVersions
+        +Boolean canApprove
+        +String passphraseHash
+        +String notifyEmail
+    }
+    note for ClientShareLink "tokenHash = SHA-256, raw token chỉ hiện 1 lần, không lưu"
+
+    class Project {
+        +Int id
+        +String name
+        +String code
+        +Int clientId
+        +String workspaceId
+        +String profileId
+    }
+
+    class PricingRule {
+        +String id
+        +String name
+        +Int clientId
+        +String ruleType
+        +Json config
+        +Boolean isDefault
+    }
+
+    class CrmActions {
+        +getClients(workspaceId)
+        +createClient(data, workspaceId)
+        +updateClient(id, data, workspaceId)
+        +createProject(data, workspaceId)
+        +deleteClient(id, workspaceId)
+        +restoreClient(id, workspaceId)
+        +getTrashedClients(workspaceId)
+        +permanentlyDeleteClient(id, workspaceId)
+        +mergeClientIntoParent(childId, parentId, workspaceId)
+        +unmergeClient(clientId, workspaceId)
+        +getClientDetail(clientId, workspaceId)
+        -withClientNameLock(wp, profileId, workspaceId, fn)
+        -findDuplicateName(wp, name, parentId, excludeId)
+        -collectClientSubtreeIds(wp, rootId, status)
+    }
+
+    class ShareLinkActions {
+        +createClientShareLink(clientId, workspaceId)
+        +revokeClientShareLink(linkId, workspaceId)
+        +listClientShareLinks(clientId, workspaceId)
+        -gateShareLinkAdmin(workspaceId)
+    }
+
+    class ShareLinkAuth {
+        +hashShareToken(raw)
+        +resolveShareToken(rawToken, opts)
+        +getRequestIp()
+    }
+
+    class ProfilePermissions {
+        +canManageShareLinks(userId, profileId)
+        +isSessionLive(session)
+    }
+
+    class SecurityLib {
+        +verifyWorkspaceAccess(workspaceId, requiredRole)
+        +verifyFinanceAccess(workspaceId)
+    }
+
+    class AuditLog {
+        +audit(entry)
+    }
+
+    class CRMDashboardPage {
+        +render admin crm
+    }
+    class ClientList {
+        +bảng 6 cột desktop
+    }
+    class MobileClientList {
+        +card list mobile
+    }
+    class ShareLinkSection {
+        +create()
+        +revoke(linkId)
+        +reload()
+    }
+    class SharePortalGuest {
+        +render share token
+    }
+
+    Client "1" o-- "0..n" Client : parent - subsidiaries
+    Client --> Client : mergedInto
+    Client "1" *-- "0..n" Project : Cascade
+    Client "1" *-- "0..n" ClientShareLink : Cascade
+    Client "1" o-- "0..n" PricingRule : SetNull
+
+    CRMDashboardPage ..> CrmActions : getClients
+    CRMDashboardPage ..> ClientList : desktop
+    CRMDashboardPage ..> MobileClientList : mobile dispatcher
+    ClientList ..> ShareLinkSection : mở modal link chia sẻ
+    ShareLinkSection ..> ShareLinkActions : create - revoke - list
+
+    CrmActions ..> SecurityLib : verifyWorkspaceAccess ADMIN
+    CrmActions ..> AuditLog : client.soft_deleted - restored - hard_deleted
+    CrmActions --> Client : CRUD + lock tên
+    CrmActions --> Project : create
+
+    ShareLinkActions ..> ProfilePermissions : isSessionLive + canManageShareLinks
+    ShareLinkActions ..> ShareLinkAuth : hashShareToken
+    ShareLinkActions ..> AuditLog : share_link.created - revoked
+    ShareLinkActions --> ClientShareLink : create - revoke - list
+
+    SharePortalGuest ..> ShareLinkAuth : resolveShareToken
+    ShareLinkAuth --> ClientShareLink : findUnique tokenHash
+    ShareLinkAuth --> Client : name-path scope
+
+%% Nguồn (file:line, verify từ code thật):
+%% - Client / ClientShareLink / Project / PricingRule: prisma/schema.prisma:494, :572, :676, :1404
+%% - Client.status ACTIVE|SOFT_DELETED|MERGED: prisma/schema.prisma:546 (comment :538-544)
+%% - CrmActions: src/actions/crm-actions.ts (getClients:14, createClient:113, updateClient:145,
+%%   createProject:172, deleteClient:260, restoreClient:297, getTrashedClients:384,
+%%   permanentlyDeleteClient:417, mergeClientIntoParent:461, unmergeClient:522, getClientDetail:570,
+%%   withClientNameLock:95, findDuplicateName:62, collectClientSubtreeIds:233)
+%% - ShareLinkActions: src/actions/share-link-actions.ts (gate:25, create:46, revoke:91, list:121)
+%% - ShareLinkAuth: src/lib/share-link-auth.ts (hashShareToken:40, resolveShareToken:73, getRequestIp:53)
+%% - ProfilePermissions: src/lib/profile-permissions.ts (isSessionLive:46, canManageShareLinks:87)
+%% - SecurityLib: src/lib/security.ts (verifyWorkspaceAccess:38, verifyFinanceAccess:203)
+%% - UI: src/app/[workspaceId]/admin/crm/page.tsx (CRMDashboard), src/components/crm/ClientList.tsx,
+%%   MobileClientList.tsx, ShareLinkSection.tsx; guest: src/app/share/[token]

@@ -1,0 +1,109 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    Profile {
+        String id PK "uuid - tenant gốc (team/agency)"
+        String name
+        Json settings
+        String status "ACTIVE hoặc SOFT_DELETED - String tự do"
+        DateTime deletedAt "soft-delete"
+        DateTime hardDeleteAfter "cron hard-delete sau 30 ngày, cascade workspaces"
+    }
+
+    Workspace {
+        String id PK "uuid - workspace theo tháng (tenant cấp 2)"
+        String name
+        String description
+        String profileId FK "nullable - Profile"
+        String status "ACTIVE, SUSPENDED, SOFT_DELETED - String tự do"
+        Boolean marketplaceOpen "default true"
+        DateTime deletedAt
+        DateTime hardDeleteAfter
+    }
+
+    WorkspaceMember {
+        String id PK "uuid"
+        String userId FK "Cascade - UK cùng workspaceId"
+        String workspaceId FK "Cascade"
+        String role "String default MEMBER - enum WorkspaceRole chưa tồn tại"
+        DateTime joinedAt
+    }
+
+    WorkspaceInvitation {
+        String id PK "uuid"
+        String workspaceId FK "Cascade - UK cùng invitedUserId và status"
+        String invitedUserId FK "nullable Cascade - invite in-app"
+        String invitedEmail "nullable - invite qua email"
+        String role "WorkspaceRole gán khi accept"
+        String token UK "uuid - link invite"
+        String status "PENDING, ACCEPTED, DECLINED, EXPIRED, REVOKED"
+        String invitedById FK "Cascade - người gửi"
+        DateTime expiresAt
+        DateTime respondedAt
+        Boolean isClientInvite "DEPRECATED - client giờ dùng ClientShareLink"
+        Int clientId "DEPRECATED scalar"
+    }
+
+    ProfileAccess {
+        String id PK "uuid - RBAC cấp profile"
+        String userId FK "Cascade - UK cùng profileId"
+        String profileId FK "Cascade"
+        ProfileRole role "enum OWNER, ADMIN, USER, CLIENT - default USER"
+        DateTime grantedAt "cutoff cho ADMIN thấy workspace mới"
+        Int clientId FK "nullable SetNull - khi role CLIENT"
+    }
+
+    ProfileAccessRequest {
+        String id PK "uuid"
+        String userId FK "Cascade - UK cùng targetProfileId"
+        String targetProfileId FK "Cascade"
+        String requestedById FK "Cascade"
+        String approvedById FK "nullable SetNull"
+        String status "PENDING, APPROVED, REJECTED - String tự do"
+    }
+
+    Agency {
+        String id PK "uuid - agency ngoài nhận task outsource"
+        String name
+        String code UK
+        String ownerId FK "nullable - User"
+        String status "String default ACTIVE"
+        String profileId FK "nullable"
+    }
+
+    User {
+        String id PK "stub - chi tiết ở erd-auth"
+        String username UK
+        UserRole role "enum"
+        String profileId FK "nullable"
+        String agencyId FK "nullable"
+        Int clientId FK "nullable - portal"
+    }
+    Client {
+        Int id PK "stub - chi tiết ở erd-crm"
+    }
+
+    Profile |o--o{ Workspace : "profileId nullable"
+    Profile |o--o{ User : "profileId nullable"
+    Workspace ||--o{ WorkspaceMember : "Cascade"
+    User ||--o{ WorkspaceMember : "Cascade"
+    Workspace ||--o{ WorkspaceInvitation : "Cascade"
+    User |o--o{ WorkspaceInvitation : "invitedUser nullable Cascade"
+    User ||--o{ WorkspaceInvitation : "invitedBy Cascade"
+    User ||--o{ ProfileAccess : "Cascade"
+    Profile ||--o{ ProfileAccess : "Cascade"
+    Client |o--o{ ProfileAccess : "clientId SetNull khi role CLIENT"
+    User ||--o{ ProfileAccessRequest : "user được cấp quyền"
+    Profile ||--o{ ProfileAccessRequest : "targetProfile Cascade"
+    User ||--o{ ProfileAccessRequest : "requestedBy Cascade"
+    User |o--o{ ProfileAccessRequest : "approvedBy SetNull"
+    User |o--o{ Agency : "owner nullable"
+    Agency |o--o{ User : "members qua agencyId"
+    Profile |o--o{ Agency : "profileId nullable"
+
+%% Nguồn: prisma/schema.prisma — Profile:11-55, Workspace:57-108, WorkspaceMember:110-123,
+%% WorkspaceInvitation:826-855, ProfileAccess:266-290, ProfileAccessRequest:292-308, Agency:719-733.
+%% Enum ProfileRole:908-913. Soft-delete 3 cột status+deletedAt+hardDeleteAfter ở Profile:25-27 và Workspace:69-71.
+%% Phân nhóm theo docs/system-audit/00-discovery/parts/03-models.md mục 1.1 + 1.5.

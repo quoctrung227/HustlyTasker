@@ -1,0 +1,76 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Task (Task.isArchived + Task.status)" as TaskLC {
+        state "Đang hoạt động (isArchived=false)" as T_Active
+        state "Đã lưu trữ (isArchived=true, status giữ 'Đã hủy')" as T_Archived
+        [*] --> T_Active
+        T_Active --> T_Archived : status='Đã hủy' auto-archive
+        T_Archived --> T_Active : restoreCancelledTask - status='Nhận task' nếu có assignee, 'Đang đợi giao' nếu chưa
+    }
+
+    state "Client (Client.status)" as ClientLC {
+        state "ACTIVE" as C_Active
+        state "SOFT_DELETED" as C_Trash
+        state "MERGED (chỉ migration Canonical Clients ghi)" as C_Merged
+        [*] --> C_Active
+        C_Active --> C_Trash : deleteClient - cả subtree, deletedAt=now
+        C_Trash --> C_Active : restoreClient - chặn nếu trùng tên ACTIVE cùng cấp
+        C_Trash --> [*] : permanentlyDeleteClient - thủ công, chặn nếu còn invoice
+        C_Merged --> [*] : không hiện trong UI, giữ làm rollback
+    }
+
+    state "Workspace (Workspace.status)" as WsLC {
+        state "ACTIVE" as W_Active
+        state "SOFT_DELETED (hardDeleteAfter = now+30d)" as W_Trash
+        [*] --> W_Active
+        W_Active --> W_Trash : deleteWorkspaceAction - chỉ OWNER hoặc global admin
+        W_Trash --> W_Active : restoreWorkspaceAction - trong 30 ngày
+        W_Trash --> [*] : cron hard-delete-workspaces khi hardDeleteAfter lte now
+    }
+
+    state "Profile (Profile.status)" as ProfileLC {
+        state "ACTIVE" as P_Active
+        state "SOFT_DELETED (hardDeleteAfter = now+30d)" as P_Trash
+        [*] --> P_Active
+        P_Active --> P_Trash : deleteProfileAction - chỉ OWNER, isSessionLive gate
+        P_Trash --> P_Active : restoreProfileAction - trong 30 ngày
+        P_Trash --> [*] : cron hard-delete-profiles - cascade workspaces/tasks/members
+    }
+
+    state "Review item (ReviewFolder/Asset/Version.deletedAt)" as ReviewLC {
+        state "Sống (deletedAt=null)" as R_Live
+        state "Thùng rác (deletedAt=now, deleteBatchId, purgeAt=+30d)" as R_Trash
+        state "Khôi phục về root (orphanedFromPurge=true)" as R_Orphan
+        [*] --> R_Live
+        R_Live --> R_Trash : deleteItems - quét cả subtree cùng deleteBatchId
+        R_Trash --> R_Live : restoreItems - parent còn sống
+        R_Trash --> R_Orphan : restoreItems - parent đã mất, re-home về workspace root
+        R_Orphan --> R_Trash : deleteItems lại
+        R_Trash --> [*] : purgeExpiredTrash cron quá 30 ngày HOẶC purgeItemsAuthorized admin xóa vĩnh viễn - gỡ Mux + R2 trước, xóa row sau
+    }
+
+%% Nguồn status THẬT trong code (file:line):
+%% - Task.isArchived: prisma/schema.prisma:363; status string tự do 'Đã hủy' ('Đã hủy') auto-archive:
+%%   src/actions/task-actions.ts:485-490 (comment design) + restoreCancelledTask :553 đặt
+%%   'Nhận task' / 'Đang đợi giao' :567, isArchived=false :571
+%% - Client.status "ACTIVE" | "SOFT_DELETED" | "MERGED": prisma/schema.prisma:538-546;
+%%   SOFT_DELETED: src/actions/crm-actions.ts:273 (deleteClient); ACTIVE: :355 (restoreClient);
+%%   hard delete: :436 (permanentlyDeleteClient, guard invoice :428); MERGED chỉ do migration ghi
+%%   (không có "status: 'MERGED'" trong src runtime — grep 2026-08-02), filter loại MERGED :33,:478
+%% - Workspace.status "ACTIVE" | "SUSPENDED" | "SOFT_DELETED" (comment schema.prisma:69) —
+%%   SUSPENDED không có transition nào trong code nên KHÔNG vẽ;
+%%   SOFT_DELETED: src/actions/workspace-actions.ts:203 (deleteWorkspaceAction, grace 30d :196);
+%%   ACTIVE: :338 (restoreWorkspaceAction); hard delete cron:
+%%   src/app/api/cron/hard-delete-workspaces/route.ts:47-76
+%% - Profile.status "ACTIVE" | "SOFT_DELETED": prisma/schema.prisma:23-25;
+%%   SOFT_DELETED: src/actions/profile-actions.ts:402 (deleteProfileAction);
+%%   ACTIVE: :444 (restoreProfileAction); cron: src/app/api/cron/hard-delete-profiles/route.ts:44-82
+%% - Review trash (không có cột status — dùng deletedAt/deleteBatchId/orphanedFromPurge:
+%%   prisma/schema.prisma:1666-1669, 1702-1705, 1762-1764):
+%%   vào thùng rác: src/lib/review/folders.ts:811 deleteItems (purgeAt +30d :895);
+%%   restore + re-home root: :997 restoreItems (movedToRoot :1054, orphanedFromPurge :1074,:1100);
+%%   purge: src/lib/review/purge.ts:236 purgeExpiredTrash (PURGE_AGE_DAYS=30 :31),
+%%   :372 purgeItemsAuthorized (admin bypass 30d)

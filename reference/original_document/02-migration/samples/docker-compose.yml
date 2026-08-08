@@ -1,0 +1,98 @@
+# =============================================================================
+# docker-compose.yml — HustlyTasker API trên VPS (Ubuntu 24.04)
+#
+# 3 service: api (Spring Boot :8080) + db (Postgres 16) + caddy (reverse proxy
+# auto-SSL). Toàn bộ secret nằm trong file .env cùng thư mục (chmod 600 —
+# xem vps-setup.md mục 6). Deploy dir chuẩn: /opt/hustlytasker
+#
+# LỰA CHỌN DB — 2 phương án, file này ship phương án (a):
+#   (a) Self-host Postgres 16 trong compose (service `db` bên dưới).
+#       Cần migrate data từ Neon: pg_dump Neon -> pg_restore vào db này.
+#   (b) GIỮ Neon (DB hiện tại của app — src/lib/db.ts, POSTGRES_URL):
+#       xoá service `db` + depends_on của api, trỏ SPRING_DATASOURCE_URL
+#       thẳng vào Neon connection string. Ít rủi ro hơn cho bước cutover đầu.
+# =============================================================================
+
+name: hustlytasker
+
+services:
+  # ---------------------------------------------------------------------------
+  # Postgres 16 — thay Neon khi self-host hoàn toàn (phương án a)
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: .env                     # POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Bind-mount cho pg_dump (backup.sh trong vps-setup.md ghi ra đây rồi
+      # rclone đẩy lên R2). KHÔNG phải volume data — chỉ là chỗ chứa file dump.
+      - ./backups:/backups
+    ports:
+      # CHỈ loopback — Docker publish port sẽ BYPASS ufw (đi thẳng iptables),
+      # nên tuyệt đối không viết "5432:5432". Admin truy cập DB qua SSH tunnel:
+      #   ssh -L 5432:127.0.0.1:5432 deploy@VPS
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hustly} -d ${POSTGRES_DB:-hustlytasker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Spring Boot API — image build từ Dockerfile cùng thư mục, push lên GHCR
+  # bởi deploy.yml. KHÔNG publish port ra ngoài — chỉ caddy gọi vào qua
+  # network nội bộ của compose.
+  # ---------------------------------------------------------------------------
+  api:
+    # deploy.yml pull tag :latest; có thể pin tag :sha-<commit> khi rollback:
+    #   API_IMAGE=ghcr.io/phucmetlamroi/hustlytasker-api:sha-abc1234 docker compose up -d api
+    image: ${API_IMAGE:-ghcr.io/phucmetlamroi/hustlytasker-api:latest}
+    restart: unless-stopped
+    env_file: .env                     # JWT_SECRET, MUX_*, R2_*, RESEND_*, ... (xem .env.example)
+    environment:
+      # Ghi đè datasource trỏ vào service `db` (phương án a).
+      # Phương án b (giữ Neon): xoá 3 dòng này, đặt SPRING_DATASOURCE_URL trong .env.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-hustlytasker}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-hustly}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # Cron @Scheduled chạy theo UTC để khớp lịch 7 cron cũ trong vercel.json:22-51
+      TZ: UTC
+    depends_on:
+      db:
+        condition: service_healthy     # api chỉ start khi Postgres đã nhận kết nối
+    expose:
+      - "8080"
+    # Khai lại healthcheck ở compose (dù Dockerfile đã có HEALTHCHECK) để
+    # depends_on của caddy hoạt động kể cả khi image đổi/strip healthcheck.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # ---------------------------------------------------------------------------
+  # Caddy — reverse proxy + tự xin/gia hạn Let's Encrypt cho api.hustlytasker.xyz
+  # (không cần certbot, không cần cron renew — Caddy tự làm).
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"        # HTTP -> Caddy tự redirect HTTPS + ACME HTTP-01 challenge
+      - "443:443"
+      - "443:443/udp"  # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # chứa cert Let's Encrypt — MẤT volume này là xin lại cert
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy   # chỉ nhận traffic khi api đã UP
+
+volumes:
+  pgdata:        # data Postgres — backup qua pg_dump (vps-setup.md mục 7), KHÔNG copy volume sống
+  caddy_data:
+  caddy_config:

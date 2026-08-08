@@ -1,0 +1,194 @@
+---
+config:
+  layout: elk
+---
+classDiagram
+    direction LR
+
+    class PayrollPage {
+        server component admin payroll page
+        +verifyProfileAdminAccess(workspaceId)
+        +extractPayrollCycle(workspaceName)
+        +query users tasks by SALARY statuses
+    }
+    class BonusCalculator {
+        client component
+        +handleCalculate()
+        +handleRevert()
+        +getPayrollLockStatus(workspaceId)
+    }
+    class PaymentModal {
+        client component
+        +confirmPayment(data, workspaceId)
+    }
+    class PayrollCard {
+        client component
+        +revertPayment(userId, m, y, workspaceId)
+    }
+    class MobilePayroll {
+        mobile dispatcher UI
+        +confirmPayment(data, workspaceId)
+    }
+    class McPayrollBoard {
+        mission control mc tien
+        +confirmPayment(data, workspaceId)
+        +revertPayment(userId, m, y, workspaceId)
+    }
+
+    class PayrollActions {
+        src actions payroll-actions.ts
+        +confirmPayment(data, workspaceId)
+        +getPayrollData(month, year, workspaceId)
+        +revertPayment(userId, month, year, workspaceId)
+    }
+    class BonusActions {
+        src actions bonus-actions.ts
+        +calculateMonthlyBonus(workspaceId)
+        +revertMonthlyBonus(workspaceId)
+        +getPayrollLockStatus(workspaceId)
+    }
+    class BonusConfigActions {
+        src actions bonus-config-actions.ts
+        +getBonusConfig(profileId)
+        +updateBonusConfig(data)
+    }
+    class UploadActions {
+        src actions upload-actions.ts
+        +uploadPaymentQr(formData)
+    }
+
+    class SecurityLib {
+        src lib security.ts
+        +verifyWorkspaceAccess(workspaceId, requiredRole)
+        +verifyProfileAdminAccess(workspaceId)
+    }
+    class PayrollCycleLib {
+        src lib payroll-cycle.ts
+        +extractPayrollCycle(workspaceName) month year
+    }
+    class TaskStatusesLib {
+        src lib task-statuses.ts
+        +TASK_STATUS_META
+        +SALARY_COMPLETED_STATUS = Hoàn tất
+        +SALARY_PENDING_STATUSES 10 status
+    }
+    class AuditLogLib {
+        src lib audit-log.ts
+        +audit(action, targetType, before, after)
+    }
+
+    class Payroll {
+        +id String
+        +userId String
+        +month Int
+        +year Int
+        +baseSalary Decimal
+        +bonus Decimal
+        +totalAmount Decimal
+        +status String default UNPAID
+        +paidAt DateTime opt
+        +workspaceId String
+    }
+    class MonthlyBonus {
+        +userId String
+        +month Int
+        +year Int
+        +rank Int
+        +revenue Decimal
+        +bonusPercent Decimal
+        +bonusAmount Decimal
+        +workspaceId String
+    }
+    class PayrollLock {
+        +month Int
+        +year Int
+        +isLocked Boolean
+        +lockedAt DateTime
+        +lockedBy String
+        +workspaceId String
+    }
+    class MonthlyRank {
+        +userId String
+        +totalTasks Int
+        +totalPenalty Int
+        +errorRate Float
+        +rank String S A B C D UNRANKED
+        +isLocked Boolean
+        +payrollLockId String opt
+    }
+    class BonusConfig {
+        +profileId String unique
+        +top1Enabled Boolean
+        +top1Percent Decimal
+        +top2Enabled Boolean
+        +top2Percent Decimal
+        +top3Enabled Boolean
+        +top3Percent Decimal
+    }
+    class Task {
+        +status String free string
+        +value Decimal
+        +assigneeId String opt
+        +workspaceId String
+    }
+    class UserModel {
+        +username String
+        +nickname String opt
+        +role String
+    }
+    class Workspace {
+        +name String chứa kỳ MM YYYY
+        +profileId String opt
+    }
+    class ErrorLog {
+        +userId String
+        +calculatedScore Decimal
+    }
+
+    PayrollPage o-- BonusCalculator : render
+    PayrollPage o-- PayrollCard : render mỗi editor
+    PayrollPage o-- MobilePayroll : render mobile
+    PayrollCard o-- PaymentModal : mở modal chi tiền
+
+    PayrollPage ..> SecurityLib : guard ADMIN
+    PayrollPage ..> TaskStatusesLib : lọc task tính lương
+    PayrollPage ..> PayrollCycleLib : lấy chu kỳ
+    BonusCalculator ..> BonusActions : gọi action
+    PaymentModal ..> PayrollActions : confirmPayment
+    PayrollCard ..> PayrollActions : revertPayment
+    MobilePayroll ..> PayrollActions : confirmPayment
+    McPayrollBoard ..> PayrollActions : reuse actions
+
+    PayrollActions ..> SecurityLib : verifyWorkspaceAccess ADMIN
+    PayrollActions ..> PayrollCycleLib : chu kỳ từ workspace.name
+    PayrollActions ..> AuditLogLib : audit payroll.locked unlocked
+    BonusActions ..> SecurityLib : verifyWorkspaceAccess ADMIN
+    BonusActions ..> PayrollCycleLib : chu kỳ từ workspace.name
+    BonusActions ..> TaskStatusesLib : SALARY statuses
+
+    PayrollActions --> Payroll : upsert PAID và delete
+    PayrollActions --> PayrollLock : check isLocked trước khi ghi
+    BonusActions --> Task : groupBy assigneeId sum value
+    BonusActions --> ErrorLog : groupBy calculatedScore penalty
+    BonusActions --> BonusConfig : đọc tiers phần trăm
+    BonusActions --> MonthlyBonus : deleteMany và create top n
+    BonusActions --> MonthlyRank : deleteMany và createMany
+    BonusActions --> PayrollLock : upsert isLocked true khóa sổ
+    BonusConfigActions --> BonusConfig : đọc ghi cấu hình
+
+    Payroll --> UserModel : userId
+    Payroll --> Workspace : workspaceId
+    MonthlyBonus --> UserModel : userId
+    PayrollLock --> Workspace : workspaceId
+    PayrollLock "1" o-- "n" MonthlyRank : payrollLockId
+    Task --> UserModel : assigneeId
+    Task --> Workspace : workspaceId
+    BonusConfig --> Workspace : qua profileId
+
+%% Nguồn: docs/system-audit/00-discovery/parts/12-user-flows.md F13
+%% Models: prisma/schema.prisma:310 Payroll, :457 MonthlyBonus, :478 PayrollLock, :1052 MonthlyRank, :1499 BonusConfig, :331 Task (status String tự do :336)
+%% Actions: src/actions/payroll-actions.ts:22 confirmPayment, :129 getPayrollData, :165 revertPayment
+%% Actions: src/actions/bonus-actions.ts:118 calculateMonthlyBonus, :63 revertMonthlyBonus, :38 getPayrollLockStatus
+%% Actions: src/actions/bonus-config-actions.ts:44 getBonusConfig, :72 updateBonusConfig; src/actions/upload-actions.ts:53 uploadPaymentQr
+%% Libs: src/lib/security.ts:38 verifyWorkspaceAccess; src/lib/payroll-cycle.ts:11 extractPayrollCycle; src/lib/task-statuses.ts:116-119 SALARY_PENDING_STATUSES + SALARY_COMPLETED_STATUS
+%% UI: src/app/[workspaceId]/admin/payroll/page.tsx, BonusCalculator.tsx; src/components/admin/PayrollCard.tsx, PaymentModal.tsx, MobilePayroll.tsx; src/components/mission-control/McPayrollBoard.tsx (mc/tien)

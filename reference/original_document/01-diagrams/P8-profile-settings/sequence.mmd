@@ -1,0 +1,105 @@
+sequenceDiagram
+    autonumber
+    participant U as Nhân sự hoặc Admin
+    participant UI as Trang Profile + components
+    participant UA as upload-actions.ts
+    participant PA as profile-actions.ts
+    participant TA as tag-actions.ts
+    participant GS as global-settings.ts
+    participant LIB as lib auth + security
+    participant BLOB as Vercel Blob
+    participant DB as Prisma (Neon)
+
+    rect rgb(240, 248, 255)
+    note over U,DB: Luồng 1 — Upload avatar (AvatarUpload.tsx)
+    U->>UI: Chọn ảnh avatar
+    UI->>UA: uploadAvatar(userId, formData)
+    UA->>LIB: getSession()
+    alt Chưa đăng nhập
+        UA-->>UI: error Bạn cần đăng nhập
+    else Có session (bỏ qua userId từ client - chống IDOR)
+        UA->>UA: validateImageFile + check size 10MB
+        alt File sai định dạng hoặc quá 10MB
+            UA-->>UI: error Định dạng không hỗ trợ hoặc quá 10MB
+        else File hợp lệ
+            UA->>UA: sharp rotate + resize 512x512 + webp
+            alt Sharp không parse được ảnh
+                UA-->>UI: error Không xử lý được ảnh
+            else Xử lý OK
+                UA->>BLOB: uploadPublicImage(avatar-userId-ts.webp)
+                BLOB-->>UA: blob.url
+                UA->>DB: user.update(avatarUrl)
+                UA->>UA: revalidateTag(leaderboard)
+                UA-->>UI: success + url
+            end
+        end
+    end
+    end
+
+    rect rgb(255, 250, 240)
+    note over U,DB: Luồng 2 — Đổi mật khẩu (ProfileForm.tsx)
+    U->>UI: Nhập mật khẩu cũ + mới
+    UI->>PA: changePassword(userId, currentPass, newPass, workspaceId)
+    PA->>LIB: getSession()
+    alt Không có session
+        PA-->>UI: error Unauthorized
+    else Đang phiên impersonation
+        PA-->>UI: error Không thể đổi mật khẩu khi đang impersonation
+    else Session hợp lệ (targetId = session.user.id)
+        PA->>DB: user.findUnique(targetId)
+        alt user.password null (tài khoản Google OAuth)
+            PA-->>UI: error Dùng Quên mật khẩu để đặt mật khẩu lần đầu
+        else compare(currentPass) sai
+            PA-->>UI: error Mật khẩu hiện tại không đúng
+        else Mật khẩu cũ đúng
+            PA->>PA: hash(newPass, 12)
+            PA->>DB: user.update(password + sessionVersion tăng 1)
+            PA->>LIB: login(user với sessionVersion mới) - cấp lại cookie
+            PA->>DB: audit auth.password_changed
+            PA-->>UI: success
+        end
+    end
+    end
+
+    rect rgb(240, 255, 240)
+    note over U,DB: Luồng 3 — Tạo tag (TagLibraryPopup.tsx)
+    U->>UI: Tạo tag mới
+    UI->>TA: createTag(name, workspaceId)
+    TA->>LIB: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt verifyWorkspaceAccess throw (không đủ quyền)
+        TA-->>UI: error Forbidden insufficient workspace permissions
+    else Đủ quyền ADMIN
+        TA->>DB: tagCategory.count(userId) + findFirst(trùng tên)
+        alt Quá 15 tags hoặc trùng tên
+            TA-->>UI: error Đã đạt giới hạn 15 tags hoặc Tag đã tồn tại
+        else Hợp lệ
+            TA->>DB: tagCategory.create(name profileId userId workspaceId)
+            TA-->>UI: tag mới
+        end
+    end
+    end
+
+    rect rgb(255, 240, 245)
+    note over U,DB: Luồng 4 — Global settings tài khoản Frame (global-settings.ts)
+    U->>UI: Lưu tài khoản Frame dùng chung
+    UI->>GS: updateFrameAccount(account, password)
+    GS->>LIB: verifyActiveSession()
+    alt Session không active (khóa hoặc chưa đăng nhập)
+        GS-->>UI: error Bạn cần đăng nhập
+    else Session active
+        GS->>DB: task.upsert(id global-system-settings, notes_vi JSON)
+        alt DB lỗi
+            GS-->>UI: error Failed to update global settings
+        else Upsert OK
+            GS-->>UI: success
+        end
+    end
+    end
+
+%% Nguồn code thật (file:line):
+%% - uploadAvatar: src/actions/upload-actions.ts:120-188 (getSession:124, validateImageFile:130, size 10MB:134, sharp:143, uploadPublicImage:157, user.update:161, revalidateTag leaderboard:176)
+%% - changePassword: src/actions/profile-actions.ts:508-579 (getSession:513, isImpersonating:520, password null Google:534, compare:539, hash 12 rounds:545, sessionVersion increment:555-562, login re-issue:563, audit:565)
+%% - createTag: src/actions/tag-actions.ts:47-91 (verifyWorkspaceAccess ADMIN:50, MAX_TAGS_PER_USER=15:9,74, duplicate check:80, create:85)
+%% - updateFrameAccount: src/actions/global-settings.ts:54-84 (verifyActiveSession:57, task.upsert GLOBAL_FRAME_TASK_ID=global-system-settings:64, catch:80)
+%% - UI entry: src/app/[workspaceId]/dashboard/profile/page.tsx (AvatarUpload, ProfileForm, PaymentQrUpload); src/components/tags/TagLibraryPopup.tsx:79
+%% - Lưu ý audit: getFrameAccount/updateFrameAccount hiện KHÔNG còn component nào import (orphaned server actions nhưng vẫn là endpoint gọi được)

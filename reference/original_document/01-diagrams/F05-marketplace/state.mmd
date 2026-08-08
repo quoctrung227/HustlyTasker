@@ -1,0 +1,35 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "Đang đợi giao" as DangDoiGiao
+    state "Nhận task" as NhanTask
+    state "Đang thực hiện" as DangThucHien
+
+    [*] --> DangDoiGiao : task chưa giao (assigneeId null) trên phiên chợ
+
+    DangDoiGiao --> NhanTask : claimTask - claimSource MARKET, claimedAt now, version+1
+    note right of DangDoiGiao
+        Chỉ claim được khi
+        Workspace.marketplaceOpen = true
+        (check trong transaction)
+    end note
+
+    NhanTask --> DangDoiGiao : returnTask trong 10 phút - claimSource về ADMIN, claimedAt null
+    NhanTask --> DangThucHien : editor bắt đầu làm (updateTaskStatus)
+
+    note right of NhanTask
+        Quá 10 phút thì returnTask
+        bị từ chối - task ở lại với editor
+    end note
+
+    DangThucHien --> [*] : tiếp tục vòng đời F04 (Revision, Hoàn tất)
+
+%% Nguồn status THẬT (Task.status là string tự do):
+%% - "Đang đợi giao": src/actions/claim-actions.ts:174 (guard claim) và :248 (returnTask set lại)
+%% - "Nhận task": src/actions/claim-actions.ts:187 (claimTask set)
+%% - "Đang thực hiện": src/lib/task-state-machine.ts:50 (USER_TRANSITIONS "Nhận task" -> "Đang thực hiện")
+%% - Transition hợp lệ: src/lib/task-state-machine.ts:48-56 (USER_TRANSITIONS)
+%% - marketplaceOpen: prisma/schema.prisma:61 - claimSource/claimedAt: prisma/schema.prisma:388-389
+%% - Giới hạn 10 phút: src/actions/claim-actions.ts:239-242

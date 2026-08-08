@@ -1,0 +1,111 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin chốt lương
+    participant Page as PayrollPage admin payroll page.tsx
+    participant BC as BonusCalculator.tsx
+    participant PM as PaymentModal và PayrollCard
+    participant BA as bonus-actions.ts
+    participant PA as payroll-actions.ts
+    participant Sec as lib security.ts
+    participant DB as Prisma Neon Postgres
+
+    Admin->>Page: mở trang admin payroll
+    Page->>Sec: verifyProfileAdminAccess(workspaceId)
+    alt không phải ADMIN của profile
+        Sec-->>Page: throw SECURITY_VIOLATION
+        Page-->>Admin: chặn truy cập trang lương
+    else hợp lệ
+        Page->>DB: user.findMany kèm tasks lọc theo SALARY_COMPLETED_STATUS và SALARY_PENDING_STATUSES
+        DB-->>Page: users cùng tasks bonuses payrolls
+        Page-->>Admin: render PayrollKpiStrip BonusCalculator PayrollCard
+    end
+
+    Admin->>BC: bấm Tính thưởng tháng
+    BC->>BA: calculateMonthlyBonus(workspaceId)
+    BA->>Sec: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt 401 hoặc 403
+        Sec-->>BA: throw SECURITY_VIOLATION
+        BA-->>BC: success false kèm lỗi permission-check
+    else pass
+        BA->>DB: workspace.findUnique rồi extractPayrollCycle(name) ra month year
+        BA->>DB: payrollLock.findUnique(month, year, workspaceId)
+        alt isLocked bằng true
+            BA-->>BC: lỗi Kỳ lương này đã bị khóa
+        else chưa khóa
+            BA->>DB: task.groupBy status bằng Hoàn tất sum value theo assigneeId
+            BA->>DB: task.groupBy status in SALARY_PENDING_STATUSES sum value
+            BA->>DB: errorLog.groupBy sum calculatedScore phạt lỗi
+            alt không có task Hoàn tất
+                BA-->>BC: lỗi Không có dữ liệu task hoàn tất
+            else có dữ liệu
+                BA->>DB: bonusConfig.findUnique(profileId) lấy tiers phần trăm
+                BA->>DB: transaction pg_advisory_xact_lock theo workspace month year
+                Note over BA,DB: re-check PayrollLock TRONG transaction chống 2 admin bấm cùng lúc
+                alt racer đã khóa trước
+                    DB-->>BA: alreadyLocked true
+                    BA-->>BC: lỗi kỳ lương đã được tính hoặc khóa bởi thao tác khác
+                else giành được lock
+                    BA->>DB: deleteMany MonthlyBonus và MonthlyRank cũ của cycle
+                    BA->>DB: create MonthlyBonus top n theo revenue và createMany MonthlyRank
+                    BA->>DB: upsert PayrollLock isLocked true bước CUỐI của transaction
+                    BA->>DB: auditLog action payroll.bonus_calculated
+                    BA-->>BC: success kèm danh sách bonuses
+                    BC-->>Admin: hiện kết quả và revalidatePath trang payroll
+                end
+            end
+        end
+    end
+
+    Admin->>PM: bấm Xác nhận đã chi cho 1 editor
+    PM->>PA: confirmPayment(baseSalary, bonus, totalAmount, workspaceId)
+    PA->>Sec: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt 401 hoặc 403
+        Sec-->>PA: throw SECURITY_VIOLATION
+        PA-->>PM: trả error message
+    else pass
+        PA->>DB: extractPayrollCycle từ workspace.name rồi payrollLock.findUnique
+        alt cycle đã khóa
+            PA-->>PM: lỗi PAYROLL_LOCKED phải unlock qua Hoàn tác bonus trước
+        else chưa khóa
+            alt tiền âm hoặc total khác base cộng bonus
+                PA-->>PM: lỗi Số tiền lương không hợp lệ
+            else số tiền hợp lệ
+                PA->>DB: payroll.upsert status PAID kèm paidAt
+                PA->>DB: audit action payroll.locked
+                PA-->>PM: success và revalidatePath
+            end
+        end
+    end
+
+    Admin->>PM: bấm Hoàn tác payment trên PayrollCard
+    PM->>PA: revertPayment(userId, workspaceId)
+    PA->>DB: check PayrollLock của cycle thật
+    alt cycle đã khóa
+        PA-->>PM: lỗi PAYROLL_LOCKED chống gian lận inflate bonus
+    else chưa khóa
+        alt không tìm thấy record Payroll
+            PA-->>PM: lỗi Không tìm thấy record payment để revert
+        else có record
+            PA->>DB: payroll.delete và audit action payroll.unlocked
+            PA-->>PM: success
+        end
+    end
+
+    Admin->>BC: bấm Hoàn tác bonus để mở khóa sổ
+    BC->>BA: revertMonthlyBonus(workspaceId)
+    BA->>Sec: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt DB lỗi hoặc workspace không tồn tại
+        BA-->>BC: success false Workspace not found hoặc Failed to revert
+    else ok
+        BA->>DB: deleteMany MonthlyBonus MonthlyRank PayrollLock của cycle
+        BA->>DB: auditLog action payroll.bonus_reverted
+        BA-->>BC: success Đã hoàn tác và mở khóa kỳ lương
+    end
+
+%% Nguồn: docs/system-audit/00-discovery/parts/12-user-flows.md F13
+%% Page: src/app/[workspaceId]/admin/payroll/page.tsx:34 verifyProfileAdminAccess, :47-81 query users theo SALARY statuses
+%% calculateMonthlyBonus: src/actions/bonus-actions.ts:118 (lock check :142-153, groupBy :156-191, transaction + advisory lock :335-418, audit :426)
+%% confirmPayment: src/actions/payroll-actions.ts:22 (lock guard :47-53, validate :54-62, upsert PAID :64-91, audit :94)
+%% revertPayment: src/actions/payroll-actions.ts:165 (lock guard :179-191, delete :204, audit :210)
+%% revertMonthlyBonus: src/actions/bonus-actions.ts:63 (deleteMany :78-86, audit :90)
+%% Guard: src/lib/security.ts:38 verifyWorkspaceAccess throw SECURITY_VIOLATION khi không có session hoặc sai role

@@ -1,0 +1,97 @@
+---
+config:
+  layout: elk
+---
+erDiagram
+    Notification {
+        String id PK "uuid - thông báo in-app"
+        String userId FK "Cascade"
+        NotificationType type "enum 18 giá trị: TASK_ASSIGNED ... COMMENT_RESOLVED"
+        String title
+        String body
+        Boolean isRead
+        Boolean isArchived
+        String taskId "scalar - nullable theo type"
+        String actorId "scalar"
+        Json metadata "oldStatus, newStatus, messageCount ..."
+        DateTime pushSentAt "delivery tracking"
+        DateTime emailSentAt
+    }
+
+    NotificationPreference {
+        String id PK "uuid - tùy chọn email per-user"
+        String userId FK "UK Cascade - 1-1"
+        Boolean emailEnabled
+        String emailDigestMode "REALTIME, HOURLY, DAILY, OFF"
+        Int quietHoursStart "0-23 UTC, null = không quiet hours"
+        Int quietHoursEnd
+    }
+
+    PushSubscription {
+        String id PK "uuid - Web Push 1 row mỗi thiết bị"
+        String userId FK "Cascade"
+        String endpoint UK
+        String p256dh
+        String auth
+    }
+
+    GuestSession {
+        String id PK "uuid - 1 trình duyệt guest x 1 share link"
+        String shareLinkId FK "Cascade"
+        String tokenHash UK "sha256"
+        String name
+        String email
+        DateTime emailVerifiedAt "PIN double-opt-in"
+    }
+
+    GuestEmailVerification {
+        String id PK "cuid - PIN 6 số đang chờ"
+        String email "lowercase"
+        String codeHash "SHA-256"
+        String shareLinkId "scalar - KHÔNG relation"
+        Int attempts "khóa tại 5"
+        DateTime expiresAt "10 phút"
+        DateTime consumedAt "đã dùng thì không replay"
+    }
+
+    GuestSubscription {
+        String id PK "cuid - guest đăng ký email theo dõi 1 asset"
+        String email "UK cùng assetId"
+        String assetId FK "Cascade - ReviewAsset"
+        String shareLinkId "scalar - slug mới nhất"
+        String guestSessionId "scalar best-effort"
+        DateTime verifiedAt "double-opt-in UK GDPR"
+        DateTime unsubscribedAt "soft - giữ row audit"
+        String unsubscribeToken UK
+    }
+
+    User {
+        String id PK "stub - chi tiết ở erd-auth"
+    }
+    ShareLink {
+        String id PK "stub - chi tiết ở erd-review"
+        String slug UK
+    }
+    ReviewAsset {
+        String id PK "stub - chi tiết ở erd-review"
+    }
+    Task {
+        String id PK "stub - chi tiết ở erd-task"
+    }
+
+    User ||--o{ Notification : "Cascade"
+    User ||--o| NotificationPreference : "1-1 Cascade"
+    User ||--o{ PushSubscription : "Cascade"
+    ShareLink ||--o{ GuestSession : "Cascade"
+    ReviewAsset ||--o{ GuestSubscription : "Cascade"
+    Task |o..o{ Notification : "scalar-FK taskId"
+    User |o..o{ Notification : "scalar-FK actorId"
+    ShareLink |o..o{ GuestEmailVerification : "scalar-FK"
+    ShareLink |o..o{ GuestSubscription : "scalar-FK slug mới nhất"
+    GuestSession |o..o{ GuestSubscription : "scalar-FK best-effort"
+
+%% Nguồn: prisma/schema.prisma — Notification:1241-1264, NotificationPreference:1266-1277,
+%% PushSubscription:253-264, GuestSession:1926-1947, GuestEmailVerification:1951-1963,
+%% GuestSubscription:1968-1985. Enum NotificationType:1213-1239 (18 giá trị).
+%% GuestSession/GuestEmailVerification/GuestSubscription cùng xuất hiện ở erd-review (nguồn phát notify guest).
+%% Phân nhóm theo docs/system-audit/00-discovery/parts/03-models.md mục 1.5 + 1.6 + 1.8.

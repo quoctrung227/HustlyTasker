@@ -1,0 +1,121 @@
+---
+config:
+  layout: elk
+---
+flowchart TB
+  subgraph CLIENTZ["VÙNG CLIENT - trình duyệt và app local"]
+    direction LR
+    ADMIN["Admin + Staff SPA - 2 shell song song: /workspaceId/admin 18 trang + /workspaceId/mc 21 trang"]
+    PORTAL["Client portal /share/token - ClientShareLink hash SHA-256"]
+    GUEST["Guest reviewer /r/slug - password bcrypt + GuestSession cookie"]
+    ELECTRON["Electron desktop wrapper - Next standalone local + node-cron 6/7 job"]
+    MCPS["mcp-server - MCP stdio cho Claude Desktop"]
+  end
+
+  subgraph VERCELZ["VERCEL - hustlytasker.xyz - Next.js 16 App Router"]
+    direction LR
+    MW["middleware.ts - auth-gate session cookie JWT HS256 jose, skip /api"]
+    PAGES["Pages - 56 page + 9 layout - RSC đọc DB qua Prisma"]
+    ACT["Server Actions - 55 file ~190 fn - verifyWorkspaceAccess / verifyProfileAdminAccess"]
+    APIC["API core - 39 route: auth 10, integrations 5, share 2, invoices 2, exports, notifications"]
+    APIR["API review - 44 route staff /api/review + 19 route guest /api/r - requireReviewAccess / gate chain"]
+    ING["/api/inngest - serve reviewFunctions, maxDuration 800"]
+    WMUX["/api/webhooks/mux - verify HMAC SHA256 +-5 phút, ledger WebhookEvent idempotent"]
+    WCAL["/api/webhooks/calendar - STUB không xác thực"]
+    PYF["api/scoring.py + api/vdownloader.py - Python Fn orphan, vdownloader KHÔNG auth"]
+    subgraph CRONZ["7 Vercel Cron - GET Bearer CRON_SECRET - vercel.json"]
+      direction LR
+      CR1["/api/cron/send-digest - 0 * * * *"]
+      CR2["/api/cron/check-deadline - 0 * * * *"]
+      CR3["/api/cron/cleanup-notifications - 0 2 * * *"]
+      CR4["/api/cron/hard-delete-workspaces - 0 3 * * *"]
+      CR5["/api/cron/hard-delete-profiles - 30 3 * * *"]
+      CR6["/api/cron/auth-cleanup - 0 4 * * *"]
+      CR7["/api/cron/review-janitor - 0 20 * * *"]
+    end
+  end
+
+  subgraph DATAZ["VÙNG DỮ LIỆU"]
+    direction LR
+    NEON[("Neon Postgres - Prisma 5.22 - 67 model + 15 enum")]
+    R2[("Cloudflare R2 - S3 multipart - bucket hustly-review")]
+    BLOB[("Vercel Blob - ảnh public mặc định")]
+    SUPS[("Supabase Storage - ảnh dự phòng Railway")]
+  end
+
+  subgraph EXTZ["DỊCH VỤ NGOÀI"]
+    direction LR
+    MUX["Mux - REST tự viết không SDK - playback JWT RS256"]
+    INC["Inngest Cloud - 4 fn: reviewMuxWebhook, reviewProcessUpload, reviewJanitor, reviewShareDecision"]
+    RES["Resend - ~25 loại email - 2 hệ template song song"]
+    UPS["Upstash Redis - rate-limit auth signup/login/OTP"]
+    SRT["Supabase Realtime - broadcast notification"]
+    WP["web-push VAPID"]
+    GGL["Google OAuth - sign-in + Drive scan footage"]
+    DBX["Dropbox OAuth - scan footage"]
+    OAI["OpenAI GPT-4 - dịch VI sang EN - gemini-translator.ts"]
+  end
+
+  ADMIN --> MW
+  PORTAL --> MW
+  GUEST --> MW
+  MW --> PAGES
+  ADMIN --> ACT
+  ADMIN --> APIC
+  ADMIN --> APIR
+  PORTAL -->|~20 action qua 1 token| APIC
+  GUEST --> APIR
+  ADMIN -->|PUT multipart presigned URL| R2
+  ADMIN -->|HLS stream JWT ký| MUX
+  GUEST -->|HLS stream JWT ký| MUX
+  ELECTRON -->|driver pg thẳng DB| NEON
+  MCPS -->|PrismaClient thẳng DB| NEON
+
+  PAGES --> NEON
+  ACT --> NEON
+  APIC --> NEON
+  APIR --> NEON
+  PYF -->|pg8000| NEON
+
+  ACT -->|sendEmail| RES
+  ACT -->|broadcast| SRT
+  ACT -->|sendWebPushToUser| WP
+  ACT -->|dịch ghi chú task| OAI
+  SRT -.->|realtime subscribe| ADMIN
+  APIC -->|rate-limit| UPS
+  APIC --> GGL
+  APIC --> DBX
+  ACT -->|storage.ts driver mặc định| BLOB
+  ACT -.->|fallback khi thiếu BLOB token| SUPS
+  APIR -->|presign upload/download| R2
+
+  MUX -->|webhook video.asset.ready / errored| WMUX
+  WMUX -->|ghi ledger WebhookEvent| NEON
+  WMUX -->|event review/mux.event.received| INC
+  CR7 -->|event review/janitor.requested| INC
+  INC -->|gọi ký INNGEST_SIGNING_KEY| ING
+  ING -->|flip status + task-sync| NEON
+  ING -->|create/get/delete asset + reconcile| MUX
+  ING -->|sniff magic-bytes + purge trash| R2
+  ING -->|email notify| RES
+
+  CR1 -->|sendDigestEmails| RES
+  CR2 -->|ghi đè Task.status = Quá hạn| NEON
+  CR3 --> NEON
+  CR4 --> NEON
+  CR5 --> NEON
+  CR6 --> NEON
+
+%% NGUỒN (verify 2026-08-02):
+%% - vercel.json:2-51 - 7 cron + maxDuration + api/*.py Python Functions
+%% - docs/system-audit/00-discovery/parts/01-stack-deploy.md - stack, Neon, sub-project electron/mcp-server
+%% - docs/system-audit/00-discovery/parts/10-jobs-webhooks.md - cron/Inngest/webhook/email chi tiết
+%% - src/lib/db.ts:16-25 PrismaClient chuẩn; src/lib/env.ts:19 POSTGres_URL||DATABASE_URL
+%% - src/lib/review/inngest.ts:259,341,526,657,751 - 4 function id; src/app/api/inngest/route.ts:15-20 maxDuration 800
+%% - src/app/api/webhooks/mux/route.ts:23-93 - HMAC + ledger + fan-out event
+%% - src/app/api/webhooks/calendar/route.ts:11 - stub không auth
+%% - src/lib/review/mux.ts + mux-jwt.ts - REST + JWT RS256; src/lib/review/r2.ts - S3 multipart
+%% - src/lib/email.ts (Resend), src/lib/rate-limit-upstash.ts (Upstash), src/lib/storage.ts:23-31 (Blob/Supabase),
+%%   src/lib/supabase.ts + notification-broadcast.ts (Realtime), src/lib/web-push.ts, src/lib/gemini-translator.ts (OpenAI GPT4_API_KEY)
+%% - electron/main/cron-scheduler.ts:19-26 - node-cron 6/7 thiếu review-janitor; mcp-server/src/index.ts - stdio + @prisma/client
+%% - api/scoring.py:5,30-37 pg8000; api/vdownloader.py:44-45 không auth

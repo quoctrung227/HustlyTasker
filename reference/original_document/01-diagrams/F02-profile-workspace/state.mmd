@@ -1,0 +1,35 @@
+---
+config:
+  layout: elk
+---
+stateDiagram-v2
+    state "ACTIVE (đang hoạt động)" as ACTIVE
+    state "SOFT_DELETED (thùng rác 30 ngày)" as SOFT_DELETED
+
+    [*] --> ACTIVE : createWorkspaceAction hoặc createNextMonthWithRollover (workspace.create, status mặc định ACTIVE)
+    ACTIVE --> SOFT_DELETED : deleteWorkspaceAction (OWNER, set deletedAt + hardDeleteAfter = now cộng 30 ngày)
+    SOFT_DELETED --> ACTIVE : restoreWorkspaceAction (OWNER trong 30 ngày, xoá deletedAt + hardDeleteAfter)
+    SOFT_DELETED --> [*] : cron hard-delete-workspaces (hardDeleteAfter đã quá hạn → workspace.delete cascade)
+    ACTIVE --> [*] : fallback hard delete khi migration soft-delete chưa áp (P2009/P2025 → workspace.delete)
+
+    note right of ACTIVE
+        Chỉ workspace ACTIVE hiện trong switcher
+        (getMyProfilesAndWorkspaces lọc status not SOFT_DELETED)
+        và trong guard chống trùng tên tháng của rollover
+    end note
+
+    note right of SOFT_DELETED
+        Ẩn khỏi switcher, hiện ở trang Trash
+        (getMyTrashedWorkspaces, chỉ OWNER)
+    end note
+
+%% Nguồn status THẬT (string, không enum trong DB — verify 2026-08-02):
+%% - prisma/schema.prisma:69 — Workspace.status String @default("ACTIVE"); comment khai báo ACTIVE | SUSPENDED | SOFT_DELETED
+%%   nhưng SUSPENDED KHÔNG có code path nào set trong src/** → không vẽ (chỉ tồn tại trên giấy).
+%% - "ACTIVE" khởi tạo: src/actions/workspace-actions.ts:58 (createWorkspaceAction → workspace.create) và :454 (createNextMonthWithRollover → workspace.create trong $transaction) — không set status nên nhận default ACTIVE.
+%% - ACTIVE → SOFT_DELETED: src/actions/workspace-actions.ts:200-207 (deleteWorkspaceAction: status 'SOFT_DELETED', deletedAt, hardDeleteAfter = +30 ngày, dòng 196-197).
+%% - Fallback hard delete: src/actions/workspace-actions.ts:220-257 (lỗi P2009/P2025 cột chưa migrate → prisma.workspace.delete).
+%% - SOFT_DELETED → ACTIVE: src/actions/workspace-actions.ts:335-342 (restoreWorkspaceAction: status 'ACTIVE', deletedAt null, hardDeleteAfter null).
+%% - SOFT_DELETED → xóa hẳn: src/app/api/cron/hard-delete-workspaces/route.ts:49-50 (findMany status 'SOFT_DELETED' + hardDeleteAfter lte now → delete).
+%% - Lọc switcher: src/actions/profile-actions.ts:117,135,146,153 (status not SOFT_DELETED); guard trùng tên rollover: src/actions/workspace-actions.ts:411 (name + status 'ACTIVE').
+%% - Trang Trash: src/actions/workspace-actions.ts:279-321 (getMyTrashedWorkspaces).

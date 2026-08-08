@@ -1,0 +1,118 @@
+sequenceDiagram
+    autonumber
+    participant Admin as Admin (người dùng)
+    participant UI as UI trang Trash (ClientTrashClient / TeamTrash)
+    participant Act as Server Action (crm-actions.ts)
+    participant API as API /api/review/trash/* (withReviewRoute)
+    participant Lib as Lib review (folders.ts / purge.ts)
+    participant DB as Prisma / Neon DB
+    participant Mux as Mux
+    participant R2 as Cloudflare R2
+    participant Cron as Vercel Cron
+    participant Ing as Inngest (reviewJanitor)
+
+    Note over Admin,DB: (A) Khôi phục Client từ Thùng rác khách hàng
+    Admin->>UI: bấm Khôi phục (client-trash)
+    UI->>Act: restoreClient(id, workspaceId)
+    Act->>Act: verifyWorkspaceAccess(workspaceId, ADMIN)
+    alt không phải ADMIN / không có quyền
+        Act-->>UI: catch SECURITY_VIOLATION - Không thể khôi phục khách hàng
+    else có quyền
+        Act->>DB: withClientNameLock + collectClientSubtreeIds(id, SOFT_DELETED)
+        alt subtree rỗng (không có trong thùng rác)
+            Act-->>UI: error Không tìm thấy khách hàng trong Thùng rác
+        else trùng tên với client ACTIVE cùng cấp
+            Act-->>UI: error Không thể khôi phục - đã có khách hàng đang hoạt động
+        else hợp lệ
+            Act->>DB: updateMany status=ACTIVE, deletedAt=null, hardDeleteAfter=null
+            Act->>DB: audit client.restored
+            Act-->>UI: success true + revalidatePath crm, client-trash
+        end
+    end
+
+    Note over Admin,R2: (B) Review trash - restore + Xóa vĩnh viễn (Delete forever)
+    Admin->>UI: chọn mục trong Recently Deleted (TeamTrash)
+    UI->>API: POST /api/review/trash/restore items[]
+    API->>API: parseBody(RestoreSchema zod)
+    alt body sai schema
+        API-->>UI: 400 VALIDATION_ERROR
+    else body hợp lệ
+        API->>Lib: restoreItems(items)
+        Lib->>Lib: requireReviewAccess(workspaceId)
+        alt không đăng nhập / không phải thành viên
+            Lib-->>API: throw ReviewAccessError
+            API-->>UI: 401 UNAUTHORIZED / 403 FORBIDDEN
+        else editor không phải người tạo folder (FR-B07)
+            Lib-->>API: throw 403 FORBIDDEN - Chỉ người tạo hoặc quản trị
+        else được phép
+            Lib->>DB: tx clear deletedAt theo deleteBatchId + re-home về root nếu parent đã mất
+            Lib-->>API: restored[] movedToRoot
+            API-->>UI: 200 apiJson restored
+        end
+    end
+    UI->>API: POST /api/review/trash/purge items[] (nút Xóa vĩnh viễn)
+    API->>Lib: purgeItemsAuthorized(items)
+    Lib->>Lib: requireReviewAccess(workspaceId)
+    alt không phải workspace ADMIN
+        Lib-->>API: 403 FORBIDDEN - Chỉ admin mới xóa vĩnh viễn được
+        API-->>UI: 403
+    else ADMIN
+        Lib->>Lib: manualPurgeItems - teardownVersionExternal từng version
+        Lib->>Mux: deleteMuxAsset(muxAssetId) khi là ref cuối
+        Lib->>R2: deleteObject(r2Key, thumbnailKey, attachments)
+        alt Mux / R2 lỗi
+            Mux-->>Lib: error
+            Lib->>Lib: reviewLog purge.mux_delete_failed / purge.r2_delete_failed (tiếp tục)
+        end
+        Lib->>DB: reviewAsset.delete cascade versions, folders deepest-first
+        Lib-->>API: PurgeStats
+        API-->>UI: 200 versions, assets, folders, bytesFreed
+    end
+
+    Note over Cron,DB: (C) Cron hard-delete workspace/profile sau 30 ngày
+    Cron->>Act: GET /api/cron/hard-delete-workspaces (x-cron-secret)
+    alt CRON_SECRET chưa cấu hình
+        Act-->>Cron: 500 CRON_SECRET not configured
+    else key sai
+        Act-->>Cron: 401 Unauthorized
+    else key đúng
+        Act->>DB: findMany status=SOFT_DELETED, hardDeleteAfter lte now
+        loop từng workspace quá hạn
+            Act->>DB: audit workspace.hard_deleted rồi workspace.delete cascade
+        end
+        Act-->>Cron: 200 deleted count (hard-delete-profiles tương tự với Profile)
+    end
+
+    Note over Cron,R2: (D) Cron review-janitor - purge trash quá 30 ngày
+    Cron->>API: GET /api/cron/review-janitor (x-cron-secret)
+    alt key sai
+        API-->>Cron: 401 Unauthorized
+    else key đúng
+        API->>Ing: inngest.send review/janitor.requested
+        alt inngest send lỗi
+            API-->>Cron: 502 inngest send failed
+        else gửi thành công
+            API-->>Cron: 200 success true
+            Ing->>Lib: step purge-expired-trash - purgeExpiredTrash(25)
+            Lib->>DB: tìm asset/version/folder có deletedAt lt cutoff 30 ngày
+            Lib->>Mux: deleteMuxAsset (ref-count, bỏ qua nếu còn bản copy sống)
+            Lib->>R2: deleteObject originals + thumbs
+            Lib->>DB: delete rows, folder deepest-first, skip nếu còn descendant
+            Lib-->>Ing: PurgeSummary capHit
+        end
+    end
+
+%% Nguồn (file:line):
+%% (A) src/actions/crm-actions.ts:297-376 restoreClient (verifyWorkspaceAccess, withClientNameLock,
+%%     collectClientSubtreeIds(id,'SOFT_DELETED'), lỗi trùng tên :345, updateMany ACTIVE :353, audit :361)
+%% (B) src/app/api/review/trash/restore/route.ts:18 POST + RestoreSchema zod :11;
+%%     src/lib/review/folders.ts:997 restoreItems (404 NOT_IN_TRASH :1010, 403 FORBIDDEN :1023,
+%%     requireReviewAccess :1015, re-home root :1047-1074);
+%%     src/app/api/review/trash/purge/route.ts:18 POST; src/lib/review/purge.ts:372 purgeItemsAuthorized
+%%     (403 :391), manualPurgeItems :311, teardownVersionExternal :57 (mux :101, r2 :80, log lỗi :70,84,104);
+%%     withReviewRoute map ReviewAccessError sang 401/403: src/lib/review/route-auth.ts:27-29
+%% (C) src/app/api/cron/hard-delete-workspaces/route.ts:20-88 (500 :32, 401 :35, delete :76);
+%%     src/app/api/cron/hard-delete-profiles/route.ts:20-94
+%% (D) src/app/api/cron/review-janitor/route.ts:13-38 (401 :27, inngest.send :31, 502 :36);
+%%     src/lib/review/inngest.ts:526 reviewJanitor, :633 step purge-expired-trash;
+%%     src/lib/review/purge.ts:236 purgeExpiredTrash (cutoff 30d :237, batch 25, capHit :247)

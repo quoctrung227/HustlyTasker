@@ -1,0 +1,123 @@
+sequenceDiagram
+    autonumber
+    actor Admin as Admin (OWNER hoặc ADMIN)
+    actor Editor as Editor (USER)
+    participant AddUI as AddTaskModal + DashboardActionWrapper.tsx
+    participant CreateAct as createTask (admin-actions.ts)
+    participant BatchAct as createTasksFromBatch (velox-batch-actions.ts)
+    participant RawAct as saveHookGraph (raw-footage-actions.ts)
+    participant AssignAct as assignTask (task-management-actions.ts)
+    participant TaskUI as StatusCell / TaskDetailModal
+    participant StatusAct as updateTaskStatus (task-actions.ts)
+    participant Guard as verifyWorkspaceAccess + task-statuses
+    participant DB as Prisma (Neon Postgres)
+    participant Mail as Resend (lib/email sendEmail)
+    participant Notif as notification-actions
+
+    Note over Admin,DB: Bước 1 - Tạo task (đơn hoặc Velox batch)
+    Admin->>AddUI: điền form Add Task
+    alt 1 video - tạo đơn
+        AddUI->>CreateAct: createTask(formData, workspaceId)
+        CreateAct->>Guard: verifyWorkspaceAccess(workspaceId, ADMIN)
+        alt không phải ADMIN của workspace
+            Guard-->>CreateAct: throw SECURITY_VIOLATION
+            CreateAct-->>AddUI: error SECURITY_VIOLATION
+        else title rỗng sau trim
+            CreateAct-->>AddUI: error Title is required
+        else clientId hoặc assigneeId khác profile
+            CreateAct-->>AddUI: error khách hàng / editor không hợp lệ
+        else hợp lệ
+            CreateAct->>DB: task.create - status Nhận task nếu có assignee, ngược lại Đang đợi giao
+            CreateAct->>Notif: createNotificationInternal TASK_ASSIGNED (fire-and-forget)
+            CreateAct->>Mail: sendEmail taskAssigned cho assignee
+            CreateAct-->>AddUI: success + taskId
+            opt có Multi-Hook Map (hookGraphV1)
+                AddUI->>RawAct: saveHookGraph(taskId, graph)
+                alt Zod hookGraphSchema fail
+                    RawAct-->>AddUI: error manualGraph không hợp lệ
+                else hợp lệ
+                    RawAct->>DB: taskRawFootage.upsert manualGraph
+                    RawAct-->>AddUI: success
+                end
+            end
+        end
+    else N video - Velox batch
+        AddUI->>BatchAct: createTasksFromBatch(rows, exchangeRate, managerId)
+        BatchAct->>BatchAct: validateRow từng row (title, jobPriceUSD, wageVND, type)
+        alt row lỗi và skipInvalid false
+            BatchAct-->>AddUI: error Row N không hợp lệ
+        else assignee không tồn tại hoặc khác workspace/profile
+            BatchAct-->>AddUI: error editor không tồn tại / chưa thuộc workspace
+        else hợp lệ
+            BatchAct->>Guard: verifyWorkspaceAccess(workspaceId, ADMIN)
+            BatchAct->>DB: $transaction tạo N task (status theo assignee từng row)
+            BatchAct->>Notif: TASK_ASSIGNED cho từng assignee
+            BatchAct-->>AddUI: success + count + taskIds + skipped
+            AddUI->>RawAct: attachMapToFirstBatchTask -> saveHookGraph(taskIds[0])
+        end
+    end
+
+    Note over Admin,DB: Bước 2 - Giao task
+    Admin->>AssignAct: assignTask(taskId, userId, workspaceId)
+    AssignAct->>Guard: verifyWorkspaceAccess(workspaceId, ADMIN)
+    AssignAct->>DB: monthlyRank.findFirst(userId)
+    alt editor rank D
+        AssignAct-->>Admin: error Phạt thẻ đỏ Rank D
+    else editor không thuộc workspace/profile
+        AssignAct-->>Admin: error không thuộc workspace này
+    else giao thành công
+        AssignAct->>DB: task.update status Nhận task + claimSource ADMIN + claimedAt
+        AssignAct->>Notif: TASK_ASSIGNED (và TASK_UNASSIGNED cho editor cũ)
+        AssignAct-->>Admin: success
+    end
+
+    Note over Editor,DB: Bước 3 - Editor làm việc và nộp bài
+    Editor->>TaskUI: bắt đầu làm (chọn status Đang thực hiện)
+    TaskUI->>StatusAct: updateTaskStatus(id, Đang thực hiện, workspaceId, ..., currentVersion)
+    StatusAct->>Guard: isValidStatus(newStatus)
+    alt status không nằm trong VALID_TASK_STATUSES
+        StatusAct-->>TaskUI: error status không hợp lệ (legacy)
+    else non-admin không phải assignee
+        StatusAct-->>TaskUI: error Forbidden - chỉ task của chính mình
+    else non-admin vào terminal hoặc client-facing status
+        StatusAct-->>TaskUI: error Forbidden - chỉ admin (guard H3 + HT-016)
+    else version lệch (optimistic lock)
+        StatusAct->>DB: updateMany where id + version = currentVersion
+        DB-->>StatusAct: count 0
+        StatusAct-->>TaskUI: error task modified - please refresh
+    else hợp lệ
+        StatusAct->>Guard: validateTransition (FSM disabled - luôn true)
+        StatusAct->>DB: $transaction update status + version increment
+        StatusAct->>Mail: GD3 isUserStart - email taskStarted cho assignedBy admin
+        StatusAct->>Notif: TASK_STARTED cho admin
+        StatusAct-->>TaskUI: success
+    end
+    Editor->>TaskUI: nộp bài (productLink + status Revision)
+    TaskUI->>StatusAct: updateTaskStatus(id, Revision, workspaceId)
+    StatusAct->>DB: update status Revision + deadline null (STATUS_REQUIRES_NULL_DEADLINE)
+    StatusAct->>Mail: GD4 isUserDelivery - email taskDelivered cho assignedBy admin
+    Note over Mail: fire-and-forget - lỗi email chỉ console.error, action vẫn success
+
+    Note over Admin,DB: Bước 4 - Admin duyệt -> hoàn thành
+    alt admin trả feedback (reject)
+        Admin->>TaskUI: status Revision + notes
+        TaskUI->>StatusAct: updateTaskStatus(id, Revision, workspaceId, notes)
+        StatusAct->>Mail: email taskFeedback cho editor
+        StatusAct->>Notif: TASK_STATUS_CHANGED cho assignee
+    else admin duyệt xong (complete)
+        Admin->>TaskUI: status Hoàn tất
+        TaskUI->>StatusAct: updateTaskStatus(id, Hoàn tất, workspaceId)
+        StatusAct->>DB: update status Hoàn tất + deadline null (payroll đếm SALARY_COMPLETED_STATUS)
+        StatusAct->>Mail: email taskCompleted + lương wageVND cho editor
+        StatusAct->>DB: audit task.completed
+        StatusAct-->>Admin: success
+    end
+
+%% Nguồn (file:line, repo root):
+%% createTask: src/actions/admin-actions.ts:85 (guard :89, title :92, clientId :161, assignee :180-202, create :214, status :232, email/notify :268-325)
+%% createTasksFromBatch: src/actions/velox-batch-actions.ts:102 (validateRow :86, guard :138, orphan assignee :164-180, transaction :213, status :218)
+%% saveHookGraph: src/actions/raw-footage-actions.ts:351 (Zod :356)
+%% gọi từ DashboardActionWrapper.tsx:290,353,384,391
+%% assignTask: src/actions/task-management-actions.ts:118 (rank D :162, profile check :169-173, update :189, notify :210)
+%% updateTaskStatus: src/actions/task-actions.ts:17 (isValidStatus :27-31, RBAC :68-75, terminal/client guard :84-97, FSM :101, lock :108+186, transaction :153, email GD3/GD4 :255-328, notify :343-391, audit :393-424)
+%% FSM disabled: src/lib/fsm-config.ts:122-125
