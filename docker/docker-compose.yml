@@ -1,0 +1,21 @@
+services:
+
+  postgres:
+    image: postgres:16
+    container_name: hustlytasker_postgres
+
+    environment:
+      POSTGRES_DB: hustlytasker_db
+      POSTGRES_USER: hustlytasker_user
+      POSTGRES_PASSWORD: hustlytasker_password
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+
+volumes:
+
+  postgres_data:
