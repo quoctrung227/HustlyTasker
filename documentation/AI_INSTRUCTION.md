@@ -10,3 +10,11 @@ Before creating Django models:
 
 
 Do not create random fields without documentation.
+
+Do not rewrite architecture without approval.
+
+Always check existing documentation before modifying code.
+
+Explain commands step-by-step.
+
+Developer is not an advanced Django developer.

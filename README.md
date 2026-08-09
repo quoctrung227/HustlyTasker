@@ -16,3 +16,10 @@ React
 ## Documentation
 
 See documentation folder.
+
+Project setup instructions
+
+1. Start Docker
+2. Activate venv
+3. Run migrations
+4. Run server
