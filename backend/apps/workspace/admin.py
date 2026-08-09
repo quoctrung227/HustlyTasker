@@ -1,3 +1,23 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import Workspace, WorkspaceMember
+
+
+@admin.register(Workspace)
+class WorkspaceAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "name",
+        "owner",
+        "created_at",
+    )
+
+
+@admin.register(WorkspaceMember)
+class WorkspaceMemberAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "workspace",
+        "user",
+        "role",
+    )
