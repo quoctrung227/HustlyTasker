@@ -12,7 +12,9 @@ class User(AbstractUser):
     )
 
     email = models.EmailField(
-        unique=True
+        unique=True,
+        blank=False,
+        null=False,
     )
 
     created_at = models.DateTimeField(
