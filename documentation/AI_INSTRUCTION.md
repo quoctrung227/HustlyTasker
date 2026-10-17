@@ -1,5 +1,9 @@
 # Database Rule
 
+Repository-wide instructions are maintained in root `AGENTS.md`. Always read
+that file and `documentation/HANDOVER.md` before using this historical database
+checklist.
+
 
 Before creating Django models:
 

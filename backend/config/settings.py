@@ -10,7 +10,101 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+from django.core.exceptions import ImproperlyConfigured
+
+
+_UNSET = object()
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _env(name, default=_UNSET):
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        if default is _UNSET:
+            raise ImproperlyConfigured(
+                f"Required environment variable {name} is not set or is empty."
+            )
+        return default
+    return value.strip()
+
+
+def _env_secret(name, default=_UNSET):
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        if default is _UNSET:
+            raise ImproperlyConfigured(
+                f"Required environment variable {name} is not set or is empty."
+            )
+        return default
+    return value
+
+
+def _env_bool(name, default=_UNSET):
+    value = os.environ.get(name)
+    if value is None or not value.strip():
+        if default is _UNSET:
+            raise ImproperlyConfigured(
+                f"Required environment variable {name} is not set or is empty."
+            )
+        return default
+
+    normalized = value.strip().lower()
+    if normalized in _TRUE_VALUES:
+        return True
+    if normalized in _FALSE_VALUES:
+        return False
+    raise ImproperlyConfigured(
+        f"Environment variable {name} must be one of: "
+        "1, 0, true, false, yes, no, on, off."
+    )
+
+
+def _env_int(name, default=_UNSET, *, minimum=None, maximum=None):
+    raw_value = os.environ.get(name)
+    if raw_value is None or not raw_value.strip():
+        if default is _UNSET:
+            raise ImproperlyConfigured(
+                f"Required environment variable {name} is not set or is empty."
+            )
+        value = default
+    else:
+        try:
+            value = int(raw_value.strip())
+        except ValueError as exc:
+            raise ImproperlyConfigured(
+                f"Environment variable {name} must be an integer."
+            ) from exc
+
+    if minimum is not None and value < minimum:
+        raise ImproperlyConfigured(
+            f"Environment variable {name} must be at least {minimum}."
+        )
+    if maximum is not None and value > maximum:
+        raise ImproperlyConfigured(
+            f"Environment variable {name} must be at most {maximum}."
+        )
+    return value
+
+
+def _env_list(name, default=()):
+    value = os.environ.get(name)
+    if value is None:
+        return list(default)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _env_choice(name, choices):
+    value = _env(name).lower()
+    if value not in choices:
+        allowed = ", ".join(sorted(choices))
+        raise ImproperlyConfigured(
+            f"Environment variable {name} must be one of: {allowed}."
+        )
+    return value
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,13 +113,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-u(9@l#nd#*ocrr8(_0ul#9q_4w*(k2xsq2&x53t)r!fqx$&rw^'
+ENVIRONMENT = _env_choice(
+    "DJANGO_ENVIRONMENT",
+    {"development", "production"},
+)
+IS_PRODUCTION = ENVIRONMENT == "production"
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+SECRET_KEY = _env_secret("DJANGO_SECRET_KEY")
+DEBUG = _env_bool("DJANGO_DEBUG")
+ALLOWED_HOSTS = _env_list("DJANGO_ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = _env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 
-ALLOWED_HOSTS = []
+if IS_PRODUCTION and DEBUG:
+    raise ImproperlyConfigured(
+        "DJANGO_DEBUG must be false when DJANGO_ENVIRONMENT=production."
+    )
+if not ALLOWED_HOSTS:
+    raise ImproperlyConfigured("DJANGO_ALLOWED_HOSTS must contain at least one host.")
+if IS_PRODUCTION and "*" in ALLOWED_HOSTS:
+    raise ImproperlyConfigured(
+        "DJANGO_ALLOWED_HOSTS cannot contain '*' in production."
+    )
 
 
 # Application definition
@@ -84,11 +192,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "hustlytasker_db",
-        "USER": "hustlytasker_user",
-        "PASSWORD": "hustlytasker_password",
-        "HOST": "localhost",
-        "PORT": "5432",
+        "NAME": _env("POSTGRES_DB"),
+        "USER": _env("POSTGRES_USER"),
+        "PASSWORD": _env_secret("POSTGRES_PASSWORD"),
+        "HOST": _env("POSTGRES_HOST"),
+        "PORT": _env_int("POSTGRES_PORT", minimum=1, maximum=65535),
     }
 }
 
@@ -130,21 +238,121 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 
-# Email
-# https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Environment-specific security controls. Production defaults are secure, while
+# HSTS remains an explicit deployment decision because it can affect subdomains.
+SECURE_SSL_REDIRECT = _env_bool(
+    "DJANGO_SECURE_SSL_REDIRECT",
+    default=IS_PRODUCTION,
+)
+SESSION_COOKIE_SECURE = _env_bool(
+    "DJANGO_SESSION_COOKIE_SECURE",
+    default=IS_PRODUCTION,
+)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SECURE = _env_bool(
+    "DJANGO_CSRF_COOKIE_SECURE",
+    default=IS_PRODUCTION,
+)
+CSRF_COOKIE_SAMESITE = "Lax"
+SECURE_HSTS_SECONDS = _env_int(
+    "DJANGO_SECURE_HSTS_SECONDS",
+    default=0,
+    minimum=0,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    default=False,
+)
+SECURE_HSTS_PRELOAD = _env_bool(
+    "DJANGO_SECURE_HSTS_PRELOAD",
+    default=False,
+)
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
+
+# Email
+# https://docs.djangoproject.com/en/6.1/topics/email/#configuring-email
+
+_DEVELOPMENT_MAILER_BACKENDS = {
+    "django.core.mail.backends.console.EmailBackend",
+    "django.core.mail.backends.dummy.EmailBackend",
+    "django.core.mail.backends.filebased.EmailBackend",
+    "django.core.mail.backends.locmem.EmailBackend",
 }
+_SMTP_MAILER_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+_MAILER_BACKEND = _env(
+    "DJANGO_MAILER_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+
+if IS_PRODUCTION and _MAILER_BACKEND in _DEVELOPMENT_MAILER_BACKENDS:
+    raise ImproperlyConfigured(
+        "DJANGO_MAILER_BACKEND must use a production-capable backend in production."
+    )
+
+_default_mailer = {"BACKEND": _MAILER_BACKEND}
+if _MAILER_BACKEND == _SMTP_MAILER_BACKEND:
+    _smtp_boolean_default = _UNSET if IS_PRODUCTION else False
+    _smtp_port_default = _UNSET if IS_PRODUCTION else 25
+    _smtp_use_tls = _env_bool(
+        "DJANGO_SMTP_USE_TLS",
+        default=_smtp_boolean_default,
+    )
+    _smtp_use_ssl = _env_bool(
+        "DJANGO_SMTP_USE_SSL",
+        default=_smtp_boolean_default,
+    )
+    if _smtp_use_tls and _smtp_use_ssl:
+        raise ImproperlyConfigured(
+            "DJANGO_SMTP_USE_TLS and DJANGO_SMTP_USE_SSL cannot both be true."
+        )
+
+    _smtp_host_default = _UNSET if IS_PRODUCTION else "localhost"
+    _smtp_username = _env("DJANGO_SMTP_USERNAME", default="")
+    _smtp_password = _env_secret("DJANGO_SMTP_PASSWORD", default="")
+    if bool(_smtp_username) != bool(_smtp_password):
+        raise ImproperlyConfigured(
+            "DJANGO_SMTP_USERNAME and DJANGO_SMTP_PASSWORD must be set together."
+        )
+
+    _default_mailer["OPTIONS"] = {
+        "host": _env("DJANGO_SMTP_HOST", default=_smtp_host_default),
+        "port": _env_int(
+            "DJANGO_SMTP_PORT",
+            default=_smtp_port_default,
+            minimum=1,
+            maximum=65535,
+        ),
+        "username": _smtp_username,
+        "password": _smtp_password,
+        "use_tls": _smtp_use_tls,
+        "use_ssl": _smtp_use_ssl,
+        "timeout": _env_int("DJANGO_SMTP_TIMEOUT", default=10, minimum=1),
+    }
+
+MAILERS = {"default": _default_mailer}
+DEFAULT_FROM_EMAIL = _env("DJANGO_DEFAULT_FROM_EMAIL", default="webmaster@localhost")
+SERVER_EMAIL = _env("DJANGO_SERVER_EMAIL", default="root@localhost")
 
 AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
 
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.AllowAny",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
     ],
+
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login": "10/minute",
+        "auth_register": "5/hour",
+    },
+
+    # Ignore spoofable proxy headers by default. Set a positive value only
+    # after the deployment's trusted reverse-proxy chain is fixed and known.
+    "NUM_PROXIES": _env_int("DRF_NUM_PROXIES", default=0, minimum=0),
 
 }

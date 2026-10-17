@@ -1,21 +1,17 @@
-from django.urls import path
-from django.http import JsonResponse
+from django.urls import include, path
 
-
-def api_test(request):
-
-    return JsonResponse(
-        {
-            "message": "HustlyTasker API is working"
-        }
-    )
+from .views import HealthCheckView
 
 
 urlpatterns = [
-
     path(
-        "test/",
-        api_test
+        "auth/",
+        include("apps.accounts.urls"),
     ),
 
+    path(
+        "health/",
+        HealthCheckView.as_view(),
+        name="health",
+    ),
 ]

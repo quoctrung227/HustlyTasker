@@ -1,5 +1,9 @@
 # SESSION_REPORT.md
 
+> Historical snapshot from 2026-08-08. It is not the current project status or
+> continuation instruction. Read root `AGENTS.md` and
+> `documentation/HANDOVER.md` for the current checkpoint.
+
 # HustlyTasker Development Session Report
 
 
