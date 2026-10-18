@@ -99,6 +99,12 @@ Completed in the current phase:
   read-only Viewer; legacy `OWNER` fails closed and cannot be newly assigned.
   Final PostgreSQL verification passed 51/51 targeted and 80/80 full tests on
   2026-10-18 without an API, model or migration change.
+- HT-API-P1-04 Profile/Workspace Read API & DRF Permission Integration: four
+  read-only `/api/v1/` routes, minimal serializers, active tenant permission
+  adapters, scoped querysets, bounded pagination, generic IDOR-safe `404`, and
+  GET/HEAD/OPTIONS-only behavior. Final PostgreSQL verification passed 21/21
+  targeted API and 101/101 full tests on 2026-10-18 without a model, migration,
+  authentication, service-rule, or development-data change.
 
 
 Approved architecture target, not fully implemented:
@@ -126,15 +132,17 @@ Not completed:
 - Applying Workspace `0002` to the development database; it has run only on
   disposable test databases after read-only inventory found 0 business rows
   and 3 User rows
-- Workspace/Invitation API and DRF tenant permission layer; the current access
-  foundation is service/query infrastructure only
+- Applying the existing Profile schema before the new read routes can operate
+  on development; read API/DRF tenant permissions exist in source and tests,
+  while Workspace write/membership and Invitation APIs are not implemented
 - Cross-domain Client/Finance/Audit selectors and Task/Review enforcement;
   exact reviewer/workflow states remain a later contract
 - Account deactivation service that preserves last-owner invariants across
   Profiles and revokes established sessions
 - Invitation model/API, Project model, Client/Finance tenant migrations,
   public-link replacement and soft-delete services
-- Business APIs
+- Business write APIs and downstream domain APIs beyond the completed
+  Profile/Workspace read slice
 - Frontend
 - Deployment
 
@@ -159,7 +167,9 @@ Frontend
 
 The tenancy design and capability/scoping/invitation contract are approved, and
 the schema plus tenant-access/service foundations have completed regression.
-Invitation remains design-only and downstream; no Workspace API, full RBAC, or
+The owner separately authorized and the project completed only the minimal
+Profile/Workspace read API slice. Invitation remains design-only and
+downstream; no Workspace write/membership, full cross-domain RBAC, or other
 business API may start until the owner authorizes the next implementation task,
 regardless of roadmap task numbering.
 

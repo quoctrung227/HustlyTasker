@@ -4,6 +4,36 @@ Lịch sử thay đổi của dự án HustlyTasker.
 
 ## Unreleased - 2026-10-18
 
+### Profile/Workspace read API and DRF tenant permissions
+
+- Thêm bốn endpoint read-only dưới `/api/v1/`: Profile list/detail và nested
+  Workspace list/detail. Giữ nguyên SessionAuthentication, global
+  deny-by-default và không thêm `AllowAny`.
+- Thêm minimal serializers chỉ trả metadata đã phê duyệt; không expose
+  transitional owner, membership, role, email hoặc PII.
+- Nối DRF permission trực tiếp với tenant access contexts và scoped selectors
+  từ HT-RBAC-P1-03. Profile Owner/Admin đọc mapped Workspace cùng Profile;
+  ordinary Member chỉ đọc Workspace có effective `ADMIN`, `MEMBER` hoặc
+  `VIEWER`; legacy `OWNER`, Profile-null, transitional owner và platform flags
+  không bypass scope.
+- Chuẩn hóa list bằng page-number pagination bounded (20 mặc định, 100 tối đa)
+  và stable ordering. Malformed, unknown, cross-tenant, wrong-parent và
+  out-of-scope IDs cùng trả generic JSON `404`.
+- Chỉ hỗ trợ `GET`/`HEAD`/`OPTIONS`, thêm no-cache boundary và xác nhận unsafe
+  request phải qua auth/CSRF và tenant permission trước (`403`/`404` nếu fail);
+  request đã được authorize với CSRF hợp lệ mới trả `405`. Không nhánh nào thay
+  đổi dữ liệu hay AuditLog.
+- Sửa race khi Profile membership bị revoke sau DRF permission nhưng trước lúc
+  queryset được evaluate: late stale-context exception được map về cùng generic
+  `404`; thêm regression cho Workspace list/detail.
+- Thêm 21 PostgreSQL API tests cho session access/CSRF, multi-Profile, role matrix,
+  revoke/inactive, IDOR, legacy/unmapped data, staff non-bypass, pagination và
+  no-write contract. Final full suite PASS 101/101; Authentication/API
+  Foundation regression PASS 29/29.
+- Không đổi model, schema, migration, authentication, service business rule,
+  Docker hoặc development data. `workspace.0002` vẫn chưa apply development;
+  rollout và smoke test cần một operational approval riêng.
+
 ### Documentation and handover governance
 
 - Thêm root `AGENTS.md` làm quy tắc bắt buộc cho mọi agent: đọc source/docs và
@@ -174,6 +204,11 @@ Lịch sử thay đổi của dự án HustlyTasker.
   Workspace 51/51 và full suite 80/80 PASS, gồm 19 Authentication và 10 API
   Foundation regressions. Test database tạm được Django hủy; development
   `workspace.0002` vẫn unapplied và development data không đổi.
+- Verification cuối HT-API-P1-04 ngày 2026-10-18 trên PostgreSQL 16: targeted
+  read API 21/21, Authentication/API Foundation 29/29 và full suite 101/101
+  PASS; `pip check`, compile, Django system check và migration drift check PASS.
+  Test database tạm được hủy, không còn `test_%` database; development migration
+  và data không đổi.
 
 
 # Version 0.0-foundation

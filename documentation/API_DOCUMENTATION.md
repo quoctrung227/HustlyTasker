@@ -1,6 +1,6 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-10-15
+Last updated: 2026-10-18
 
 ## API boundary and public allowlist
 
@@ -41,6 +41,101 @@ This is intentionally not a database-readiness check: a database outage does
 not change its result while the Django request stack remains healthy. A future
 readiness endpoint must use a separate path and contract. The legacy
 `/api/test/` route has been removed and returns `404 Not Found`.
+
+## Profile and Workspace read API
+
+Base path: `/api/v1/`
+
+This is the first tenant-scoped business API slice. Every endpoint in this
+section uses Django `SessionAuthentication`, requires a current active User,
+and has no `AllowAny` override. The selected Profile or any identifier supplied
+by the client is never authorization evidence; access is resolved from current
+database membership through the tenant access foundation.
+
+| Method | Path | Access | Purpose |
+|---|---|---|---|
+| `GET` | `/api/v1/profiles/` | Active authenticated User | List Profiles in which the User has an active membership. |
+| `GET` | `/api/v1/profiles/{profile_id}/` | Active membership in the Profile | Return minimal Profile metadata. |
+| `GET` | `/api/v1/profiles/{profile_id}/workspaces/` | Active Profile access plus the Workspace rules below | List only Workspaces visible to the caller inside the nested Profile. |
+| `GET` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/` | Effective read access to that Workspace in that Profile | Return minimal Workspace metadata. |
+
+All four routes also support `HEAD` and `OPTIONS` for authorized callers.
+`POST`, `PUT`, `PATCH`, and `DELETE` are not implemented. DRF performs
+authentication, permission, and session-CSRF checks before method dispatch, so
+anonymous or CSRF-invalid unsafe requests may return `403 Forbidden`; an active
+authorized session with a valid CSRF token reaches method dispatch and returns
+`405 Method Not Allowed`. No branch writes data or creates audit events.
+
+Profile responses contain exactly:
+
+- `id`
+- `name`
+- `created_at`
+- `updated_at`
+
+Workspace responses contain exactly:
+
+- `id`
+- `profile_id`
+- `name`
+- `description`
+- `created_at`
+- `updated_at`
+
+IDs are canonical UUID strings and timestamps use DRF's ISO-8601 rendering.
+Transitional `Workspace.owner`, memberships, roles, emails, and other PII are
+not serialized.
+
+List endpoints use the standard DRF page-number envelope:
+
+```json
+{
+  "count": 0,
+  "next": null,
+  "previous": null,
+  "results": []
+}
+```
+
+The default `page_size` is 20 and the client may request at most 100 with the
+`page_size` query parameter. Results have fixed stable ordering by
+`created_at`, then `id`; this slice exposes no client-controlled search,
+filter, or ordering.
+
+Workspace visibility is fail-closed:
+
+- Profile Owner and Profile Admin can read every Profile-mapped Workspace in
+  their own Profile.
+- An ordinary Profile Member can read only a Workspace with an effective
+  explicit `ADMIN`, `MEMBER` (Editor), or `VIEWER` membership.
+- Legacy `WorkspaceMember.OWNER`, transitional `Workspace.owner`, staff or
+  superuser flags, and a selected Profile do not grant tenant API access.
+- An inactive User, inactive Profile membership, revoked Workspace membership,
+  cross-Profile relationship, or `Workspace.profile=NULL` cannot be used for
+  access.
+
+Anonymous access returns `403 Forbidden`. A malformed, unknown, cross-tenant,
+wrong-parent, or otherwise out-of-scope Profile/Workspace identifier returns
+the same JSON `404` response:
+
+```json
+{"detail": "Not found."}
+```
+
+An accessible Profile with no visible Workspaces returns a successful empty
+page instead of disclosing hidden rows. Responses are marked non-cacheable.
+
+The `/api/v1/` prefix currently applies to tenant business endpoints only;
+the established `/api/auth/` and `/api/health/` paths remain unchanged. A
+project-wide error-envelope convention beyond this non-enumerating read
+contract is deferred to later API slices.
+
+Operational limitation: the source migration was exercised successfully on
+disposable PostgreSQL test databases that Django then destroyed, but
+`workspace.0002_profile_workspace_foundation` is intentionally still unapplied
+on the development database. A separately approved development sequence is:
+repeat read-only inventory, take the required backup, apply only the existing
+`0002`, then smoke these four routes.
 
 ## Authentication foundation
 
@@ -111,5 +206,7 @@ returns `403` with DRF `SessionAuthentication`. Throttled requests return `429`.
 - Duplicate registration returns field-specific validation errors. This is a
   deliberate foundation-stage UX contract and permits account enumeration;
   revisit it together with activation and public-signup abuse controls.
-- OTP/email activation, password reset, logout-all, JWT, OAuth, Profile,
-  Workspace, roles, and permissions are not part of this foundation.
+- OTP/email activation, password reset, logout-all, JWT, and OAuth are not part
+  of this foundation. The separately documented `/api/v1/` tenant slice adds
+  read-only Profile/Workspace authorization; Profile/Workspace writes,
+  membership management, and Invitation APIs remain unimplemented.

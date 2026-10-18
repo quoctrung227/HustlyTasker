@@ -1,9 +1,92 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-10-18
+## Current Snapshot - 2026-10-18 (HT-API-P1-04)
 
-This snapshot is the current source of truth. The 2026-10-17 snapshot below is
-retained as superseded history.
+This snapshot is the current source of truth. Earlier 2026-10-18 and
+2026-10-17 snapshots below are retained as superseded history.
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture`
+
+### HT-API-P1-04 - COMPLETE / OWNER REVIEW GATE
+
+The owner authorized the minimal Profile/Workspace read API after
+`HT-RBAC-P1-03`. The implementation reuses its access contexts and selectors;
+it does not create a parallel authorization system.
+
+Completed in this task:
+
+- Added four read-only tenant routes under `/api/v1/`: Profile list/detail and
+  nested Workspace list/detail.
+- Added minimal read serializers. Profile responses expose only `id`, `name`,
+  `created_at`, and `updated_at`; Workspace responses add `profile_id`,
+  `description`, and no owner/member/role/PII field.
+- Added DRF permission adapters for an active authenticated identity, active
+  Profile access, and effective Workspace read access. No new endpoint uses
+  `AllowAny`; SessionAuthentication and global deny-by-default remain intact.
+- Every list and object lookup starts from `profiles_visible_to()` or
+  `workspaces_visible_to()`. Cross-Profile, wrong-parent, sibling,
+  malformed, random, revoked, inactive, legacy-role, Profile-null, and
+  transitional-owner cases fail closed without disclosing existence.
+- Added bounded page-number pagination: default 20, client maximum 100, stable
+  `created_at`/`id` ordering, and no client-controlled search/filter/order.
+- Limited all four views to `GET`, `HEAD`, and `OPTIONS` and marked responses
+  non-cacheable. Unsupported unsafe requests enforce SessionAuthentication/
+  CSRF and tenant permissions first (`403`/`404` when those checks fail), then
+  return `405` for an authorized request with valid auth/CSRF; no path changes
+  Profile, Workspace, membership, or AuditLog data.
+- Independent review identified a late membership-revocation race between DRF
+  permission resolution and queryset evaluation. The shared view mixin now
+  maps that stale access exception to the same generic JSON `404`, with a
+  regression test for both Workspace list and detail.
+- No authentication mechanism, model, schema, migration, service business
+  rule, development row, or Docker resource changed.
+
+Verification actually run against Django-created disposable PostgreSQL test
+databases:
+
+- Targeted `apps.workspace.test_api`: PASS, 21/21, including an explicit
+  session-CSRF-before-`405` regression.
+- Authentication and API Foundation regressions (`api apps.accounts`): PASS,
+  29/29, including the existing SessionAuthentication/CSRF policy coverage.
+- Final full PostgreSQL suite after all code/test changes: PASS, 101/101 in
+  55.129s inside a disposable Python 3.12 container with the source mounted
+  read-only; Django destroyed the disposable test database.
+- `python -m pip check`: PASS.
+- In-memory Python syntax compile for the new modules/tests: PASS.
+- `python manage.py check`: PASS, zero issues.
+- `python manage.py makemigrations --check --dry-run`: PASS, no changes.
+- Read-only migration plan still shows `workspace.0001_initial` applied and
+  `workspace.0002_profile_workspace_foundation` unapplied in development.
+- Post-test read-only verification found no leftover `test_%` database.
+- Current local `.env` is absent and the historical Windows virtualenv points
+  to a removed Python installation; verification was safely restored with the
+  cached ephemeral Python image, without recreating PostgreSQL infrastructure.
+- `git diff --check`: PASS (only existing LF-to-CRLF conversion warnings).
+  Strict UTF-8/no-BOM/no-NUL/code-fence/trailing-whitespace QA and
+  secret-assignment scan: PASS for all 17 changed/new code/documentation files.
+
+Known boundary: the source migration was exercised on disposable test
+databases that Django destroyed, but development still has only
+`workspace.0001` and no Profile table.
+The new routes must not be exercised there until the owner separately approves
+inventory, backup, the existing `0002` rollout, and a development smoke test.
+No endpoint required by this read-only task remains missing; Workspace writes,
+membership management, Invitation, and downstream business APIs are explicitly
+outside scope.
+
+### Review Gate
+
+Stop at the `HT-API-P1-04` owner review gate. Do not apply `workspace.0002`,
+open write/Invitation APIs, or begin another roadmap task automatically.
+
+---
+
+## Previous Snapshot - 2026-10-18 (HT-RBAC-P1-03, superseded)
+
+This historical snapshot describes the completed access/service foundation
+before the owner authorized HT-API-P1-04. Use the current snapshot above.
 
 ### Current Phase
 

@@ -918,9 +918,10 @@ be treated as implemented unless they also exist in models/migrations.
 The schema foundation adds explicit ProfileMembership uniqueness and role
 checks, membership lookup indexes, Workspace/Profile model validation, and
 transactional membership services. `HT-RBAC-P1-03` now adds Profile/Workspace
-scoped selectors and verified access contexts without a schema change. API
-permissions, soft delete, and cross-domain same-Profile constraints are not
-implemented.
+scoped selectors and verified access contexts without a schema change.
+`HT-API-P1-04` adds four read-only DRF endpoints and tenant permissions, also
+without a schema change. Write permissions, soft delete, and cross-domain
+same-Profile constraints are not implemented.
 
 The eight development domain apps remain at their existing
 `0001_initial.py` migrations. The additive
@@ -986,8 +987,10 @@ updates, raw SQL, and direct `ProfileMembership` ORM mutations can bypass
 service invariants. Direct User deactivation can also make an Owner account
 unusable without going through the owner service. Profile/ProfileMembership are
 not exposed in Admin and WorkspaceMember Admin is read-only, but future APIs
-must use reviewed services. This foundation is not a complete authorization
-layer or a database-wide guarantee of the aggregate last-owner invariant.
+that mutate data must use reviewed services. The read-only DRF layer now uses
+the scoped access contexts/selectors, but this foundation is not a complete
+cross-domain authorization layer or a database-wide guarantee of the aggregate
+last-owner invariant.
 
 ## Migration and inventory evidence
 
@@ -1004,7 +1007,7 @@ layer or a database-wide guarantee of the aggregate last-owner invariant.
 - `0002` has **not** been applied to the development database. A different
   environment must be inventoried and backed up independently before apply.
 
-## Approved target — not implemented
+## Approved target — implementation status
 
 | Domain | Approved boundary/behavior still awaiting its own task |
 |---|---|
@@ -1013,7 +1016,7 @@ layer or a database-wide guarantee of the aggregate last-owner invariant.
 | Finance | Invoice belongs to Workspace and same-Profile Client; Payment belongs to Invoice. Current finance schema has not been migrated and numbering/billing details remain undecided. |
 | Public access | Client Portal account and secure link are supported targets; ClientPortalLink and GuestReviewLink are separate, hashed, expiring, revocable, capability-scoped principals. Replacements are absent. |
 | Soft delete/retention | Soft delete is the target default for Profile, Workspace, Client, Project, and Task; hard delete is controlled; Invoice/Payment/AuditLog are protected under the eventual retention policy; User departure must not cascade-delete business data. Current foundation adds no soft-delete fields/services. Retention periods and automated purge remain undecided. |
-| Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, action-level capability helpers and IDOR/service tests now exist; DRF permission classes/endpoints and Client/Finance/Audit/Task/Review scoping remain absent. |
+| Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, action-level capability helpers, four read-only DRF endpoints/permissions, and IDOR tests now exist; write/membership endpoints and Client/Finance/Audit/Task/Review scoping remain absent. |
 | Task/Review workflow | Assignment → Deliverable → Review → approval/completion or revision/resubmission is approved at high level; Task completion is allowed only after Deliverable approval. Detailed states, approvers, and payroll trigger remain undecided. |
 
 ## Approved ProfileInvitation contract — schema not implemented
@@ -1073,9 +1076,9 @@ scope.
 - Later migrations must add Client, Project, Invoice, public-link, AuditLog,
   and soft-delete changes additively in their approved tasks.
 
-Verification recorded for this checkpoint on 2026-10-18: final targeted
-Workspace/model/service/migration/access tests passed 51/51 and the full
-80-test PostgreSQL suite passed. The full run includes the 19 Authentication
-and 10 API Foundation regression tests. `pip check`, Django system check, and
-`makemigrations --check --dry-run` also passed. No migration was created or
-applied to development.
+Historical P1-03 verification on 2026-10-18 passed 51/51 targeted Workspace
+model/service/migration/access tests and the then-current 80-test full suite.
+After P1-04 added only the read API layer and tests, final verification passed
+21/21 targeted API tests and the 101-test full PostgreSQL suite. `pip check`,
+Django system check, and `makemigrations --check --dry-run` also passed. No
+schema migration was created or applied to development by P1-04.

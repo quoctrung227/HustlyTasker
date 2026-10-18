@@ -11,8 +11,11 @@ Nguyên tắc thực hiện: hoàn thành P0/P1 và test gate trước khi mở 
 `HT-DATA-P2-01` và `PROFILE/WORKSPACE SCHEMA FOUNDATION` đã hoàn tất.
 `HT-RBAC-DESIGN-P0-01` đã được chốt qua ủy quyền của Owner. Slice
 `HT-RBAC-P1-03 - Tenant Access Context and Scoped Service Foundation` đã hoàn
-thành và đang dừng tại `OWNER REVIEW GATE`; chưa mở Workspace/Invitation API và
-chưa áp dụng `workspace.0002` lên development database.
+thành và được Owner cho phép dùng làm nền cho `HT-API-P1-04`. Slice read-only
+`HT-API-P1-04 - Profile/Workspace Read API & DRF Permission Integration` cũng
+đã hoàn thành và đang dừng tại `OWNER REVIEW GATE`; chưa mở Workspace write,
+membership hay Invitation API và chưa áp dụng `workspace.0002` lên development
+database.
 
 ## P0 - An toàn và khả năng kiểm chứng
 
@@ -109,7 +112,7 @@ chưa áp dụng `workspace.0002` lên development database.
   được ghi trong `RBAC_DESIGN.md`/`DECISION_LOG.md`. Reviewer role/states và
   các domain downstream vẫn dành cho task riêng.
 
-### HT-RBAC-P1-03 - Tenant Access Context and Scoped Service Foundation — COMPLETE / OWNER REVIEW GATE
+### HT-RBAC-P1-03 - Tenant Access Context and Scoped Service Foundation — COMPLETE
 
 - **Mục tiêu:** tạo boundary dùng lại được để resolve Profile/Workspace từ User
   và membership thực tế, chống cross-tenant/IDOR trước khi mở business API.
@@ -122,24 +125,44 @@ chưa áp dụng `workspace.0002` lên development database.
   không được cấp mới. Không đổi enum hay schema.
 - **Kiểm thử:** final targeted Workspace 51/51 và full PostgreSQL 80/80 PASS;
   system check, dependency check và migration drift check PASS ngày 2026-10-18.
-- **Không thuộc scope:** DRF permission classes/endpoints, Workspace API,
-  Invitation model/API, Client/Finance/Audit selectors, Task/Review workflow,
-  User deactivation/session-revocation lifecycle và áp dụng migration `0002`.
+- **Không thuộc scope của P1-03:** DRF permission classes/endpoints, Workspace
+  API, Invitation model/API, Client/Finance/Audit selectors, Task/Review
+  workflow, User deactivation/session-revocation lifecycle và áp dụng migration
+  `0002`. Slice P1-04 sau đó chỉ hiện thực phần read API/DRF permission tối thiểu.
 - **Rủi ro còn lại:** direct ORM/bulk/raw/Admin có thể bypass services; các
   domain chưa có tenant path chưa thể được expose an toàn.
-- **Review gate / bước kế tiếp:** owner review foundation hiện tại. Sau khi được
-  duyệt, mở một task riêng cho Profile/Workspace read API và DRF permission
-  integration tối thiểu; Invitation vẫn để sau account/email verification.
+- **Kết quả review gate:** Owner đã cho phép mở task riêng P1-04 cho read API và
+  DRF permission integration tối thiểu. Invitation vẫn để sau account/email
+  verification và một task được phê duyệt riêng.
 
-### HT-API-P1-04 - API structure, serializers và versioning
+### HT-API-P1-04 - Profile/Workspace Read API & DRF Permission Integration — COMPLETE / OWNER REVIEW GATE
 
-- **Mục tiêu:** tạo convention thống nhất cho `/api/v1/`, serializers, errors và pagination.
-- **Phạm vi:** API URL modules, base serializers/validators, response/error conventions, `API_DOCUMENTATION.md`.
-- **Ảnh hưởng:** contract của mọi endpoint tiếp theo.
-- **Dependencies:** HT-AUTH-P1-02, HT-RBAC-P1-03.
-- **Acceptance criteria:** route versioned; field mutability rõ; UUID/date/decimal format thống nhất; validation không rò dữ liệu tenant; docs và tests khớp code.
-- **Kiểm thử:** serializer unit tests và API contract tests.
-- **Rủi ro:** không expose CRUD generic trước khi object permission hoàn chỉnh.
+- **Mục tiêu:** mở read-only Profile/Workspace API an toàn dưới `/api/v1/` và
+  nối trực tiếp DRF với access context/scoped selector của P1-03.
+- **Phạm vi hoàn thành:** bốn route Profile list/detail và nested Workspace
+  list/detail; minimal read serializers; active-identity/Profile/Workspace read
+  permissions; bounded pagination; stable ordering; non-cacheable responses;
+  generic non-enumerating `404`; tài liệu API.
+- **Access contract:** SessionAuthentication và global deny-by-default giữ
+  nguyên; không `AllowAny`. Profile Owner/Admin đọc mọi mapped Workspace cùng
+  Profile; ordinary Member chỉ đọc Workspace có effective `ADMIN`, `MEMBER`
+  hoặc `VIEWER`; legacy `OWNER`, transitional owner FK và staff/superuser không
+  bypass tenant scope.
+- **Response contract:** Profile chỉ có `id/name/created_at/updated_at`;
+  Workspace có `id/profile_id/name/description/created_at/updated_at`;
+  UUID render thành chuỗi. List envelope dùng `count/next/previous/results`,
+  page size mặc định 20 và tối đa 100.
+- **Dependencies:** P1-03 đã hoàn thành và existing SessionAuthentication đang
+  hoạt động. HT-AUTH-P1-02 không chặn authenticated read slice này nhưng vẫn là
+  dependency của Invitation/onboarding production.
+- **Kiểm thử:** targeted API 21/21; Authentication/API Foundation 29/29; final
+  full PostgreSQL suite 101/101; system/dependency/compile/migration-drift
+  checks PASS ngày 2026-10-18.
+- **Không thuộc scope:** write/CRUD lifecycle, membership management,
+  Invitation, Client/Project/Task/Finance, model/schema/migration và frontend.
+- **Operational gate:** `workspace.0002` vẫn chưa apply development. Sau owner
+  review phải có authorization riêng cho inventory/backup/apply/smoke; không
+  coi test database thành bằng chứng migration đã được rollout.
 
 ## P2 - Business domains tiếp theo
 
@@ -172,9 +195,9 @@ chưa áp dụng `workspace.0002` lên development database.
 
 - **Mục tiêu:** hoàn tất F02/F03 sau tenancy decision.
 - **Phạm vi:** workspace CRUD có scope, invitation lifecycle và tests.
-- **Dependencies:** `HT-RBAC-DESIGN-P0-01` đã được chấp thuận và
-  `HT-RBAC-P1-03` đã hoàn tất; owner duyệt review gate hiện tại; schema
-  foundation được áp dụng có kiểm soát ở môi trường đích sau inventory/backup.
+- **Dependencies:** `HT-RBAC-DESIGN-P0-01`, `HT-RBAC-P1-03` và read-only
+  `HT-API-P1-04` đã hoàn tất; Owner duyệt P1-04 review gate; schema foundation
+  được áp dụng có kiểm soát ở môi trường đích sau inventory/backup.
   Trước phần Invitation API còn cần account/email verification và identity
   binding dù contract TTL/rate/retention đã được chốt.
 - **Acceptance criteria:** invitation expiry/accept/decline/revoke an toàn; owner/admin policy rõ; concurrency không tạo membership trùng.

@@ -14,4 +14,9 @@ urlpatterns = [
         HealthCheckView.as_view(),
         name="health",
     ),
+
+    path(
+        "v1/",
+        include("apps.workspace.urls"),
+    ),
 ]

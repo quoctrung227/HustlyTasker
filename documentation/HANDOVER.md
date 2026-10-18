@@ -1,6 +1,164 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-10-18
+## Current checkpoint — 2026-10-18 — HT-API-P1-04
+
+Repository: `D:\da\HustlyTasker`
+
+Branch: `main`
+
+HEAD and local `origin/main`: `eb76395`
+
+Current task: `HT-API-P1-04 — COMPLETE / OWNER REVIEW GATE`
+
+Read root `AGENTS.md` before taking action. Source, migrations, Git status and
+current test output override historical notes. Do not commit, push, reset,
+revert, clean, apply migrations or alter development data without owner
+authorization.
+
+### What was already complete before this resumed checkpoint
+
+- `HT-RBAC-P1-03` supplied verified Profile/Workspace access contexts,
+  tenant-scoped selectors, capability revalidation and scoped membership
+  services. The owner authorized using that foundation for this read API task.
+- Before the interruption, the complete P1-04 code and 20 API tests were already
+  present. Independent review found a late membership-revocation race; it had
+  already been fixed by mapping stale access during queryset evaluation to the
+  same generic DRF `404` and adding an exact regression.
+- Final code/test verification had already passed. The interrupted work was the
+  required documentation and handover reconciliation, which this checkpoint
+  completes without rewriting the valid implementation.
+- Final documentation review then found that unsupported unsafe methods can be
+  rejected by session CSRF before DRF reaches method dispatch. One focused API
+  regression was added; the read implementation itself did not change.
+
+### Implementation completed
+
+- Added `/api/v1/` routing for exactly four read-only endpoints:
+  - `GET /api/v1/profiles/`
+  - `GET /api/v1/profiles/{profile_id}/`
+  - `GET /api/v1/profiles/{profile_id}/workspaces/`
+  - `GET /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/`
+- Added minimal Profile and Workspace read serializers. They expose only the
+  identifiers, names/descriptions and timestamps documented in
+  `API_DOCUMENTATION.md`; no owner, membership, role, email, or PII is exposed.
+- Added explicit DRF tenant permissions for a current active identity, active
+  Profile access and effective Workspace read access. SessionAuthentication and
+  global deny-by-default remain unchanged; no new `AllowAny` exists.
+- Lists and lookups use only `profiles_visible_to()` and
+  `workspaces_visible_to()`. Owner/Admin inheritance is same-Profile only;
+  ordinary Members require an effective explicit `ADMIN`, `MEMBER` or `VIEWER`
+  Workspace role. Legacy `OWNER`, transitional owner, Profile-null rows and
+  staff/superuser flags fail closed.
+- Malformed, random, cross-tenant, wrong-parent and otherwise out-of-scope IDs
+  share `404 {"detail":"Not found."}`. Pagination is page-number based,
+  default 20/max 100, with fixed `created_at`/`id` ordering.
+- Views support only `GET`, `HEAD` and `OPTIONS` and are non-cacheable. Unsafe
+  requests run auth/CSRF and tenant permissions first (`403`/`404` on failure);
+  an authorized request with valid CSRF then receives `405` for unsupported
+  methods. No branch implements a Profile/Workspace write, membership
+  management or Invitation.
+
+No endpoint approved for this read-only task remains missing.
+
+### Files changed in the current worktree
+
+Backend:
+
+- `backend/api/urls.py`
+- `backend/api/pagination.py` — new
+- `backend/apps/workspace/views.py`
+- `backend/apps/workspace/permissions.py` — new
+- `backend/apps/workspace/serializers.py` — new
+- `backend/apps/workspace/urls.py` — new
+- `backend/apps/workspace/test_api.py` — new
+
+Documentation:
+
+- `documentation/API_DOCUMENTATION.md`
+- `documentation/CHANGELOG.md`
+- `documentation/DATABASE_SCHEMA.md` — runtime status wording only; no schema
+  design or migration changed
+- `documentation/DECISION_LOG.md` — clarified P1-03/P1-04 chronology only; no
+  accepted decision changed
+- `documentation/HANDOVER.md`
+- `documentation/PROGRESS.md`
+- `documentation/PROJECT_CONTEXT.md`
+- `documentation/PROJECT_ROADMAP.md`
+- `documentation/RBAC_DESIGN.md`
+- `documentation/REQUIREMENT_STATUS.md`
+
+No model, migration, settings, authentication, `access.py`, `services.py`,
+Docker, dependency or development-data file changed in this task.
+
+### Verification actually run
+
+All Django tests below used Django-created disposable PostgreSQL databases; no
+SQLite fallback or development migration was used. At resumed verification the
+workspace had no `.env` and its old Windows virtualenv pointed to a removed
+Python install, so the final run used the already-cached `python:3.12-slim`
+image, installed the pinned manifest inside an ephemeral container, and mounted
+the repository read-only. The existing PostgreSQL container was not recreated.
+The initial local verification attempt therefore did not start Django tests;
+only the successful isolated runs below are reported as test evidence.
+
+- Targeted `apps.workspace.test_api`: PASS, 21/21 in 0.747s, including the new
+  session-CSRF-before-`405` case.
+- Authentication/API Foundation regression run (`api apps.accounts`): PASS,
+  29/29, including existing session and CSRF policy coverage.
+- Final full PostgreSQL suite after every code/test change: PASS, 101/101 in
+  55.129s. This includes 72 Workspace, 19 Authentication and 10 API Foundation
+  tests; Django destroyed the test database.
+- `python -m pip check`: PASS.
+- In-memory Python syntax compile for all new/modified code and tests: PASS.
+- `python manage.py check`: PASS, zero issues.
+- `python manage.py makemigrations --check --dry-run`: PASS, no changes.
+- `python manage.py showmigrations workspace --plan`: development state remains
+  `0001` applied and `0002` unapplied.
+- Read-only PostgreSQL check after tests: zero leftover `test_%` databases.
+- `git diff --check`: PASS, with only Git's existing LF-to-CRLF conversion
+  warnings. Strict UTF-8/no-BOM/no-NUL, balanced-code-fence,
+  trailing-whitespace and secret-assignment QA: PASS for all 17 changed/new
+  source and documentation files.
+- Independent code and test review found no blocking/high/medium issue. Optional
+  non-blocking future assertions are page-size cap/default, explicit no-store
+  header, and an additional cross-tenant Workspace-list parity case.
+
+### Migration and data state
+
+- Source still contains the unchanged additive
+  `workspace/0002_profile_workspace_foundation.py`.
+- Development PostgreSQL still has only `workspace.0001_initial` applied;
+  `workspace.0002` is intentionally unapplied and Profile tables are absent.
+- Final read-only inventory confirms 3 User rows, 0 Workspace rows, no Profile
+  table and no leftover test database. Only the pre-existing PostgreSQL
+  container remains running; every Python test container was removed. No
+  development row/schema/container/volume was created, modified, deleted,
+  reset, backfilled or migrated by P1-04.
+- The API implementation is complete and verified on isolated PostgreSQL test
+  databases, but cannot be runtime-smoked against development before the
+  separately approved `0002` operational rollout.
+
+### Remaining boundaries and exact continuation
+
+- Direct ORM/bulk/raw/Admin bypasses, global User-deactivation/session purge,
+  Workspace writes/membership lifecycle, Invitation, and all downstream
+  Client/Project/Task/Review/Finance APIs remain outside this task.
+- There is no implementation blocker inside the approved P1-04 scope. The
+  active gate is Owner review of the API contract, diff and 101-test evidence.
+- Do not apply `workspace.0002` automatically. If the owner separately
+  authorizes a development rollout, first repeat read-only inventory, take the
+  required backup, apply only the existing migration, then smoke all four
+  endpoints and record the result.
+- Do not begin Workspace write/membership or Invitation work automatically.
+  After review and any operational migration approval, the next implementation
+  task must be separately scoped; Invitation still depends on account/email
+  verification.
+
+Stop at `OWNER REVIEW GATE`.
+
+---
+
+## Superseded checkpoint — 2026-10-18 — HT-RBAC-P1-03 (historical only)
 
 Repository: `D:\da\HustlyTasker`
 

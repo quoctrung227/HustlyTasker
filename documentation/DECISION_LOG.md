@@ -812,8 +812,10 @@ Consequences:
   selectors/capabilities, scoped membership-service refactors, and regression
   tests under the accepted contract. This decision does not authorize routes,
   models, migrations, data changes, or Invitation implementation.
-- The current Authentication/Health API contract is unchanged, and no new
-  `AllowAny` endpoint is proposed by default.
+- At completion of `HT-RBAC-P1-03`, the Authentication/Health API contract was
+  unchanged. The owner later authorized `HT-API-P1-04`, which added four
+  read-only tenant routes with no new `AllowAny`; this chronology does not
+  alter the accepted RBAC decision.
 - Client/Project/Finance/Audit APIs remain closed until each domain has its
   approved canonical tenant path.
 - The safe implementation order is: delegated design approval → access

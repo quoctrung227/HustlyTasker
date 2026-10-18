@@ -21,11 +21,13 @@ Source of truth cho trạng thái là source code, migration đã áp dụng và
 
 Dự án đang ở `PHASE 2.2 - API Architecture`. `HT-RBAC-DESIGN-P0-01` đã
 `COMPLETE / ACCEPTED — APPROVED BY OWNER DELEGATION`; `HT-RBAC-P1-03` Tenant
-Access Context and Scoped Service Foundation cũng đã hoàn thành và dừng tại
-Owner review gate. Nền tảng context/scoped selector và hai membership service
-đã được kiểm chứng trên PostgreSQL, nhưng không có Workspace/Invitation API,
-không có migration mới và `workspace.0002` vẫn chưa apply development database.
-Activation/recovery, business APIs, frontend và deployment vẫn chưa hoàn thành.
+Access Context and Scoped Service Foundation đã hoàn thành, sau đó Owner cho
+phép triển khai `HT-API-P1-04`. Bốn Profile/Workspace read route, DRF tenant
+permissions, scoped querysets và pagination hiện đã hoàn thành, kiểm chứng trên
+PostgreSQL và dừng tại Owner review gate. Không có write/Invitation API hay
+migration mới; `workspace.0002` vẫn chưa apply development database.
+Activation/recovery, các business API còn lại, frontend và deployment vẫn chưa
+hoàn thành.
 
 ## Nền tảng kỹ thuật
 
@@ -38,9 +40,9 @@ Activation/recovery, business APIs, frontend và deployment vẫn chưa hoàn th
 | Tenancy/ownership design | COMPLETE / ACCEPTED | Owner đã phê duyệt 11 nhóm quyết định: Profile tenant root, monthly Workspace, multi-Profile/multi-Owner, ownership và isolation target | Các chi tiết billing, public-link capabilities, retention duration, domain-specific/DRF action enforcement và detailed workflow được defer sang task tương ứng | `documentation/DECISION_LOG.md`; owner approval 2026-10-16 |
 | RBAC/access/invitation design | COMPLETE / ACCEPTED | 14 quyết định được chốt qua ủy quyền: capability matrix, compatibility roles, least-privilege ceilings, IDOR/error/operator policy và Invitation contract | Invitation implementation, reviewer role/states và downstream domain details vẫn ở task riêng | `documentation/RBAC_DESIGN.md`; `DECISION_LOG.md`; owner delegation 2026-10-17 |
 | Django Admin | PARTIAL | User, Workspace, WorkspaceMember, Task, TaskAssignment, TaskComment; Workspace Profile is read-only after mapping; WorkspaceMember is read-only; User auto-managed timestamps are readonly | Profile/ProfileMembership and 8 earlier domain models are not registered (10/16 total); current foundation adds no tenant-scoped admin authorization | `backend/apps/*/admin.py`; source review 2026-10-16 |
-| DRF/API foundation | PARTIAL | HT-API-P0-03 đã COMPLETE: DRF dùng SessionAuthentication và global `IsAuthenticated`; toàn bộ route dưới `/api/` dùng DRF; public view nằm trong allowlist explicit `AllowAny`; `/api/health/` là liveness JSON-only không auth/throttle/DB; legacy `/api/test/` đã gỡ; 10 API policy tests pass | Nền API tổng thể vẫn PARTIAL vì chưa có `/api/v1/`, error/pagination convention hoặc business route | `backend/api/views.py`; `backend/api/urls.py`; `backend/api/tests.py`; `backend/config/settings.py`; kiểm chứng Docker 2026-10-15 |
-| Authentication/RBAC | PARTIAL | Session auth giữ nguyên; verified Profile/Workspace contexts, scoped selectors, capability checks và scoped membership services đã implement | Activation/OTP/reset/logout-all, DRF tenant permission/endpoints, account deactivation/session purge và domain-wide RBAC còn thiếu | `backend/apps/accounts/`; `backend/apps/workspace/access.py`; `services.py`; `RBAC_DESIGN.md` |
-| Automated tests | PARTIAL | Final targeted `apps.workspace` 51/51 và full PostgreSQL suite 80/80 pass; gồm context-forgery/staleness, IDOR, role ceilings, duplicate concurrency, migration rehearsal, 19 Authentication và 10 API regressions | Chưa có CI; business-domain/API coverage chưa tồn tại | `backend/apps/workspace/tests.py`; `test_migrations.py`; kiểm chứng 2026-10-18 |
+| DRF/API foundation | PARTIAL | HT-API-P0-03 giữ SessionAuthentication/global `IsAuthenticated`, explicit public allowlist và health policy; HT-API-P1-04 thêm `/api/v1/` với Profile/Workspace read routes, minimal serializers, bounded pagination, stable ordering và non-enumerating tenant errors | Nền API tổng thể vẫn PARTIAL: chưa có project-wide shared error/envelope contract ngoài read slice này và chưa có write hay downstream business routes | `backend/api/`; `backend/apps/workspace/{views,urls,serializers,permissions,test_api}.py`; `API_DOCUMENTATION.md`; kiểm chứng PostgreSQL 2026-10-18 |
+| Authentication/RBAC | PARTIAL | Session auth giữ nguyên; verified Profile/Workspace contexts, scoped selectors, capability checks, scoped membership services và DRF tenant read permissions/endpoints đã implement | Activation/OTP/reset/logout-all, account deactivation/session purge, write permissions và domain-wide RBAC còn thiếu | `backend/apps/accounts/`; `backend/apps/workspace/access.py`; `permissions.py`; `views.py`; `services.py`; `RBAC_DESIGN.md` |
+| Automated tests | PARTIAL | Targeted read API 21/21, Authentication/API Foundation 29/29 và final full PostgreSQL suite 101/101 pass; bao phủ session/CSRF-before-405, tenant roles, IDOR, inactive/revoked/stale context, pagination, no-write và prior migration/service concurrency regressions | Chưa có CI; write/Invitation và downstream business-domain API coverage chưa tồn tại | `backend/apps/workspace/test_api.py`; `tests.py`; `test_migrations.py`; `backend/api/tests.py`; kiểm chứng 2026-10-18 |
 | Frontend | NOT STARTED | Chỉ có định hướng React/Next.js | Không có source hoặc package manifest; chưa chốt React SPA hay Next.js | `documentation/TECH_STACK_DECISION.md` |
 | Docker/deployment/CI | PARTIAL | PostgreSQL Compose dùng environment bắt buộc, loopback bind mặc định và giữ named volume; setup local đã được tài liệu hóa | Chưa có backend image, active deploy config hoặc CI workflow | `docker/docker-compose.yml`; `README.md` |
 
@@ -49,7 +51,7 @@ Activation/recovery, business APIs, frontend và deployment vẫn chưa hoàn th
 | ID | Module | Trạng thái | Đã triển khai | Còn thiếu / vấn đề |
 |---|---|---|---|---|
 | F01 | Authentication | PARTIAL | Custom `User`; session register/login/logout/me; CSRF; password validation/hash; inactive block; scoped throttle; 19 tests | Activation/OTP, password reset, logout-all và production shared-cache/proxy enforcement |
-| F02 | Profile & Workspace | PARTIAL | Profile/ProfileMembership foundation; verified Profile/Workspace contexts; scoped selectors; audited tenant-scoped membership services; approved two-level role compatibility and ceilings | `0002` chưa apply development; chưa soft delete, DRF Workspace API/permissions hoặc domain-wide RBAC |
+| F02 | Profile & Workspace | PARTIAL | Profile/ProfileMembership foundation; verified contexts/scoped selectors; audited tenant-scoped membership services; approved role ceilings; four read-only Profile/Workspace routes with DRF tenant permissions | `0002` chưa apply development; chưa soft delete, write/lifecycle/membership API hoặc domain-wide RBAC |
 | F03 | Membership Invitation | PARTIAL | Direct-add requires active same-Profile membership; invitation identity, role ceiling, TTL 7 days, rate limits and minimum 12-month terminal metadata retention are approved | Chưa có verified-email onboarding dependency, model, migration, delivery, service hoặc API implementation |
 | F04 | Task Lifecycle | PARTIAL | Task, assignment, status/priority, admin CRUD | Transition service, invariants, API, RBAC và tests |
 | F05 | Marketplace | NOT STARTED | Chưa có implementation | Publish/claim rules, concurrency guard, API và tests |
@@ -75,9 +77,11 @@ reviewer cụ thể và trạng thái Task/Review/payroll trigger; account verif
 và full deactivation/session-revocation flow; rejoin/history semantics;
 Invitation delivery/onboarding implementation; Invoice numbering/billing;
 Client Portal/Guest Review exact capabilities/default expiry; retention legal
-hold/purge; và API response envelope/versioning. Policy migration vẫn là kiểm
-kê từng môi trường, không tự gán tenant cho dữ liệu không xác định.
+hold/purge; và project-wide response/error convention ngoài contract read-only
+hiện có. Policy migration vẫn là kiểm kê từng môi trường, không tự gán tenant
+cho dữ liệu không xác định.
 
-`HT-RBAC-P1-03` dừng tại Owner review trước khi áp dụng `workspace.0002`, mở
-Workspace/Invitation API hoặc chuyển sang task tiếp theo. Xem
+`HT-API-P1-04` đã hoàn thành scope read-only và dừng tại Owner review. Không áp
+dụng `workspace.0002`, mở Workspace write/membership/Invitation API hoặc chuyển
+sang task tiếp theo nếu chưa có phê duyệt riêng. Xem
 `documentation/RBAC_DESIGN.md` và `documentation/DECISION_LOG.md`.

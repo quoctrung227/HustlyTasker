@@ -7,11 +7,12 @@ Status: `COMPLETE — APPROVED BY OWNER DELEGATION`
 Date: 2026-10-18
 
 The owner delegated the remaining RBAC decisions to the Technical Advisor on
-2026-10-17. The approved contract in this document authorizes only
-`HT-RBAC-P1-03` Tenant Access Context and Scoped Service Foundation. It does
-not authorize a new API, model, migration, data change, Invitation flow, or
-development-database migration. The runtime API contract remains limited to
-Authentication and Health until a later task is approved and implemented.
+2026-10-17. That approval first authorized `HT-RBAC-P1-03` Tenant Access
+Context and Scoped Service Foundation. The owner subsequently authorized
+`HT-API-P1-04`, which now implements only four read-only Profile/Workspace
+routes under `/api/v1/` using this contract. Neither authorization permits
+write/membership/Invitation APIs, a model or migration change, a data change,
+or applying the existing migration to the development database.
 
 ## 1. Evidence and decision labels
 
@@ -127,10 +128,11 @@ implementation completed on 2026-10-18.
   Unmapped Workspaces must never be exposed by a tenant API.
 - **[CURRENT]** `Workspace.owner` is a transitional protected User FK and is
   not authorization proof.
-- **[CURRENT]** Session authentication and global DRF `IsAuthenticated` still
-  prove identity only. `apps/workspace/access.py` now provides Profile/
-  Workspace scoped selectors and verified capability contexts, but there is no
-  Profile/Workspace API, DRF tenant permission class, or invitation model/API.
+- **[CURRENT — HT-API-P1-04]** Session authentication and global DRF
+  `IsAuthenticated` establish identity. `apps/workspace/access.py` supplies
+  the authorization facts, while `permissions.py` and four read-only
+  Profile/Workspace views adapt those facts to DRF with scoped querysets and
+  non-enumerating errors. There is still no write/membership or Invitation API.
 - **[CURRENT]** Client, Invoice/Payment, and AuditLog do not yet have a safe
   canonical tenant path; Project does not exist. Those APIs must stay closed.
 - **[CURRENT — HT-RBAC-P1-03]** `update_profile_membership()` now establishes
@@ -293,7 +295,9 @@ Workspace and cannot create, update, delete, claim, comment, upload, or manage
 members. Future responses must omit finance/payroll, member email/PII, secrets,
 integration fields, and Profile-wide Client data unless a later contract says
 otherwise. Export, download, and every unsafe HTTP method remain denied until
-explicitly reviewed. `HT-RBAC-P1-03` opens no Viewer endpoint.
+explicitly reviewed. `HT-RBAC-P1-03` itself opened no endpoint; the later
+`HT-API-P1-04` slice now lets an assigned Viewer read only Workspace fields
+`id`, `profile_id`, `name`, `description`, `created_at`, and `updated_at`.
 
 ### 4.2 Important non-inheritance rules
 
@@ -744,32 +748,44 @@ record raw token, token hash, or unmasked recipient email in general logs.
 Current AuditLog lacks a canonical tenant FK; tenant-aware audit schema is a
 dependency before exposing tenant audit history.
 
-## 8. Planned API surface — not implemented
+## 8. API surface — four reads implemented; remaining routes proposed
 
-All routes below are proposals under global SessionAuthentication and
-`IsAuthenticated`; every mutation requires CSRF. No route receives `AllowAny`
-without a separate security review.
+All routes use global SessionAuthentication and `IsAuthenticated`; no tenant
+route receives `AllowAny`. `HT-API-P1-04` implements only the four read routes
+marked current below. Every proposed mutation remains unavailable and will
+require CSRF plus a separate implementation/review gate.
 
 ### 8.1 Profile, Workspace, and membership
 
+Current read-only routes:
+
 ```text
-GET/POST   /api/v1/profiles/
-GET/PATCH  /api/v1/profiles/{profile_id}/
+GET /api/v1/profiles/
+GET /api/v1/profiles/{profile_id}/
+GET /api/v1/profiles/{profile_id}/workspaces/
+GET /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/
+```
+
+Proposed and not implemented:
+
+```text
+POST       /api/v1/profiles/
+PATCH      /api/v1/profiles/{profile_id}/
 GET        /api/v1/profiles/{profile_id}/members/
 PATCH      /api/v1/profiles/{profile_id}/members/{membership_id}/
 
-GET/POST   /api/v1/profiles/{profile_id}/workspaces/
-GET/PATCH  /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/
+POST       /api/v1/profiles/{profile_id}/workspaces/
+PATCH      /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/
 GET/POST   /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/
 PATCH/DELETE
-            /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/{membership_id}/
+           /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/{membership_id}/
 ```
 
 Delete/restore endpoints remain blocked until soft-delete and retention
 authority are approved. The final method set must be narrowed to the approved
 capability matrix.
 
-Proposed validation contract:
+Proposed future write-validation contract:
 
 - Profile creation accepts only approved mutable fields such as `{name}`;
   creator/initial Owner and timestamps are server-set through the bootstrap
@@ -926,16 +942,18 @@ and exact error-envelope details remain deferred.
    mapping, tenant non-disclosure rule, account-lifecycle target, and invitation
    ceilings/TTL/throttles/retention listed in section 2.4.
 2. Repeat target-environment read-only inventory, apply backup policy, then
-   safely apply existing `workspace.0002` before exercising Workspace APIs in
-   development. Never synthesize mappings for unknown legacy rows.
+   safely apply existing `workspace.0002` before exercising Workspace APIs on
+   development. Disposable test databases may apply it for isolated tests.
+   Never synthesize mappings for unknown legacy rows.
 3. **Completed 2026-10-18:** implement verified access contexts,
    tenant-scoped Profile/Workspace selectors, revalidated capability primitives,
    and stable domain exception mapping without opening CRUD.
 4. **Completed 2026-10-18:** refactor membership services to
    authorize/scoped-resolve before target lookup and add IDOR, role-ceiling,
    stale/forged-context, service, duplicate, and concurrency tests.
-5. Add minimal Profile/Workspace read endpoints, then approved membership and
-   Workspace lifecycle mutations under `/api/v1/`.
+5. **Read slice completed 2026-10-18:** add four minimal Profile/Workspace read
+   endpoints with scoped DRF permissions under `/api/v1/`. Membership and
+   Workspace lifecycle mutations remain a later separately authorized task.
 6. After verified-email/account-binding dependencies and the remaining
    Invitation implementation details are reviewed, add only a new additive
    migration (expected `workspace/0003+`), migration rehearsals, locked service,
@@ -946,22 +964,22 @@ and exact error-envelope details remain deferred.
 9. Add Client Portal and Guest Review principals only after their independent
    capability/expiry contracts are approved.
 
-### 10.1 Acceptance gates for future implementation slices
+### 10.1 Acceptance gates for implementation slices
 
 | Slice | Acceptance criteria before the slice can close | Minimum verification |
 |---|---|---|
 | Access context and selectors | Active User + active ProfileMembership resolved from URL parent; Profile Member Workspace scope is explicit; Profile-null rows and cross-Profile rows are absent from every list/detail/count/search path | Unit tests for context predicates; PostgreSQL API/query tests for nested URL tampering, real-vs-random UUID, pagination/filter leakage, inactive memberships, and Profile-null rows |
 | Capability policy | Only owner-approved matrix actions are encoded; inheritance is same-Profile only; no enum, staff flag, selected Profile, or transitional owner FK grants an unstated capability | Parameterized role/action matrix tests; every deny case tested; Client/Guest rejected from internal endpoints |
 | Membership services | Parent scope established before target lookup; mutation revalidates under lock; last-owner, same-tenant, duplicate, and audit invariants are atomic; no supported direct/bulk bypass | Service tests for cross-tenant IDs and uniform domain errors; concurrent demote/remove/direct-add tests; rollback/audit tests |
-| Minimal Profile/Workspace API | Nested/scoped queryset used for every object; CSRF on mutation; no new `AllowAny`; response fields follow approved role visibility; soft/hard delete remains absent unless separately approved | API permission/IDOR/CSRF tests plus all Authentication/API Foundation regressions |
+| Minimal Profile/Workspace read API — completed | Nested/scoped queryset used for every object; no new `AllowAny`; response fields follow approved role visibility; only safe read methods are exposed; unsupported unsafe methods still pass through session-CSRF enforcement; soft/hard delete remains absent | 21 permission/IDOR/API contract tests plus 29 Authentication/API Foundation regressions and full 101-test PostgreSQL suite |
 | Invitation schema/migration | Additive migration only; token digest/status/role constraints and pending uniqueness match approved policy; existing rows are preserved; no plaintext token field | Migration consistency plus empty/populated PostgreSQL forward tests and constraint tests |
 | Invitation service | Authorized sender/recipient binding; expiry/replay/reinvite semantics; exactly one active membership and one terminal winner; Workspace membership is never implicit; audit is atomic | Token secrecy/log capture, duplicate/case variants, wrong-user/inactive/expired/revoked/replay, concurrent accept/accept and accept/revoke tests |
 | Invitation API/delivery | Authenticated session and CSRF; non-enumerating failures; scoped manager lists; no token/hash serialization; send only after commit; approved throttle/cache contract | API contract, CSRF, throttle, cache/header, delivery-failure, and cross-Profile negative tests |
 | Business-domain onboarding | Domain has a canonical non-null/reconciled tenant path and same-tenant relationship service before route exposure | Domain migration rehearsal, cross-tenant relationship tests, API matrix tests, and full PostgreSQL regression |
 
-No slice may claim a pass from this design document. These gates become
-executable acceptance criteria only after the corresponding implementation is
-authorized and the listed tests are actually run.
+No slice may claim a pass from design text alone. A completed slice needs
+current implementation and actual test evidence, as recorded below; all
+unimplemented slices retain their later authorization and verification gates.
 
 ### 10.2 HT-RBAC-P1-03 implementation evidence — 2026-10-18
 
@@ -977,6 +995,24 @@ authorized and the listed tests are actually run.
   changed. `workspace.0002` remains unapplied to development.
 - Direct ORM/bulk/raw/Admin writes and the unimplemented global User
   deactivation/session-revocation flow remain explicit boundaries.
+
+### 10.3 HT-API-P1-04 implementation evidence — 2026-10-18
+
+- Four current routes provide Profile list/detail and nested Workspace
+  list/detail under `/api/v1/`; all use SessionAuthentication and explicit
+  tenant permissions with no `AllowAny`.
+- Minimal serializers, tenant-scoped querysets, stable bounded pagination,
+  generic malformed/unknown/out-of-scope `404`, and GET/HEAD/OPTIONS-only
+  behavior are implemented. A late membership-revocation race maps to the same
+  generic response instead of escaping as a server error.
+- Targeted read API tests: PASS, 21/21, including CSRF-before-`405` behavior.
+  Authentication/API Foundation regressions: PASS, 29/29. Final full
+  PostgreSQL suite: PASS, 101/101.
+- `pip check`, Python compile, Django system check, and
+  `makemigrations --check --dry-run`: PASS.
+- No model, migration, authentication mechanism, membership-service rule, or
+  development data changed. Development still has only `workspace.0001`;
+  `workspace.0002` remains a separately controlled operational rollout.
 
 ## 11. Delegated decisions resolved and downstream review gates
 
