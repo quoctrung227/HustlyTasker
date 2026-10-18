@@ -1,6 +1,6 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-10-17
+Last updated: 2026-10-18
 
 ## Giai đoạn hiện tại
 
@@ -8,10 +8,11 @@ Last updated: 2026-10-17
 
 Nguyên tắc thực hiện: hoàn thành P0/P1 và test gate trước khi mở business API; không tạo frontend, migration nghiệp vụ lớn hoặc thay đổi business rule khi contract chưa được chốt.
 
-`HT-DATA-P2-01` đã được owner phê duyệt ngày 2026-10-16 và
-`PROFILE/WORKSPACE SCHEMA FOUNDATION` đã qua regression gate. Task hiện tại là
-`HT-RBAC-DESIGN-P0-01`: deliverable thiết kế đã hoàn tất và đang dừng ở
-`DESIGN READY — PENDING OWNER APPROVAL` trước RBAC/Workspace/Invitation API.
+`HT-DATA-P2-01` và `PROFILE/WORKSPACE SCHEMA FOUNDATION` đã hoàn tất.
+`HT-RBAC-DESIGN-P0-01` đã được chốt qua ủy quyền của Owner. Slice
+`HT-RBAC-P1-03 - Tenant Access Context and Scoped Service Foundation` đã hoàn
+thành và đang dừng tại `OWNER REVIEW GATE`; chưa mở Workspace/Invitation API và
+chưa áp dụng `workspace.0002` lên development database.
 
 ## P0 - An toàn và khả năng kiểm chứng
 
@@ -81,44 +82,54 @@ Nguyên tắc thực hiện: hoàn thành P0/P1 và test gate trước khi mở 
 - **Kiểm thử:** activation/reset success-failure-expiry-replay, neutral response, session revocation và abuse controls.
 - **Rủi ro:** tạo user inactive trước khi có đường activate sẽ khóa luồng onboarding; không triển khai rời rạc.
 
-### HT-RBAC-DESIGN-P0-01 - Capability, tenant scope và invitation contract — DESIGN READY / PENDING OWNER APPROVAL
+### HT-RBAC-DESIGN-P0-01 - Capability, tenant scope và invitation contract — COMPLETE / ACCEPTED BY OWNER DELEGATION
 
 - **Mục tiêu:** chốt permission contract trước khi một endpoint tenant nào được mở.
 - **Phạm vi:** action-level capability matrix hai tầng; request/query/service
   boundary; IDOR/error contract; ORM/Admin/bulk bypass controls; Profile
   Invitation lifecycle; planned API; negative/concurrency tests; dependency
   order. Chi tiết tại `documentation/RBAC_DESIGN.md`.
-- **Ảnh hưởng:** chỉ tài liệu thiết kế; không thay model, migration, API,
-  authentication, dữ liệu hoặc frontend.
+- **Ảnh hưởng:** chốt contract cho access context, role compatibility,
+  invitation và operator boundary; không tự triển khai Invitation/API.
 - **Dependencies:** 11 quyết định của HT-DATA-P2-01 và schema foundation đã
   kiểm chứng; source/reference/PostgreSQL inventory đã được đối chiếu.
 - **Acceptance evidence:** matrix phân biệt approved/proposed/open; Profile
   scope và same-tenant rules đầy đủ; invitation token hash/state/concurrency
-  contract; planned routes; isolation/negative tests; implementation order.
+  contract; planned routes; isolation/negative tests; implementation order;
+  bảng đối chiếu đủ 11 quyết định đã duyệt. Audit ban đầu ghi nhận nhóm 4 có
+  xung đột nhãn và nhóm 6–9/11 thiếu nội dung; tài liệu đã sửa để cả 11 nhóm
+  đều `MATCH` mà không yêu cầu owner phê duyệt lại.
 - **Phát hiện bắt buộc trước implementation:** refactor membership update để
   scope membership trước lookup, và Workspace direct-add để scope cả Workspace
   lẫn target member/User; không expose Client/Finance/Audit khi chưa có tenant
   path; không dùng Workspace owner FK hay selected Profile làm quyền.
-- **Review gate:** owner phải chốt role vocabulary, Admin/Viewer authority,
-  Task visibility, Profile-creation bootstrap, leave/rejoin/invitation
-  lifecycle, IDOR/error và operator/Admin policy. Không bắt đầu implementation
-  trong task này.
+- **Kết quả:** 14 quyết định chi tiết được chốt với trạng thái
+  `APPROVED BY OWNER DELEGATION`; role compatibility, least-privilege ceilings,
+  non-enumeration, Invitation TTL/rate/retention và platform Admin boundary đã
+  được ghi trong `RBAC_DESIGN.md`/`DECISION_LOG.md`. Reviewer role/states và
+  các domain downstream vẫn dành cho task riêng.
 
-### HT-RBAC-P1-03 - Workspace RBAC và object scoping
+### HT-RBAC-P1-03 - Tenant Access Context and Scoped Service Foundation — COMPLETE / OWNER REVIEW GATE
 
-- **Mục tiêu:** thực thi role mapping hai tầng Profile/Workspace đã được owner
-  phê duyệt, chống cross-tenant/IDOR.
-- **Phạm vi:** permission classes, queryset scoping, membership validators và tests.
-- **Ảnh hưởng:** mọi business API.
-- **Dependencies:** HT-DATA-P2-01 đã được phê duyệt; Profile/Workspace schema
-  foundation đã kiểm chứng; owner phê duyệt `HT-RBAC-DESIGN-P0-01`; apply
-  `workspace.0002` an toàn trước khi chạy Workspace API trên development;
-  quyết định scheduling với HT-AUTH-P1-02.
-- **Acceptance criteria:** mọi object có tenant path; approved read-only role
-  (nếu được giữ) không mutate; non-member không đọc;
-  assignee/commenter/uploader/reviewer phải hợp lệ trong workspace.
-- **Kiểm thử:** permission matrix và cross-workspace negative tests.
-- **Rủi ro:** schema Client/Finance hiện chưa có tenant path nên chưa thể áp dụng trọn vẹn cho các miền đó.
+- **Mục tiêu:** tạo boundary dùng lại được để resolve Profile/Workspace từ User
+  và membership thực tế, chống cross-tenant/IDOR trước khi mở business API.
+- **Phạm vi đã hoàn thành:** immutable verified contexts; scoped Profile và
+  Workspace selectors; read/edit/member-management capabilities; refactor
+  `update_profile_membership()` và `add_workspace_member()`; role ceilings,
+  duplicate/concurrency handling, audit atomicity và security regression tests.
+- **Compatibility:** `WorkspaceMember.ADMIN` = Workspace Admin,
+  `MEMBER` = Editor, `VIEWER` = read-only Viewer; legacy `OWNER` fail closed và
+  không được cấp mới. Không đổi enum hay schema.
+- **Kiểm thử:** final targeted Workspace 51/51 và full PostgreSQL 80/80 PASS;
+  system check, dependency check và migration drift check PASS ngày 2026-10-18.
+- **Không thuộc scope:** DRF permission classes/endpoints, Workspace API,
+  Invitation model/API, Client/Finance/Audit selectors, Task/Review workflow,
+  User deactivation/session-revocation lifecycle và áp dụng migration `0002`.
+- **Rủi ro còn lại:** direct ORM/bulk/raw/Admin có thể bypass services; các
+  domain chưa có tenant path chưa thể được expose an toàn.
+- **Review gate / bước kế tiếp:** owner review foundation hiện tại. Sau khi được
+  duyệt, mở một task riêng cho Profile/Workspace read API và DRF permission
+  integration tối thiểu; Invitation vẫn để sau account/email verification.
 
 ### HT-API-P1-04 - API structure, serializers và versioning
 
@@ -161,9 +172,11 @@ Nguyên tắc thực hiện: hoàn thành P0/P1 và test gate trước khi mở 
 
 - **Mục tiêu:** hoàn tất F02/F03 sau tenancy decision.
 - **Phạm vi:** workspace CRUD có scope, invitation lifecycle và tests.
-- **Dependencies:** schema foundation hoàn tất regression và được migrate an
-  toàn ở môi trường phát triển; owner duyệt HT-RBAC-DESIGN-P0-01; tenant/RBAC
-  foundation; invitation detail contract được chốt.
+- **Dependencies:** `HT-RBAC-DESIGN-P0-01` đã được chấp thuận và
+  `HT-RBAC-P1-03` đã hoàn tất; owner duyệt review gate hiện tại; schema
+  foundation được áp dụng có kiểm soát ở môi trường đích sau inventory/backup.
+  Trước phần Invitation API còn cần account/email verification và identity
+  binding dù contract TTL/rate/retention đã được chốt.
 - **Acceptance criteria:** invitation expiry/accept/decline/revoke an toàn; owner/admin policy rõ; concurrency không tạo membership trùng.
 - **Kiểm thử:** role matrix, token expiry, duplicate/concurrent accept.
 - **Rủi ro:** invitation token phải hash-at-rest và không log.

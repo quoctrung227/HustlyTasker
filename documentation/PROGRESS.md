@@ -1,8 +1,93 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-10-17
+## Current Snapshot - 2026-10-18
 
-This snapshot is the current source of truth. Older blocks below are retained as development history and may describe earlier phases.
+This snapshot is the current source of truth. The 2026-10-17 snapshot below is
+retained as superseded history.
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture`
+
+### HT-RBAC-P1-03 - COMPLETE / OWNER REVIEW GATE
+
+The owner delegated the remaining RBAC design decisions to the Technical
+Advisor. `HT-RBAC-DESIGN-P0-01` is therefore `COMPLETE / ACCEPTED - APPROVED BY
+OWNER DELEGATION`; its 14 delegated decisions are recorded in
+`RBAC_DESIGN.md` and `DECISION_LOG.md`.
+
+Implemented in this task:
+
+- Added `backend/apps/workspace/access.py` with immutable, resolver-produced
+  Profile/Workspace contexts, tenant-scoped Profile/Workspace selectors, and
+  fail-closed read/edit/member-management capability checks.
+- Context resolution requires a current active User and active
+  ProfileMembership. Profile Owner/Admin see mapped Workspaces in their own
+  Profile; ordinary Profile Members see only Workspaces with an effective
+  explicit WorkspaceMember role.
+- Kept the existing schema vocabulary with the approved compatibility map:
+  WorkspaceMember `ADMIN` = Workspace Admin, `MEMBER` = Editor, `VIEWER` =
+  read-only Viewer. Legacy `OWNER` is not assignable and grants no capability
+  through the new boundary.
+- Hardened contexts against direct construction, `dataclasses.replace()` role
+  escalation, stale account/Profile membership, and stale Workspace role.
+- Refactored `update_profile_membership()` to authorize Profile scope before
+  resolving the target. Profile Admin may manage current ordinary Members only;
+  Owner changes and the last-active-owner invariant remain locked and audited.
+- Refactored `add_workspace_member()` to accept a scoped
+  `target_profile_membership_id`, revalidate authority under locks, require an
+  active same-Profile membership and active User, enforce role ceilings, and
+  translate duplicate/concurrent adds to a stable domain conflict. Audit is
+  written only after a successful mutation.
+- No API route, authentication mechanism, model, schema, or migration changed.
+  Workspace/Invitation APIs remain unopened.
+
+Verification on PostgreSQL 16 using Django-created disposable test databases:
+
+- Local Python 3.12 environment synchronized to Django 6.1.2 and DRF 3.18.3;
+  `pip check`: PASS.
+- Python compile check for access/services/tests: PASS.
+- `manage.py check`: PASS, no issues.
+- `manage.py makemigrations --check --dry-run`: PASS, no changes detected.
+- Final targeted `apps.workspace` suite after independent-review hardening:
+  PASS, 51/51.
+- Final full suite: PASS, 80/80, including all 19 Authentication and 10 API
+  Foundation regressions.
+- The earlier pre-hardening runs also passed 49/49 targeted and 78/78 full;
+  they are not used as the final acceptance evidence.
+- Read-only development inventory reconfirmed 3 Users and 0 business rows.
+  Only `workspace.0001_initial` is applied; `workspace.0002` remains unapplied.
+- Post-test read-only verification found no leftover `test_hustlytasker_db` and
+  the Profile table remains absent from development, as expected before `0002`.
+- `git diff --check`: PASS (only existing LF-to-CRLF conversion warnings).
+  Strict UTF-8/no-NUL/code-fence QA and secret-assignment scan: PASS for all
+  changed code/documentation files.
+
+Known boundaries:
+
+- Direct ORM, bulk, raw-SQL, or unsafe Django Admin writes can bypass service
+  invariants. Tenant managers must use reviewed services; Django Admin remains
+  a platform-superuser surface until a tenant-scoped Admin exists.
+- Direct `User.is_active` mutation still lacks the approved cross-Profile
+  last-owner/session-revocation lifecycle service. This task rechecks inactive
+  accounts but does not implement global account deactivation or session purge.
+- There are no Client, Finance, Audit, Task, Review, Invitation, or Workspace
+  API selectors yet. Concrete reviewer role/workflow states remain deferred.
+- `workspace.0002` is intentionally not applied to development. No development
+  row was created, changed, deleted, or backfilled.
+
+### Review Gate
+
+Stop at the `HT-RBAC-P1-03` owner review gate. Do not apply `workspace.0002`,
+open Workspace/Invitation APIs, or begin the next task in this worktree without
+owner review.
+
+---
+
+## Previous Snapshot - 2026-10-17 (superseded)
+
+This superseded snapshot is retained only as development history and may
+describe earlier phases. Use the current 2026-10-18 snapshot above.
 
 ### Current Phase
 
@@ -10,10 +95,9 @@ This snapshot is the current source of truth. Older blocks below are retained as
 
 ### Audit Result
 
-- Git branch `main` and the local `origin/main` ref both point to `6dafc81`.
-  The worktree is intentionally dirty with the uncommitted OPS/SEC/AUTH/API
-  and documentation deliverables inventoried in `HANDOVER.md`; all are being
-  preserved.
+- Git branch `main` and the local `origin/main` ref both point to `5e89971`.
+  The current worktree contains only the nine modified documentation files for
+  this reconciliation, as inventoried in `HANDOVER.md`; all are being preserved.
 - Read-only PostgreSQL development inventory, reconfirmed on 2026-10-17, found
   0 business rows and 3 User
   rows. It contains the initial migrations; the new Workspace `0002` has not
@@ -30,8 +114,10 @@ This snapshot is the current source of truth. Older blocks below are retained as
 - `HT-RBAC-DESIGN-P0-01` has completed its design deliverables and is
   `DESIGN READY — PENDING OWNER APPROVAL`. The capability matrix,
   tenant-scoped query/service boundary, invitation contract, proposed API,
-  isolation tests, and dependency order are recorded in `RBAC_DESIGN.md`.
-  No API, model, migration, permission code, or database row changed.
+  isolation tests, dependency order, and 11-group reconciliation table are
+  recorded in `RBAC_DESIGN.md`. All 11 approved groups now match; only seven
+  grouped decisions remain for owner review. No API, model, migration,
+  permission code, or database row changed.
 - Root `AGENTS.md` now defines mandatory documentation/checkpoint/handover
   rules. `documentation/HANDOVER.md` is the continuation entry point.
 - Frontend and production deployment/CI are not started.
@@ -268,9 +354,10 @@ Known service boundary, not hidden as a database guarantee:
   Profile-first locking, including concurrent legacy mapping and manager-role
   transitions. Bulk/raw writes can bypass this boundary.
 - Direct `User.is_active` changes and direct ProfileMembership ORM mutation can
-  still bypass the usable-last-Owner service invariant. No account lifecycle
-  change was made in this task; this must be closed before a global invariant
-  is claimed.
+  still bypass the foundation service's stronger effective-Owner check. The
+  approved invariant is at least one active Owner membership; account activity,
+  deletion, and session mechanics remain open. No account lifecycle change was
+  made in this task.
 - Inactive Profile membership does not erase WorkspaceMember history. Future
   permission code must check both layers, and invitation/rejoin policy must
   decide whether old Workspace access is restored.
@@ -300,12 +387,19 @@ Completed as design evidence:
   binding, CSRF, hashed one-time token, terminal states, concurrency/audit
   rules, planned routes, and negative tests. Workspace direct-add remains a
   separate operation available only after active Profile membership.
+- Reconciled the full design against all 11 approved decision groups. Initial
+  findings: groups 1–3/5/10 `MATCH`; group 4 `CONFLICT` because “usable Owner”
+  had been over-labeled as approved; groups 6–9/11 `NOT DOCUMENTED` in part or
+  whole. Corrected the label and added every missing approved boundary; all 11
+  now read as `MATCH`. The review gate is reduced from 16 granular questions
+  to seven genuinely open decision groups.
 - Reconfirmed development PostgreSQL read-only: only `workspace.0001` is
   applied; 3 Users and 0 business rows; `workspace.0002` was not applied and
   Docker was returned to its prior stopped state.
-- Documentation QA: required design sections/status labels PASS; UTF-8/no-NUL
-  check PASS for all affected documentation; secret-pattern scan found no
-  matches; `git diff --check` PASS with only existing LF→CRLF warnings.
+- Documentation QA after reconciliation: required 11-row comparison and seven
+  open-group structure PASS; UTF-8/no-NUL/code-fence checks PASS for all nine
+  affected files; secret-pattern scan found no matches; `git diff --check`
+  PASS with only line-ending conversion warnings.
 - No backend implementation test was rerun for this documentation-only task.
   The local venv points to a missing Python 3.12 installation and neither
   `py` nor `python` is installed on PATH. No replacement environment or new
@@ -328,30 +422,29 @@ Task workflow, or another business API. Do not apply `0002` without a separate
 approved operational step, repeated inventory, and backup policy appropriate
 to the target environment.
 
-### Decisions Required Before Business APIs
+### Decisions Required Before RBAC Implementation
 
-- Authentication activation method (email link or OTP); session is the selected foundation contract for the current same-origin architecture.
-- Workspace role vocabulary: keep Workspace Admin; deprecate Workspace Owner;
-  enable/disable Viewer and approve its exact read/download scope.
-- Profile Admin authority over other Admins, Workspace membership management,
-  and soft-delete/restore operations.
-- Profile creation self-service eligibility/limits and the initial-Owner
-  bootstrap; voluntary leave/rejoin and historical Workspace access behavior.
-- Task visibility for Members and whether inherited Profile managers need an
-  explicit Workspace membership for contributor actions.
-- Invitation role ceiling, registered/unregistered recipient onboarding,
-  existing-account email verification, TTL/reinvite/throttle, issuer revalidation,
-  optional Workspace orchestration, and invitation retention.
-- Proposed non-enumerating `404`/`403`/generic `400` behavior, `409` conflict
-  envelope, platform-operator/Admin bypass, and User deactivate/delete/session
-  policy protecting the last usable Owner.
-- Invoice numbering and detailed billing workflow.
-- Client Portal/Guest Review exact fields/actions, account-linking flow and
-  default expiry/rotation details.
-- Retention duration, legal hold/purge schedule and hard-delete authority.
-- Canonical Task/Review states, approver permissions and payroll trigger.
-- Explicit mapping for any existing row that a later environment inventory
-  cannot map safely; unknown rows remain blockers rather than guessed tenants.
+The 11 approved architecture groups are reconciled and must not be reviewed
+again. Owner review is limited to these seven groups:
+
+1. Workspace role vocabulary and action ceiling.
+2. Profile Admin and Profile/Workspace lifecycle authority.
+3. Workspace Member Task visibility and contributor-membership requirement.
+4. Profile/account/membership lifecycle: self-service eligibility/limits,
+   leave/rejoin/history, and deactivate/delete/session mechanics. Atomic
+   initial-Owner creation already exists and is not an open decision.
+5. Invitation identity/onboarding and role/management ceiling, including
+   whether an invitation can ever request `OWNER` (proposal: no).
+6. Invitation TTL/reinvite/throttle/delivery, inviter revalidation, record/PII
+   retention, and optional combined UX that preserves acceptance then direct-add.
+7. Non-enumerating error/`409` and platform-operator/Django Admin policy.
+
+Other genuine decisions remain scoped to their later tasks: authentication
+activation method; Invoice numbering/billing; Client Portal/Guest Review exact
+capabilities/account linking/default expiry; retention/legal hold/purge; and
+exact Task/Review states, approvers, and payroll trigger. A tenant row that
+cannot be mapped becomes an evidence-specific migration blocker if encountered;
+the already-approved rule is not to guess.
 
 ---
 

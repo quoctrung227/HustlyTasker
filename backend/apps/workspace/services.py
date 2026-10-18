@@ -1,13 +1,28 @@
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.audit.models import AuditLog
 
+from .access import (
+    TenantAccessNotFound,
+    can_manage_workspace_members,
+    resolve_profile_access_context,
+    resolve_workspace_access_context,
+)
 from .models import Profile, ProfileMembership, Workspace, WorkspaceMember
 
 
 class LastActiveProfileOwnerError(ValidationError):
     pass
+
+
+class WorkspaceMembershipConflict(ValidationError):
+    default_message = (
+        "A Workspace membership already exists for this Profile member."
+    )
+
+    def __init__(self):
+        super().__init__({"target_profile_membership_id": self.default_message})
 
 
 def _write_membership_audit(*, actor, membership, action, before, after):
@@ -68,38 +83,47 @@ def create_profile_with_owner(*, name, owner):
 @transaction.atomic
 def update_profile_membership(
     *,
-    membership_id,
     actor,
+    profile_id,
+    membership_id,
     role=None,
     is_active=None,
 ):
-    membership_reference = ProfileMembership.objects.only(
-        "profile_id"
-    ).get(id=membership_id)
+    profile_context = resolve_profile_access_context(actor, profile_id)
 
-    Profile.objects.select_for_update().get(
-        id=membership_reference.profile_id
-    )
-
-    membership = ProfileMembership.objects.select_for_update().select_related(
-        "user"
-    ).get(id=membership_id)
+    Profile.objects.select_for_update().filter(
+        id=profile_context.profile_id
+    ).get()
 
     actor_membership = ProfileMembership.objects.select_for_update().filter(
-        profile_id=membership.profile_id,
-        user_id=actor.id,
+        id=profile_context.membership_id,
+        profile_id=profile_context.profile_id,
+        user_id=profile_context.user_id,
         user__is_active=True,
         is_active=True,
-        role__in=(
-            ProfileMembership.Role.OWNER,
-            ProfileMembership.Role.ADMIN,
-        ),
     ).first()
 
     if actor_membership is None:
-        raise PermissionDenied(
-            "An active Profile Owner or Admin is required."
-        )
+        raise TenantAccessNotFound()
+
+    if actor_membership.role not in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    ):
+        raise PermissionDenied("Profile membership management is not allowed.")
+
+    try:
+        membership = ProfileMembership.objects.select_for_update().select_related(
+            "user"
+        ).filter(
+            id=membership_id,
+            profile_id=profile_context.profile_id,
+        ).first()
+    except (TypeError, ValueError, ValidationError):
+        raise TenantAccessNotFound() from None
+
+    if membership is None:
+        raise TenantAccessNotFound()
 
     next_role = membership.role if role is None else role
     next_is_active = membership.is_active if is_active is None else is_active
@@ -127,15 +151,13 @@ def update_profile_membership(
             "user": "An active Profile Owner must have an active account."
         })
 
-    if (
-        actor_membership.role == ProfileMembership.Role.ADMIN
-        and (
-            membership.role == ProfileMembership.Role.OWNER
-            or next_role == ProfileMembership.Role.OWNER
-        )
+    if actor_membership.role == ProfileMembership.Role.ADMIN and (
+        membership.role != ProfileMembership.Role.MEMBER
+        or next_role != ProfileMembership.Role.MEMBER
     ):
         raise PermissionDenied(
-            "Profile Admins cannot appoint, demote, or deactivate Owners."
+            "Profile Admins may manage only existing Profile Members and "
+            "cannot grant Profile Admin or Owner roles."
         )
 
     removes_active_owner = (
@@ -149,7 +171,7 @@ def update_profile_membership(
     )
 
     if removes_active_owner and not ProfileMembership.objects.filter(
-        profile_id=membership.profile_id,
+        profile_id=profile_context.profile_id,
         role=ProfileMembership.Role.OWNER,
         is_active=True,
         user__is_active=True,
@@ -173,7 +195,7 @@ def update_profile_membership(
         )
     )
     if removes_workspace_manager_status and Workspace.objects.filter(
-        profile_id=membership.profile_id,
+        profile_id=profile_context.profile_id,
         owner_id=membership.user_id,
     ).exists():
         raise ValidationError({
@@ -214,59 +236,128 @@ def update_profile_membership(
 
 
 @transaction.atomic
-def add_workspace_member(*, workspace_id, user, role, actor):
-    workspace_reference = Workspace.objects.only(
-        "profile_id"
-    ).get(id=workspace_id)
-
-    if workspace_reference.profile_id is None:
-        raise ValidationError({
-            "workspace": "The workspace must be mapped to a profile first."
-        })
-
-    Profile.objects.select_for_update().get(
-        id=workspace_reference.profile_id
+def add_workspace_member(
+    *,
+    actor,
+    profile_id,
+    workspace_id,
+    target_profile_membership_id,
+    role,
+):
+    profile_context = resolve_profile_access_context(actor, profile_id)
+    workspace_context = resolve_workspace_access_context(
+        profile_context,
+        workspace_id,
     )
-    workspace = Workspace.objects.select_for_update().get(id=workspace_id)
+
+    Profile.objects.select_for_update().filter(
+        id=profile_context.profile_id
+    ).get()
+
+    workspace = Workspace.objects.select_for_update().filter(
+        id=workspace_context.workspace_id,
+        profile_id=profile_context.profile_id,
+    ).first()
+    if workspace is None:
+        raise TenantAccessNotFound()
 
     actor_membership = ProfileMembership.objects.select_for_update().filter(
-        profile_id=workspace.profile_id,
-        user_id=actor.id,
+        id=profile_context.membership_id,
+        profile_id=profile_context.profile_id,
+        user_id=profile_context.user_id,
         user__is_active=True,
         is_active=True,
-        role__in=(
-            ProfileMembership.Role.OWNER,
-            ProfileMembership.Role.ADMIN,
-        ),
     ).first()
     if actor_membership is None:
-        raise PermissionDenied(
-            "An active Profile Owner or Admin is required."
-        )
+        raise TenantAccessNotFound()
 
-    target_membership = ProfileMembership.objects.select_for_update().filter(
-        profile_id=workspace.profile_id,
-        user_id=user.id,
-        user__is_active=True,
-        is_active=True,
-    ).first()
-    if target_membership is None:
-        raise ValidationError({
-            "user": (
-                "The user must first have an active membership in the "
-                "workspace profile."
-            )
-        })
+    locked_workspace_role = None
+    if actor_membership.role == ProfileMembership.Role.MEMBER:
+        locked_workspace_role = WorkspaceMember.objects.select_for_update().filter(
+            workspace_id=workspace.id,
+            user_id=actor_membership.user_id,
+            role__in=(
+                WorkspaceMember.Role.ADMIN,
+                WorkspaceMember.Role.MEMBER,
+                WorkspaceMember.Role.VIEWER,
+            ),
+        ).values_list("role", flat=True).first()
+
+        if locked_workspace_role is None:
+            raise TenantAccessNotFound()
+
+    if (
+        actor_membership.role != workspace_context.profile_role
+        or locked_workspace_role != workspace_context.workspace_role
+    ):
+        # Role changes after initial resolution must be retried from a fresh
+        # context; a stale snapshot never broadens mutation authority.
+        raise TenantAccessNotFound()
+
+    if not can_manage_workspace_members(workspace_context):
+        raise PermissionDenied("Workspace membership management is not allowed.")
 
     if role not in WorkspaceMember.Role.values:
         raise ValidationError({"role": "Unsupported Workspace membership role."})
 
+    if actor_membership.role in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    ):
+        assignable_roles = (
+            WorkspaceMember.Role.ADMIN,
+            WorkspaceMember.Role.MEMBER,
+            WorkspaceMember.Role.VIEWER,
+        )
+    else:
+        assignable_roles = (
+            WorkspaceMember.Role.MEMBER,
+            WorkspaceMember.Role.VIEWER,
+        )
+
+    if role not in assignable_roles:
+        raise PermissionDenied(
+            "The requested Workspace role exceeds the actor's assignment "
+            "ceiling."
+        )
+
+    try:
+        target_membership = ProfileMembership.objects.select_for_update().filter(
+            id=target_profile_membership_id,
+            profile_id=profile_context.profile_id,
+            user__is_active=True,
+            is_active=True,
+        ).first()
+    except (TypeError, ValueError, ValidationError):
+        raise TenantAccessNotFound() from None
+
+    if target_membership is None:
+        raise TenantAccessNotFound()
+
+    existing_membership = WorkspaceMember.objects.select_for_update().filter(
+        workspace_id=workspace.id,
+        user_id=target_membership.user_id,
+    ).first()
+    if existing_membership is not None:
+        raise WorkspaceMembershipConflict()
+
     membership = WorkspaceMember(
         workspace=workspace,
-        user=user,
+        user_id=target_membership.user_id,
         role=role,
     )
-    membership.save()
+    try:
+        # The nested savepoint lets the outer transaction safely translate a
+        # concurrent unique-constraint race into the stable domain conflict.
+        with transaction.atomic():
+            membership.save()
+    except IntegrityError:
+        if WorkspaceMember.objects.filter(
+            workspace_id=workspace.id,
+            user_id=target_membership.user_id,
+        ).exists():
+            raise WorkspaceMembershipConflict() from None
+        raise
 
     _write_membership_audit(
         actor=actor,

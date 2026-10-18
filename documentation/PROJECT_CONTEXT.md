@@ -88,24 +88,36 @@ Completed in the current phase:
   `ProfileMembership`, transitional `Workspace.profile`, membership/owner
   invariants, additive `workspace/0002_profile_workspace_foundation.py`, and
   targeted 32/32 plus full-suite 61/61 PostgreSQL tests verified on 2026-10-17
-- HT-RBAC-DESIGN-P0-01 deliverable in `RBAC_DESIGN.md`: evidence-labeled
-  capability matrix, tenant-scoped request/query/service boundary,
-  non-enumerating IDOR policy proposal, Profile Invitation contract, planned
-  API, negative/concurrency tests, and dependency-ordered rollout. It is
-  `DESIGN READY — PENDING OWNER APPROVAL`; none of it is runtime behavior yet.
+- HT-RBAC-DESIGN-P0-01 is `COMPLETE / ACCEPTED — APPROVED BY OWNER
+  DELEGATION`; `RBAC_DESIGN.md` and `DECISION_LOG.md` hold the approved
+  Profile/Workspace roles, least-privilege ceilings, IDOR/operator policy and
+  Profile Invitation contract.
+- HT-RBAC-P1-03 Tenant Access Context and Scoped Service Foundation: immutable
+  verified Profile/Workspace contexts, scoped selectors, revalidated
+  capabilities and tenant-scoped membership services. Compatibility mapping is
+  `WorkspaceMember.ADMIN` = Workspace Admin, `MEMBER` = Editor, `VIEWER` =
+  read-only Viewer; legacy `OWNER` fails closed and cannot be newly assigned.
+  Final PostgreSQL verification passed 51/51 targeted and 80/80 full tests on
+  2026-10-18 without an API, model or migration change.
 
 
 Approved architecture target, not fully implemented:
 
-- Client belongs to Profile; Project spans monthly Workspaces through Tasks;
-  Invoice belongs to one Workspace and same-Profile Client
+- Client belongs to Profile and has many Projects; Project spans monthly
+  Workspaces through Tasks; Invoice belongs to one Workspace and same-Profile
+  Client; Payment belongs to Invoice
 - Profile and Workspace membership remain separate; Profile Owner/Admin
   administer Profile Workspaces while ordinary Members need explicit Workspace
   assignment
-- Client Portal and Guest Review credentials are separate, hashed, expiring,
-  revocable capability principals
+- Client Portal supports both authenticated-account and secure-link access;
+  Client Portal and Guest Review links are separate, hashed, expiring,
+  revocable capability principals and grant no implicit internal membership
 - Soft delete is the default target for Profile, Workspace, Client, Project,
-  and Task; retention duration/purge rules remain future decisions
+  and Task; hard delete is controlled, finance/audit records are protected,
+  and User departure does not cascade-delete business data; retention duration/
+  purge rules remain future decisions
+- Task completes only after its submitted Deliverable passes Review approval;
+  exact states, approver authority, and payroll trigger remain future decisions
 
 
 Not completed:
@@ -114,11 +126,12 @@ Not completed:
 - Applying Workspace `0002` to the development database; it has run only on
   disposable test databases after read-only inventory found 0 business rows
   and 3 User rows
-- Workspace RBAC and object permission system
-- Owner approval of the proposed Workspace role/action matrix, Admin/Viewer
-  authority, Task visibility, Profile-creation bootstrap, leave/rejoin and
-  invitation lifecycle, error semantics, platform-operator/Admin policy, and
-  User deactivation/delete protection for the last usable Owner
+- Workspace/Invitation API and DRF tenant permission layer; the current access
+  foundation is service/query infrastructure only
+- Cross-domain Client/Finance/Audit selectors and Task/Review enforcement;
+  exact reviewer/workflow states remain a later contract
+- Account deactivation service that preserves last-owner invariants across
+  Profiles and revokes established sessions
 - Invitation model/API, Project model, Client/Finance tenant migrations,
   public-link replacement and soft-delete services
 - Business APIs
@@ -144,10 +157,11 @@ API
 ↓
 Frontend
 
-The tenancy design is approved and its schema foundation has completed
-regression. The next-level capability/scoping/invitation design is ready but
-pending owner approval. No Workspace RBAC or business API may start merely
-because a technical proposal exists, regardless of roadmap task numbering.
+The tenancy design and capability/scoping/invitation contract are approved, and
+the schema plus tenant-access/service foundations have completed regression.
+Invitation remains design-only and downstream; no Workspace API, full RBAC, or
+business API may start until the owner authorizes the next implementation task,
+regardless of roadmap task numbering.
 
 
 ## AI Development Instructions

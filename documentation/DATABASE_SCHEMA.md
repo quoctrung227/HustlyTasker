@@ -894,7 +894,7 @@ PostgreSQL
 
 ---
 
-# 13. Current Ownership Audit — verified 2026-10-17
+# 13. Current Ownership Audit — verified 2026-10-18
 
 This section describes the active Django source. The original sections above
 document the initial schema; their “future” indexes or relationships must not
@@ -915,9 +915,10 @@ be treated as implemented unless they also exist in models/migrations.
 | Notification | Recipient User | No structured Profile/Workspace context. |
 | AuditLog | Optional User + generic entity ID | No reliable tenant path or enforced target reference. |
 
-The foundation adds explicit ProfileMembership uniqueness and role checks,
-membership lookup indexes, Workspace/Profile model validation, and a
-transactional owner-membership service. Full tenant-aware querysets, API
+The schema foundation adds explicit ProfileMembership uniqueness and role
+checks, membership lookup indexes, Workspace/Profile model validation, and
+transactional membership services. `HT-RBAC-P1-03` now adds Profile/Workspace
+scoped selectors and verified access contexts without a schema change. API
 permissions, soft delete, and cross-domain same-Profile constraints are not
 implemented.
 
@@ -936,7 +937,10 @@ Architecture status: `ACCEPTED — 2026-10-16`
 Foundation status: `COMPLETE IN SOURCE; DEVELOPMENT MIGRATION NOT APPLIED`
 
 RBAC/Invitation design status:
-`DESIGN READY — PENDING OWNER APPROVAL; NO SCHEMA IMPLEMENTATION`
+`COMPLETE / ACCEPTED BY OWNER DELEGATION; INVITATION SCHEMA NOT IMPLEMENTED`
+
+Tenant access/service status:
+`HT-RBAC-P1-03 COMPLETE; NO MODEL OR MIGRATION CHANGE`
 
 The authoritative decisions and remaining detailed questions are in
 `documentation/DECISION_LOG.md`. This section distinguishes current schema
@@ -974,7 +978,8 @@ from the same Profile; Payment belongs to Invoice.
 | `Workspace.profile` | Transitional nullable protected FK. New saves require Profile; a mapped Workspace cannot be re-parented through model/admin writes; an explicit null-to-Profile mapping validates the owner and every existing Workspace member. Mapped saves lock Profile then Workspace; existing legacy null saves lock their Workspace row before validation, preventing concurrent mapping/re-parent and stale null write-back races. Null remains allowed at database level so unknown legacy rows are preserved without guessed backfill. |
 | `Workspace.owner` | Existing transitional FK retained; deletion changed from `CASCADE` to `PROTECT`. Validated writes require that owner to be an active Profile Owner or Admin. |
 | `WorkspaceMember` validation | `save()` validates an active same-Profile membership and active account. Existing one-row-per-Workspace/User constraint remains; Django Admin membership mutation is read-only. |
-| Foundation services | Create Profile plus initial active Owner atomically; lock Profile during role/active changes; support multiple Owners; block removal/demotion of the last usable active Owner and Admin changes to Owners; reject generic reactivation pending invitation acceptance; directly add an existing active Profile member to Workspace by Profile Owner/Admin; write membership AuditLog events. |
+| Foundation services | Create Profile plus initial active Owner atomically; tenant-scope Profile membership updates before target lookup; lock Profile during role/active changes; support multiple Owners; block removal/demotion of the last usable active Owner; restrict Profile Admin to current ordinary Members; directly add only an active same-Profile member with Profile/Workspace role ceilings; translate duplicate adds to a stable conflict; write membership AuditLog events atomically. |
+| Access contexts/selectors (no schema change) | Resolver-produced immutable Profile/Workspace contexts require active User and ProfileMembership; Profile/Workspace selectors fail closed across tenants; capability checks revalidate current role and reject forged/stale contexts. Existing WorkspaceMember values map `ADMIN` to Workspace Admin, `MEMBER` to Editor and `VIEWER` to read-only Viewer; legacy `OWNER` grants no capability and cannot be assigned by the service. |
 
 `Workspace.save()` and `WorkspaceMember.save()` call `full_clean()`, but bulk
 updates, raw SQL, and direct `ProfileMembership` ORM mutations can bypass
@@ -990,7 +995,7 @@ layer or a database-wide guarantee of the aggregate last-owner invariant.
   `workspace/0002_profile_workspace_foundation.py`.
 - No applied `0001_initial.py` was edited.
 - Read-only PostgreSQL development inventory before migration: 0 business
-  rows and 3 User rows; reconfirmed before and after tests on 2026-10-17.
+  rows and 3 User rows; reconfirmed before and after tests on 2026-10-18.
 - No synthetic Profile or tenant mapping was created.
 - `0002` was exercised on disposable PostgreSQL test databases, including an
   empty test schema and a populated migration fixture retaining Workspace,
@@ -1007,15 +1012,16 @@ layer or a database-wide guarantee of the aggregate last-owner invariant.
 | Project/Client | Client belongs to Profile; Project belongs to Client/Profile and may span Workspaces. Current models have not been migrated. |
 | Finance | Invoice belongs to Workspace and same-Profile Client; Payment belongs to Invoice. Current finance schema has not been migrated and numbering/billing details remain undecided. |
 | Public access | Client Portal account and secure link are supported targets; ClientPortalLink and GuestReviewLink are separate, hashed, expiring, revocable, capability-scoped principals. Replacements are absent. |
-| Soft delete/retention | Soft delete is the target default for Profile, Workspace, Client, Project, and Task. Current foundation does not add soft-delete fields/services. Retention periods and purge authority remain undecided. |
-| Tenant authorization | Profile Owner/Admin administration inheritance is approved, while ordinary Members require explicit Workspace assignment. Permission classes, scoped querysets, IDOR tests, and action-level Workspace capabilities are absent. |
-| Task/Review workflow | Assignment → Deliverable → Review → approval/completion or revision/resubmission is approved at high level. Detailed states, approvers, and payroll trigger remain undecided. |
+| Soft delete/retention | Soft delete is the target default for Profile, Workspace, Client, Project, and Task; hard delete is controlled; Invoice/Payment/AuditLog are protected under the eventual retention policy; User departure must not cascade-delete business data. Current foundation adds no soft-delete fields/services. Retention periods and automated purge remain undecided. |
+| Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, action-level capability helpers and IDOR/service tests now exist; DRF permission classes/endpoints and Client/Finance/Audit/Task/Review scoping remain absent. |
+| Task/Review workflow | Assignment → Deliverable → Review → approval/completion or revision/resubmission is approved at high level; Task completion is allowed only after Deliverable approval. Detailed states, approvers, and payroll trigger remain undecided. |
 
-## Proposed ProfileInvitation schema — pending owner approval
+## Approved ProfileInvitation contract — schema not implemented
 
-This subsection is design information only. It does not describe current
-models, does not reserve a migration number, and must not be implemented until
-the owner approves the open invitation decisions in `RBAC_DESIGN.md`.
+This subsection is approved design information only. It does not describe
+current models, does not reserve a migration number, and is not authorization
+to implement Invitation in `HT-RBAC-P1-03`. Verified email identity is a
+production dependency; a hashed token alone is not sufficient identity proof.
 
 Proposed aggregate:
 
@@ -1039,10 +1045,12 @@ ProfileMembership rows. Constraints provide duplicate/replay defense while
 the service enforces recipient binding, expiry, role ceiling, one terminal
 winner, same-Profile scope, and atomic audit.
 
-Open schema-impacting decisions include unregistered-recipient support,
-reactivate-versus-new membership history, treatment of historical
-WorkspaceMember rows on rejoin, terminal invitation/PII retention, FK deletion
-behavior, and whether pending invitations survive inviter authority changes.
+Later schema/implementation work must still define unregistered-recipient
+onboarding, reactivate-versus-new membership history, historical WorkspaceMember
+behavior on rejoin, FK deletion behavior and inviter-authority revalidation.
+The approved initial TTL is 7 days; resend invalidates the prior credential;
+terminal metadata is retained at least 12 months; automated purge is out of
+scope.
 
 ## Foundation invariants and remaining rollout work
 
@@ -1065,8 +1073,9 @@ behavior, and whether pending invitations survive inviter authority changes.
 - Later migrations must add Client, Project, Invoice, public-link, AuditLog,
   and soft-delete changes additively in their approved tasks.
 
-Verification recorded for this checkpoint on 2026-10-17: targeted
-Workspace/model/service/migration tests passed 32/32 and the full 61-test
-PostgreSQL suite passed. The full run
-includes the 19 Authentication and 10 API Foundation regression tests. `pip
-check`, Django system check, and `makemigrations --check --dry-run` also passed.
+Verification recorded for this checkpoint on 2026-10-18: final targeted
+Workspace/model/service/migration/access tests passed 51/51 and the full
+80-test PostgreSQL suite passed. The full run includes the 19 Authentication
+and 10 API Foundation regression tests. `pip check`, Django system check, and
+`makemigrations --check --dry-run` also passed. No migration was created or
+applied to development.

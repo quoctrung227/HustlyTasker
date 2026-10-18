@@ -1,15 +1,191 @@
 # HUSTLYTASKER HANDOVER
 
+## Current checkpoint — 2026-10-18
+
+Repository: `D:\da\HustlyTasker`
+
+Branch: `main`
+
+HEAD and local `origin/main`: `5e89971`
+
+Current task: `HT-RBAC-P1-03 — COMPLETE / OWNER REVIEW GATE`
+
+Read root `AGENTS.md` before taking action. Source, migrations, Git status and
+current test output override historical notes. Do not commit, push, reset,
+revert, clean, apply migrations or alter development data without owner
+authorization.
+
+### What was completed
+
+- `HT-RBAC-DESIGN-P0-01` is `COMPLETE / ACCEPTED — APPROVED BY OWNER
+  DELEGATION`. `RBAC_DESIGN.md` and `DECISION_LOG.md` record all 14 delegated
+  decisions; do not ask the owner to decide them again.
+- Added `backend/apps/workspace/access.py`:
+  - resolver-produced immutable ID-only Profile/Workspace contexts;
+  - active-User and active-ProfileMembership verification;
+  - tenant-scoped Profile and Workspace selectors;
+  - Profile Owner/Admin same-Profile Workspace inheritance;
+  - ordinary Profile Member access only with explicit effective
+    WorkspaceMember;
+  - DB-revalidated read/edit/member-management capabilities;
+  - generic `TenantAccessNotFound` for unknown/out-of-scope/malformed tenant
+    identifiers;
+  - fail-closed handling for direct construction, `dataclasses.replace()`,
+    inactive/stale membership and stale Workspace role.
+- Kept the existing WorkspaceMember schema vocabulary:
+  - `ADMIN` = Workspace Admin;
+  - `MEMBER` = Editor;
+  - `VIEWER` = read-only Viewer;
+  - legacy `OWNER` grants no capability through this boundary and is never
+    assigned by the scoped service.
+- Refactored `update_profile_membership()`:
+  - signature now requires `profile_id`;
+  - actor/Profile authorization precedes target lookup;
+  - target is filtered inside the verified Profile;
+  - Profile Admin may manage a current ordinary Member only and cannot grant
+    or modify Admin/Owner;
+  - Profile-first locking, last-active-owner, transitional Workspace-owner
+    guard and atomic AuditLog behavior remain.
+- Refactored `add_workspace_member()`:
+  - signature requires `profile_id`, `workspace_id` and
+    `target_profile_membership_id`; it no longer accepts a globally resolved
+    User;
+  - actor, Workspace, target ProfileMembership and active User are verified in
+    the same Profile and rechecked under locks;
+  - Profile Owner/Admin may grant `ADMIN`, `MEMBER` or `VIEWER`;
+  - Workspace Admin may grant only `MEMBER` or `VIEWER` in its own Workspace;
+  - Editor/Viewer cannot manage membership; no actor may grant legacy `OWNER`;
+  - sequential/concurrent duplicates raise `WorkspaceMembershipConflict` and
+    successful mutation writes exactly one audit event.
+- Expanded Workspace tests for contexts, tenant isolation, IDOR-equivalent
+  failures, stale/forged contexts, role ceilings, denied-audit behavior,
+  last-owner protection and duplicate concurrency.
+- Independent review found one medium context-forgery issue involving
+  `dataclasses.replace()`. It was fixed with non-init provenance plus exact DB
+  revalidation, regression tests were added, and follow-up review found no
+  blocking/high/medium issue.
+
+### Files changed in the worktree
+
+Backend:
+
+- `backend/apps/workspace/access.py` — new, untracked until the owner chooses to
+  commit.
+- `backend/apps/workspace/services.py`
+- `backend/apps/workspace/tests.py`
+
+Documentation:
+
+- `documentation/CHANGELOG.md`
+- `documentation/DATABASE_SCHEMA.md`
+- `documentation/DECISION_LOG.md`
+- `documentation/HANDOVER.md`
+- `documentation/PROGRESS.md`
+- `documentation/PROJECT_CONTEXT.md`
+- `documentation/PROJECT_ROADMAP.md`
+- `documentation/RBAC_DESIGN.md`
+- `documentation/REQUIREMENT_STATUS.md`
+
+`API_DOCUMENTATION.md` is unchanged because no HTTP route or API contract was
+added. No model or migration file changed.
+
+### Verification actually run
+
+Environment:
+
+- Existing PostgreSQL 16 container `hustlytasker_postgres`; no container was
+  created, replaced, stopped or reset.
+- Existing local Python 3.12.5 virtualenv synchronized to pinned Django 6.1.2
+  and DRF 3.18.3; no requirement file changed.
+
+Final acceptance evidence after the independent-review fix:
+
+- `python -m pip check`: PASS.
+- Version assertion: Django 6.1.2 / DRF 3.18.3: PASS.
+- Python compile for access/services/tests: PASS.
+- `python manage.py check`: PASS, zero issues.
+- `python manage.py makemigrations --check --dry-run`: PASS, no changes.
+- `python manage.py test apps.workspace --noinput -v 1`: PASS, 51/51.
+- `python manage.py test --noinput -v 1`: PASS, 80/80. This includes all 19
+  Authentication and 10 API Foundation regressions.
+- `git diff --check`: PASS (only existing LF-to-CRLF conversion warnings).
+- Strict UTF-8/no-NUL/code-fence QA and secret-assignment scan: PASS for all
+  changed code/documentation files.
+
+Pre-fix diagnostic runs also passed 49/49 targeted and 78/78 full. They are
+historical within this task and are not the final acceptance evidence.
+
+Django created and destroyed only disposable `test_hustlytasker_db` databases.
+It did not migrate the development database.
+
+### Migration and data state
+
+- Source still contains additive
+  `workspace/0002_profile_workspace_foundation.py`; no migration was created or
+  edited by HT-RBAC-P1-03.
+- Read-only development PostgreSQL inventory on 2026-10-18 confirmed only
+  `workspace.0001_initial` is applied. `workspace.0002` is unapplied.
+- Development inventory: 3 User rows; 0 Workspace, WorkspaceMember, Task,
+  Client, Invoice, Payment and AuditLog business rows. Profile tables do not
+  exist in development because `0002` is unapplied.
+- No development row was created, changed, deleted, reset or backfilled. The
+  named volume was preserved.
+
+### Security boundaries that still exist
+
+- Direct ORM `.save()`/`.update()`, bulk operations, raw SQL and unsafe Django
+  Admin paths can bypass the reviewed membership services. This task does not
+  claim database-wide enforcement against privileged code.
+- Django Admin remains a platform-operations surface. Tenant-wide business
+  model access is for platform superusers only until tenant-scoped Admin exists.
+- Direct `User.is_active` changes can bypass cross-Profile last-owner and
+  session-revocation requirements. The approved account-deactivation service
+  and established-session purge are not implemented.
+- No Workspace/Profile API or DRF tenant permission class exists. The new
+  exception is a service boundary that a future API must map without revealing
+  object existence.
+- No Invitation model/migration/service/API exists. Verified email/account
+  binding is required before production Invitation; token hashing alone is not
+  identity verification.
+- No Client, Project, Finance, Audit, Task or Review tenant selector/API was
+  added. Concrete Review role/states and the payroll trigger remain deferred.
+- WorkspaceMember has no active flag and legacy membership/history semantics
+  remain for later lifecycle work. Soft delete is not implemented.
+
+### Blockers and exact continuation
+
+There is no implementation blocker for the completed scope. The active gate is
+owner review.
+
+1. Review the three backend files, the delegated decisions and the 51/80-test
+   evidence. Do not reopen the 14 accepted decisions unless the owner explicitly
+   changes them.
+2. Do not apply `workspace.0002` as part of this task. A future operational
+   apply requires target-specific inventory, retention-appropriate backup and
+   explicit authorization even though current development has no business rows.
+3. Do not open Workspace or Invitation APIs in this worktree yet.
+4. After owner approval, define a separately authorized next task. The expected
+   next implementation slice is minimal Profile/Workspace read/API permission
+   integration using this foundation, scheduled with the account-verification
+   dependency; Invitation remains later.
+
+Stop at `OWNER REVIEW GATE`. Do not start the next task automatically.
+
+---
+
+## Superseded checkpoint — 2026-10-17 (historical only)
+
 Checkpoint: 2026-10-17
 
 Repository: `D:\da\HustlyTasker`
 
 Branch: `main`
 
-HEAD and local `origin/main`: `6dafc81`
+HEAD and local `origin/main`: `5e89971`
 Current task: `HT-RBAC-DESIGN-P0-01 — DESIGN READY / OWNER REVIEW GATE`
 
-This is the current transfer checkpoint for a new developer or Codex session.
+This historical checkpoint is retained only for traceability. Continue from
+the current checkpoint above.
 Read root `AGENTS.md` before taking action. Source code, migrations, Git status,
 and current test results override any stale historical note.
 
@@ -67,8 +243,9 @@ without explicit owner approval.
 - Applying Workspace `0002` to the development database
 - Workspace lifecycle/invitation API
 - Workspace/Profile RBAC and object-scoped querysets
-- Owner approval of the proposed Workspace role/action, Admin/Viewer, Task
-  visibility, invitation/rejoin, error, and platform-operator policies
+- Owner approval of the seven residual RBAC groups covering Workspace roles,
+  Profile Admin/lifecycle, Task visibility/contributor membership, account/
+  membership lifecycle, Invitation identity/operations, and error/operator policy
 - Project model/API
 - Client/Profile, Workspace-scoped Invoice, public-link and soft-delete schema
   migrations
@@ -92,7 +269,7 @@ does not provide tenant authorization.
 | Permanent documentation/handover foundation | COMPLETE | Root `AGENTS.md` and this handover checkpoint created on 2026-10-16. |
 | HT-DATA-P2-01 Workspace architecture design | COMPLETE / ACCEPTED | Source/reference audit, alternatives, ownership matrix, invariants and migration plan completed; owner approved all 11 decision groups on 2026-10-16. |
 | PROFILE/WORKSPACE SCHEMA FOUNDATION | COMPLETE | Foundation implemented and verified: targeted Workspace tests 32/32 and full PostgreSQL suite 61/61 pass; `pip check`, system check and migration drift check pass. Owner authorized the subsequent design task; `0002` intentionally remains unapplied to development. |
-| HT-RBAC-DESIGN-P0-01 capability/scoping/invitation design | DESIGN READY / OWNER REVIEW GATE | Full evidence-labeled design in `RBAC_DESIGN.md`; source/migration/database unchanged; current PostgreSQL migration/data state reconfirmed read-only on 2026-10-17. |
+| HT-RBAC-DESIGN-P0-01 capability/scoping/invitation design | DESIGN READY / OWNER REVIEW GATE | Full evidence-labeled design in `RBAC_DESIGN.md`; reconciled against all 11 approved groups (all now `MATCH`); seven residual review groups only; source/migration/database unchanged; current PostgreSQL migration/data state reconfirmed read-only on 2026-10-17. |
 
 Latest foundation verification on 2026-10-17: targeted `apps.workspace` tests
 passed 32/32 and the complete PostgreSQL suite passed 61/61. The full run
@@ -100,13 +277,14 @@ includes 19 Authentication and 10 API Foundation regression tests. `pip check`,
 Django system check, and `makemigrations --check --dry-run` passed. See
 `PROGRESS.md` for dated evidence.
 
-For `HT-RBAC-DESIGN-P0-01` on 2026-10-17, documentation structure/status,
-UTF-8/no-NUL, secret-pattern, and `git diff --check` validation passed; the
-last command reported only existing LF→CRLF warnings. No backend code changed,
-so the 32/32 and 61/61 results above were not relabeled as a new run. The local
-venv references a missing Python 3.12 installation and no `py`/`python` exists
-on PATH; no replacement environment or new container was created for this
-design-only checkpoint.
+For `HT-RBAC-DESIGN-P0-01` on 2026-10-17, the final reconciliation QA passed:
+the 11-row table and seven open-group structure are present; all nine affected
+files pass strict UTF-8/no-NUL/code-fence and secret-pattern checks; and
+`git diff --check` passes with only line-ending conversion warnings. No backend
+code changed, so the 32/32 and 61/61 results above were not relabeled as a new
+run. The local venv references a missing Python 3.12 installation and no
+`py`/`python` exists on PATH; no replacement environment or new container was
+created for this design-only checkpoint.
 
 ## 4. Active task checkpoint
 
@@ -123,6 +301,12 @@ Work completed:
   matrix. It preserves approved Owner/Admin inheritance and ordinary-Member
   explicit Workspace access while treating Workspace Admin/Viewer/Owner action
   semantics as proposals pending approval.
+- Reconciled the complete RBAC design against all 11 owner-approved
+  architecture groups. The original findings were 1–3/5/10 `MATCH`, group 4 a
+  labeling `CONFLICT`, and groups 6–9/11 `NOT DOCUMENTED` in part or whole.
+  The conflict was corrected back to “at least one active Owner membership”;
+  every missing approved boundary was added. All 11 now read as `MATCH` without
+  asking the owner to approve them again.
 - Defined a fail-closed per-request Profile context, scoped Workspace and
   child-resource querysets, same-tenant request-body resolution, and proposed
   non-enumerating `404`/`403`/generic `400` behavior.
@@ -150,10 +334,11 @@ Work completed:
 
 Work pending at this checkpoint:
 
-- Owner review/edits of the 16 decision groups summarized in
-  `RBAC_DESIGN.md`, especially Workspace role vocabulary, Admin/Viewer
-  authority, Task visibility, rejoin semantics, Invitation recipient/TTL
-  lifecycle, error contract, and platform-operator policy.
+- Owner review/edits of the seven genuinely open groups in
+  `RBAC_DESIGN.md`: Workspace role/action ceiling; Profile Admin/lifecycle
+  authority; Task visibility/contributor attribution; Profile/account/
+  membership lifecycle; Invitation identity/role ceiling; Invitation
+  operations/retention; and API error/operator policy.
 - Development database migration apply is still a separate operational gate.
   Do not apply `0002` merely because the current inventory has no business rows.
 - There is no blocker to reviewing the design. The unresolved owner decisions
@@ -226,13 +411,15 @@ The owner also accepted these tenancy/business boundaries on 2026-10-16:
   Review link are separate hashed, scoped, expiring and revocable principals.
   Client accounts receive no internal membership automatically.
 - Soft delete is the target default for Profile, Workspace, Client, Project
-  and Task; finance/audit history is protected. Retention duration and purge
-  remain deferred.
+  and Task; hard delete is controlled, finance/audit history is protected, and
+  User departure does not cascade-delete business data. Retention duration and
+  purge remain deferred.
 - Migration requires inventory, no guessed mapping, backup/rehearsal for risky
   data, and new migrations only.
 - High-level Task workflow is assignment → work → Deliverable → Review →
-  approval/completion or revision/resubmission. Exact states, approvers and
-  payroll trigger are deferred.
+  approval/completion or revision/resubmission. Task completes only after its
+  Deliverable is approved. Exact states, approvers and payroll trigger are
+  deferred.
 
 ## 7. Approved target and remaining decisions
 
@@ -254,28 +441,25 @@ are not Workspace roles.
 
 Still requires later task decisions:
 
-1. Keep Workspace Admin; deprecate Workspace Owner; retain/disable Viewer and
-   define its exact field/comment/download/export scope.
-2. Profile Admin authority over other Admins and Workspace memberships;
-   Workspace/Profile soft-delete/restore authority.
-3. Task visibility for Workspace Members and whether inherited Profile
-   managers need explicit Workspace membership for contributor attribution.
-4. Profile self-service creation eligibility/limits and initial-Owner bootstrap;
-   voluntary Profile/Workspace leave, rejoin history, and prevention of silent
-   historical Workspace-access restoration.
-5. Invitation grant/management ceiling; existing-only/unregistered recipient
-   onboarding; verified email/account linking; TTL/reinvite/throttle/delivery;
-   inviter-authority revalidation; combined Workspace UX; invitation retention.
-6. Approve non-enumerating URL/body error semantics, `409` conflict envelope,
-   platform-operator/Django Admin bypass, and User deactivate/delete/session
-   policy protecting the last usable Owner.
-7. Invoice numbering/uniqueness and detailed billing workflow.
-8. Client Portal/Guest Review visible fields, allowed actions, account-linking
-   flow and default expiry/rotation.
-9. Retention durations, legal hold/purge schedule and hard-delete authority.
-10. Exact Task/Review states, approver permissions and payroll trigger.
-11. Explicit mapping for any existing row in another environment that cannot be
-   mapped from verified evidence.
+RBAC owner-review gate (seven groups):
+
+1. Workspace role vocabulary and action ceiling.
+2. Profile Admin and Profile/Workspace lifecycle authority.
+3. Task visibility and contributor-membership requirement.
+4. Profile/account/membership lifecycle, including self-service eligibility,
+   leave/rejoin, history, and account/session mechanics. Initial-Owner creation
+   already exists and is not pending re-approval.
+5. Invitation identity, onboarding, grant/management role ceiling, including
+   whether invitations can ever request `OWNER` (proposal: no).
+6. Invitation TTL/reinvite/throttle/delivery, inviter revalidation, optional
+   combined UX that preserves the two fixed transitions, and record retention.
+7. Non-enumerating error/`409` and platform-operator/Django Admin policy.
+
+Separate downstream decisions: Invoice numbering/billing; Client Portal/Guest
+Review exact capabilities/account linking/default expiry; retention/legal hold/
+purge; and exact Task/Review states, approvers, and payroll trigger. An unknown
+tenant mapping becomes a target-environment blocker only when inventory finds
+such a row; the approved policy is already to never guess it.
 
 Detailed proposal and owner-review checklist: `documentation/RBAC_DESIGN.md`.
 Accepted rationale and proposal status: `documentation/DECISION_LOG.md`.
@@ -285,45 +469,23 @@ Current source/development state versus accepted target:
 
 ## 8. Git and uncommitted work to preserve
 
-The worktree is intentionally dirty. There has been no commit, push, reset, or
-history rewrite. Preserve all listed changes:
+Repository evidence on 2026-10-17:
 
-Files changed specifically by `HT-RBAC-DESIGN-P0-01`:
+- Branch, `HEAD`, and local `origin/main` are `main` / `5e89971`. That existing
+  owner commit contains the previously completed environment, authentication,
+  API, schema-foundation, and initial RBAC-design work.
+- This reconciliation did not commit, push, reset, rewrite history, edit
+  backend source, or touch the database.
+- `git status --short --untracked-files=all` currently reports exactly nine
+  modified tracked documentation files and no untracked files:
+  `CHANGELOG.md`, `DATABASE_SCHEMA.md`, `DECISION_LOG.md`, `HANDOVER.md`,
+  `PROGRESS.md`, `PROJECT_CONTEXT.md`, `PROJECT_ROADMAP.md`, `RBAC_DESIGN.md`,
+  and `REQUIREMENT_STATUS.md` under `documentation/`.
+- `API_DOCUMENTATION.md` is unchanged because no runtime API contract changed.
 
-- New: `documentation/RBAC_DESIGN.md`.
-- Updated: `documentation/PROGRESS.md`, `PROJECT_ROADMAP.md`,
-  `REQUIREMENT_STATUS.md`, `DECISION_LOG.md`, `DATABASE_SCHEMA.md`,
-  `PROJECT_CONTEXT.md`, `HANDOVER.md`, and `CHANGELOG.md`.
-- No backend source, model, migration, settings, route, test, Docker, data, or
-  runtime API contract changed. `API_DOCUMENTATION.md` therefore received no
-  task-specific edit; its dirty state belongs to earlier completed work.
-
-Modified tracked files:
-
-- `.gitignore`, `README.md`
-- `backend/api/urls.py`
-- `backend/apps/accounts/admin.py`, `tests.py`, `views.py`
-- `backend/apps/workspace/admin.py`, `models.py`, `tests.py`
-- `backend/config/settings.py`, `backend/requirements.txt`
-- `docker/docker-compose.yml`
-- `documentation/AI_INSTRUCTION.md`, `API_DOCUMENTATION.md`, `CHANGELOG.md`,
-  `DATABASE_SCHEMA.md`, `DECISION_LOG.md`, `PROGRESS.md`,
-  `PROJECT_CONTEXT.md`, `PROJECT_ROADMAP.md`, `REQUIREMENT_STATUS.md`,
-  `SESSION_REPORT.md`
-
-Untracked files that are intentional deliverables:
-
-- `.env.example`
-- `AGENTS.md`
-- `backend/api/tests.py`, `backend/api/views.py`
-- `backend/apps/accounts/serializers.py`, `backend/apps/accounts/urls.py`
-- `backend/apps/workspace/services.py`,
-  `backend/apps/workspace/test_migrations.py`,
-  `backend/apps/workspace/migrations/0002_profile_workspace_foundation.py`
-- `documentation/HANDOVER.md`, `documentation/RBAC_DESIGN.md`
-
-Before any future edit, rerun `git status --short` because this inventory may
-change. Do not use reset/checkout/clean to make the tree appear clean.
+Preserve all nine documentation changes. Before any future edit, rerun
+`git status --short --untracked-files=all`; do not use reset/checkout/clean to
+make the tree appear clean.
 
 ## 9. Environment setup and test commands
 
@@ -376,10 +538,9 @@ Current review gate: `HT-RBAC-DESIGN-P0-01` deliverables are ready. Stop before
 Workspace API/RBAC/Invitation implementation until the owner approves or edits
 the proposal in `RBAC_DESIGN.md`.
 
-1. Owner reviews the 16 explicit questions in `RBAC_DESIGN.md`, at minimum the
-   Workspace Admin/Owner/Viewer role choices, Profile Admin ceiling, Member
-   Task visibility, rejoin behavior, invitation recipient/TTL lifecycle,
-   error semantics, and platform-operator policy.
+1. Owner reviews only the seven open decision groups in `RBAC_DESIGN.md`. Do
+   not request re-approval of the reconciled 11 architecture groups; all now
+   match the authoritative accepted decision.
 2. Record accepted answers in `DECISION_LOG.md`; proposals remain proposals
    until then. Do not silently select defaults from legacy reference material.
 3. If implementation is authorized, repeat Git/source/database inventory.

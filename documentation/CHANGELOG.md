@@ -2,7 +2,7 @@
 
 Lịch sử thay đổi của dự án HustlyTasker.
 
-## Unreleased - 2026-10-17
+## Unreleased - 2026-10-18
 
 ### Documentation and handover governance
 
@@ -36,8 +36,8 @@ Lịch sử thay đổi của dự án HustlyTasker.
 
 ### RBAC, tenant access và invitation design
 
-- Thêm `documentation/RBAC_DESIGN.md` cho `HT-RBAC-DESIGN-P0-01`, trạng thái
-  `DESIGN READY — PENDING OWNER APPROVAL`.
+- Thêm `documentation/RBAC_DESIGN.md` cho `HT-RBAC-DESIGN-P0-01`; task hiện
+  `COMPLETE / ACCEPTED — APPROVED BY OWNER DELEGATION`.
 - Hoàn thiện capability matrix hai tầng Profile/Workspace, tách internal roles
   khỏi Client Portal/Guest Review và không coi enum hiện có là quyền đã duyệt.
 - Đề xuất request context, tenant-scoped queryset, same-tenant input
@@ -49,8 +49,34 @@ Lịch sử thay đổi của dự án HustlyTasker.
 - Hoàn thiện Profile Invitation contract: recipient consent/binding, token
   hash-at-rest, state/expiry/replay, duplicate/concurrency, audit, planned API,
   negative tests và dependency-ordered rollout.
-- Ghi rõ các đề xuất và quyết định owner còn thiếu. Task chỉ thay đổi tài liệu;
-  không sửa model, migration, API/authentication, dữ liệu hoặc frontend.
+- Đối chiếu toàn bộ RBAC design với 11 nhóm quyết định đã duyệt: audit ban đầu
+  xác định nhóm 4 bị mở rộng sai nhãn từ active Owner sang usable Owner và nhóm
+  6–9/11 thiếu ghi nhận một phần/toàn bộ. Đã sửa tài liệu để cả 11 nhóm đều
+  `MATCH`, không thay đổi quyết định nghiệp vụ đã duyệt.
+- Owner ủy quyền Technical Advisor chốt 14 quyết định: role compatibility và
+  action ceilings, last-owner/deactivation target, Invitation identity/TTL/rate/
+  retention, non-enumeration và platform-superuser Admin boundary.
+- Ghi rõ reviewer role/workflow states và các domain downstream vẫn cần contract
+  riêng; Invitation chưa được triển khai và verified email là dependency trước
+  production enablement.
+
+### Tenant access context and scoped membership services
+
+- Thêm `backend/apps/workspace/access.py` với immutable verified Profile/
+  Workspace contexts, Profile/Workspace scoped selectors và capability checks
+  revalidate active account/membership/role trước khi cấp read, edit hoặc member
+  management.
+- Giữ nguyên enum: `WorkspaceMember.ADMIN` = Workspace Admin, `MEMBER` = Editor,
+  `VIEWER` = read-only Viewer; legacy `OWNER` fail closed và không được cấp mới.
+- Refactor `update_profile_membership()` để scope actor/Profile trước target,
+  áp dụng Profile Admin least privilege, giữ last-active-owner locking và audit.
+- Refactor `add_workspace_member()` dùng scoped ProfileMembership target, cho
+  Profile Owner/Admin cấp `ADMIN/MEMBER/VIEWER`, Workspace Admin chỉ cấp
+  `MEMBER/VIEWER` trong Workspace của mình, và xử lý duplicate/concurrency bằng
+  stable domain conflict.
+- Harden context trước direct construction, `dataclasses.replace()` role
+  forgery và stale User/Profile/Workspace role; denied mutation không tạo audit.
+- Không đổi model, schema, migration, SessionAuthentication hoặc route/API.
 
 ### Profile/Workspace schema foundation
 
@@ -142,6 +168,12 @@ Lịch sử thay đổi của dự án HustlyTasker.
   `git diff --check` PASS (chỉ có cảnh báo LF→CRLF hiện hữu). Không rerun backend
   tests vì task không đổi code và local Python/venv hiện không khả dụng; không
   tạo container hoặc môi trường thay thế mới.
+- Verification cuối HT-RBAC-P1-03 ngày 2026-10-18 trên PostgreSQL 16: local
+  Python 3.12 virtualenv được đồng bộ đúng Django 6.1.2/DRF 3.18.3; `pip check`,
+  compile, `manage.py check` và `makemigrations --check --dry-run` PASS; targeted
+  Workspace 51/51 và full suite 80/80 PASS, gồm 19 Authentication và 10 API
+  Foundation regressions. Test database tạm được Django hủy; development
+  `workspace.0002` vẫn unapplied và development data không đổi.
 
 
 # Version 0.0-foundation

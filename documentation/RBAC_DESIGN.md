@@ -2,13 +2,16 @@
 
 ## Capability Matrix, Tenant-Scoped Access, and Invitation Contract
 
-Status: `DESIGN READY — PENDING OWNER APPROVAL`
+Status: `COMPLETE — APPROVED BY OWNER DELEGATION`
 
-Date: 2026-10-17
+Date: 2026-10-18
 
-This document is a design deliverable. It does not authorize an API, model,
-migration, data change, permission grant, or development-database migration.
-The current API contract remains limited to Authentication and Health.
+The owner delegated the remaining RBAC decisions to the Technical Advisor on
+2026-10-17. The approved contract in this document authorizes only
+`HT-RBAC-P1-03` Tenant Access Context and Scoped Service Foundation. It does
+not authorize a new API, model, migration, data change, Invitation flow, or
+development-database migration. The runtime API contract remains limited to
+Authentication and Health until a later task is approved and implemented.
 
 ## 1. Evidence and decision labels
 
@@ -18,10 +21,12 @@ from being mistaken for an approved business rule:
 - **[REQUIREMENT]** — capability-level need in `ORIGINAL_REQUIREMENTS.md`.
 - **[APPROVED]** — one of the owner-approved tenancy/business decisions in
   `DECISION_LOG.md`.
+- **[APPROVED BY OWNER DELEGATION]** — a decision finalized by the Technical
+  Advisor under the owner's explicit delegation on 2026-10-17.
 - **[CURRENT]** — behavior or limitation verified in the current Django
   source, migrations, settings, routes, or database inventory.
-- **[PROPOSED]** — least-privilege technical contract proposed for owner
-  review; it must not be implemented as an accepted rule yet.
+- **[PROPOSED]** — least-privilege technical detail that is not covered by an
+  approved decision and remains unavailable until its later review gate.
 - **[OPEN]** — a product or policy decision still required from the owner.
 
 When sources conflict, an approved decision overrides the legacy reference.
@@ -32,7 +37,8 @@ Current source remains authoritative for what is actually implemented.
 ### 2.1 Approved boundaries
 
 - **[APPROVED]** Profile represents a company/team and is the tenant root.
-  Workspace is a monthly operational scope inside exactly one Profile.
+  One Profile may contain many monthly operational Workspaces; each Workspace
+  belongs to exactly one Profile in the approved target architecture.
 - **[APPROVED]** User is a global identity and may have active membership in
   multiple Profiles. A selected/switched Profile is navigation state, not
   authorization proof.
@@ -43,23 +49,73 @@ Current source remains authoritative for what is actually implemented.
   active Workspace membership is never sufficient without an active Profile
   membership and active User.
 - **[APPROVED]** A Profile can have multiple equal Owners and must retain at
-  least one usable Owner. Owner changes require transaction/concurrency
+  least one active Owner membership. Owner changes require transaction/concurrency
   protection. Profile Admin cannot appoint, demote, deactivate, or remove an
   Owner.
 - **[APPROVED]** Joining a new Profile requires accepted consent through an
   invitation. Profile Owner/Admin may directly add only an already-active
-  Profile member to a Workspace. Material membership changes are audited.
-- **[APPROVED]** Task belongs to one Workspace. Client belongs to Profile;
-  Project may span Workspaces through Tasks. Related Client, Project,
-  Workspace, Task, Invoice, and Payment records must preserve the approved
-  same-Profile paths.
-- **[APPROVED]** Client Portal and Guest Review are external, capability-scoped
-  principals. They do not become internal Profile or Workspace roles.
-- **[APPROVED]** Soft delete is the target for Profile, Workspace, Client,
-  Project, and Task. Retention, purge, and hard-delete authority are not yet
-  approved.
+  Profile member to a Workspace. Duplicate active memberships are forbidden;
+  material membership changes are audited.
+- **[APPROVED]** Client belongs to Profile and may have many Projects. Project
+  belongs to that Client/Profile and may span monthly Workspaces through Tasks.
+  Task belongs to exactly one Workspace. Any Task references to Client,
+  Project, and Workspace must resolve to the same Profile.
+- **[APPROVED]** Invoice belongs to one monthly Workspace and references a
+  Client from the same Profile. A Workspace may have many Invoices; Payment
+  belongs to Invoice. Cross-Profile finance links are forbidden. Invoice
+  numbering and detailed billing workflow remain open for their later task.
+- **[APPROVED]** Client Portal supports both an authenticated account and a
+  secure-link flow. Client Portal Link and Guest Review Link are independent
+  principals; link credentials are capability-scoped, expiring, revocable,
+  and stored only as hashes. Client accounts do not receive internal Profile
+  or Workspace membership implicitly. Exact capabilities and default expiries
+  remain open for their later task.
+- **[APPROVED]** Soft delete is the default target for Profile, Workspace,
+  Client, Project, and Task; hard delete is controlled. Invoice, Payment, and
+  AuditLog are protected under the eventual retention policy, and a departing
+  User must not cascade-delete business data. Retention periods and automated
+  purge remain open.
+- **[APPROVED]** Every target database must be inventoried before migration.
+  Existing rows are never assumed absent or assigned a guessed tenant. Risky
+  changes require backup and rehearsal, and applied `0001` migrations are
+  never rewritten; only additive migrations are allowed.
+- **[APPROVED]** The high-level Task workflow is assignment, execution,
+  Deliverable submission, Review, then approval/completion or revision and
+  resubmission. A Task is complete only after its Deliverable is approved.
+  Section 2.4 additionally requires explicit Review capability and forbids
+  self-approval. Exact states, the role(s) granted Review capability, and the
+  payroll trigger remain open for the dedicated workflow task.
 
-### 2.2 Current implementation constraints
+### 2.2 Reconciliation with the 11 approved decisions — 2026-10-17
+
+The status in the fourth column records the finding against the document as it
+stood before this reconciliation. The final column records the corrected state
+of this document. An approved group is not `STILL OPEN`; only the explicitly
+listed downstream details remain open.
+
+| # | Owner-approved content | Content found before reconciliation | Audit status | Current result |
+|---|---|---|---|---|
+| 1 | Profile is the company/team tenant root; it has monthly operational Workspaces. | Section 2.1 already stated the same tenant and monthly-scope boundary. | `MATCH` | `MATCH` — retained and made the target cardinality explicit. |
+| 2 | A User may join multiple Profiles; switching context never grants access. | Multi-Profile identity and navigation-versus-authorization were explicit. | `MATCH` | `MATCH` — no owner re-approval required. |
+| 3 | Profile Owner/Admin administer same-Profile Workspaces; ordinary Member needs assignment; no cross-Profile inheritance; membership layers remain independent. | The baseline, matrix, and non-inheritance rules stated all four boundaries. | `MATCH` | `MATCH` — action-level role details remain separate proposals. |
+| 4 | Multiple equal Owners; at least one active Owner; locked/concurrent changes; Admin cannot change an Owner. | The document incorrectly labeled the stronger phrase “usable Owner”, which also incorporated `User.is_active`, as approved. | `CONFLICT` | `MATCH` — restored the approved active-Owner wording. Section 2.4 separately records the later delegated deactivation/session target without changing this membership invariant. |
+| 5 | Profile invitation acceptance is mandatory; direct Workspace add is only for an active Profile member; no duplicate active membership; important changes are audited. | The baseline and invitation contract preserved the two distinct transitions and invariants. | `MATCH` | `MATCH` — optional combined UX cannot bypass either transition. |
+| 6 | Client belongs to Profile and has many Projects; Project may span Workspaces through Tasks; Task stays in one Workspace; references share one Profile. | Client/Profile, Project spanning, Task/Workspace, and tenant consistency appeared, but Client→many Projects / Project→Client was omitted. | `NOT DOCUMENTED` | `MATCH` — the missing ownership/cardinality is now explicit. |
+| 7 | Invoice belongs to one monthly Workspace and same-Profile Client; Workspace has many Invoices; Payment belongs to Invoice. | Only a generic same-Profile relationship statement appeared. | `NOT DOCUMENTED` | `MATCH` — the complete approved finance ownership path is now explicit; numbering/billing remains open. |
+| 8 | Client Portal supports account and secure link; portal and guest-review links are independent, scoped, expiring, revocable, hash-only; no implicit internal membership. | The document mentioned external capability principals but omitted account access and most credential/lifecycle boundaries. | `NOT DOCUMENTED` | `MATCH` — all approved access boundaries are now explicit; exact capabilities/default expiries remain open. |
+| 9 | Default soft delete for core business aggregates; controlled hard delete; protect finance/audit; no User-departure cascade; retention/purge undecided. | The default soft-delete target and open retention were present, but finance/audit protection and no-cascade behavior were missing. | `NOT DOCUMENTED` | `MATCH` — the complete approved deletion boundary is now recorded. |
+| 10 | Inventory first; never assume empty or guess mapping; backup/rehearse risky changes; additive migrations only. | These controls existed in the implementation plan, but were not collected in the approved baseline. | `MATCH` | `MATCH` — elevated to the approved baseline; environment-specific unknown mappings remain operational blockers, not new policy questions. |
+| 11 | Assignment → execution → Deliverable → Review → approval/completion or revision/resubmission; completion only after approval. | The document deferred detailed workflow but omitted the already-approved high-level flow and completion invariant. | `NOT DOCUMENTED` | `MATCH` — fixed invariant recorded; exact states/concrete reviewer role/payroll trigger remain open. |
+
+This reconciliation found no conflict that changes an approved architecture
+decision. Row 4 was a documentation-labeling overreach and rows 6–9 and 11
+were compatible but incomplete; all are corrected above.
+
+### 2.3 Pre-implementation findings and HT-RBAC-P1-03 resolution
+
+These findings were verified before `HT-RBAC-P1-03` implementation began. The
+current-result wording below distinguishes the original gap from the verified
+implementation completed on 2026-10-18.
 
 - **[CURRENT]** `ProfileMembership` implements `OWNER`, `ADMIN`, `MEMBER`, an
   active flag, and a partial unique constraint for one active Profile/User
@@ -71,50 +127,99 @@ Current source remains authoritative for what is actually implemented.
   Unmapped Workspaces must never be exposed by a tenant API.
 - **[CURRENT]** `Workspace.owner` is a transitional protected User FK and is
   not authorization proof.
-- **[CURRENT]** Session authentication and global DRF `IsAuthenticated` prove
-  identity only. There is no Profile/Workspace API, tenant-scoped queryset,
-  object-permission implementation, or invitation model/API.
+- **[CURRENT]** Session authentication and global DRF `IsAuthenticated` still
+  prove identity only. `apps/workspace/access.py` now provides Profile/
+  Workspace scoped selectors and verified capability contexts, but there is no
+  Profile/Workspace API, DRF tenant permission class, or invitation model/API.
 - **[CURRENT]** Client, Invoice/Payment, and AuditLog do not yet have a safe
   canonical tenant path; Project does not exist. Those APIs must stay closed.
-- **[CURRENT]** `update_profile_membership()` resolves `membership_id`
-  globally before actor scope is established. `add_workspace_member()`
-  resolves `workspace_id` globally and accepts an already-resolved, unscoped
-  target User object. This is not exploitable through an API today because no
-  Workspace route exists, but both service boundaries must be refactored
-  before exposure so lookup/exception differences cannot become an IDOR
-  oracle.
+- **[CURRENT — HT-RBAC-P1-03]** `update_profile_membership()` now establishes
+  actor/Profile scope before target lookup. `add_workspace_member()` resolves
+  the actor's scoped Workspace first and accepts a same-Profile
+  `target_profile_membership_id`, not a globally resolved User. Both revalidate
+  authority under locks and use the same tenant-not-found domain error for
+  out-of-scope and unknown identifiers.
 - **[CURRENT]** bulk operations, raw SQL, direct ORM writes, User deactivation,
   and global Django Admin surfaces can bypass service-level invariants.
+- **[CURRENT]** supported foundation Owner mutations additionally filter on an
+  active User, but direct User deactivation/delete can bypass that service.
+  The delegated account-lifecycle decision now requires owner protection and
+  session revocation for a future User-deactivation flow, but that flow is not
+  implemented by the current foundation or by `HT-RBAC-P1-03`.
 
-## 3. Role model proposed for review
+### 2.4 Owner-delegated RBAC decisions — approved 2026-10-17
+
+The following decisions are **APPROVED BY OWNER DELEGATION**. They refine the
+11 architecture groups without replacing or weakening them:
+
+1. Profile Owner/Admin may administer Workspace content in the same Profile.
+   Sensitive Finance capability is not granted to Profile Admin implicitly.
+2. An ordinary Profile Member needs a valid Workspace membership before they
+   may access work in that Workspace.
+3. Workspace Admin administers only its assigned Workspace; Editor performs
+   work; Viewer is read-only.
+4. Deliverable approval requires an explicit Review capability, and a submitter
+   may not approve their own Deliverable. The concrete reviewer role and full
+   workflow remain deferred.
+5. Profile creation creates the initial Owner in the same transaction.
+6. Leave, deactivate, demote, or remove operations must be rejected when they
+   would violate the last-active-Owner invariant.
+7. User deactivation must revoke the ability to use existing sessions and must
+   not cascade-delete business or historical data. The account-lifecycle
+   service that enforces this is approved target behavior, not implemented in
+   this task.
+8. A Profile invitation is bound to email, has a one-time expiring credential
+   and an enforced role ceiling, and cannot grant `OWNER`.
+9. Profile Owner may invite `ADMIN` or `MEMBER`; Profile Admin may invite only
+   `MEMBER`.
+10. Direct Workspace add is allowed only for a User with an active
+    ProfileMembership in the same Profile.
+11. Invitation TTL is seven days. Resend/reinvite invalidates the prior
+    credential. Initial limits are five attempts per recipient email per 24
+    hours and 30 invitations per inviter per 24 hours.
+12. Terminal Invitation metadata is retained for at least 12 months. This task
+    does not implement automated purge.
+13. Cross-tenant object existence must not be disclosed through the API.
+    Django Admin is a platform-operations surface, not tenant RBAC.
+14. Until a tenant-scoped Admin implementation exists, tenant-wide Django Admin
+    access is restricted to platform superusers.
+
+These approvals remove the former seven-group owner-review blocker for
+`HT-RBAC-P1-03`. Decisions still deferred to later domain tasks remain denied
+or unavailable; they do not authorize scope expansion in this implementation
+slice.
+
+## 3. Approved role model and compatibility boundary
 
 ### 3.1 Effective internal roles
 
 | Effective role | Scope and proposed meaning |
 |---|---|
 | Profile Owner | Tenant governance plus inherited Workspace management for every Workspace in the same Profile. Only this role may change Owner status, subject to last-owner locking. |
-| Profile Admin | Tenant operations plus inherited Workspace management for every Workspace in the same Profile; never Owner governance. |
+| Profile Admin | Tenant operations plus inherited Workspace content management for every Workspace in the same Profile; never Owner governance and never implicit sensitive Finance access. |
 | Profile Member without Workspace membership | Profile self/navigation access only; no Workspace content. |
-| Workspace Admin | **[PROPOSED]** delegated content manager for exactly one assigned Workspace. Active Profile membership is still mandatory, but the role grants no Profile-admin, Profile-wide CRM, Finance, or Owner authority. |
-| Workspace Member | Contributor/editor for exactly one assigned Workspace. Current DB value remains `MEMBER` to avoid an unnecessary migration. |
-| Workspace Viewer | **[PROPOSED]** optional read-only role with a field-limited response; do not mint it through an API until its exact read scope is approved. |
+| Workspace Admin | **[APPROVED BY OWNER DELEGATION]** delegated manager for exactly one assigned Workspace. Active Profile membership is mandatory. It may assign/remove Editor and Viewer participation in that Workspace, but cannot grant Workspace Admin/Owner, Profile, CRM, Finance, or Owner authority. |
+| Workspace Editor | **[APPROVED BY OWNER DELEGATION]** performs work in exactly one assigned Workspace. The current DB value remains `MEMBER`; no enum/schema change is made in `HT-RBAC-P1-03`. |
+| Workspace Viewer | **[APPROVED BY OWNER DELEGATION]** read-only in exactly one assigned Workspace. It receives no mutation capability. Endpoint-specific visible fields and download/export behavior remain denied until their contracts are implemented. |
 | Client/Guest | External principals only, never mapped to an internal role. |
 
 ### 3.2 Existing Workspace enum treatment
 
-- **[PROPOSED]** Deprecate `WorkspaceMember.OWNER` as an authorization concept
-  and do not create it through new APIs. Profile Owner is the canonical owner.
+- **[APPROVED BY OWNER DELEGATION]** `WorkspaceMember.OWNER` is legacy
+  compatibility data, fails closed as an effective authorization role, and is
+  never assigned by the scoped service. Profile Owner is the canonical owner.
   Existing rows, if any are later found, require inventory and explicit
   reconciliation.
-- **[PROPOSED]** Retain `WorkspaceMember.ADMIN` for narrow Workspace content
-  delegation. Removing it would force every Workspace manager to become a
-  Profile Admin with access to all Profile Workspaces.
-- **[PROPOSED]** Treat `WorkspaceMember.MEMBER` as contributor/editor.
-- **[PROPOSED]** Keep `VIEWER` disabled for assignment until the owner approves
-  visible fields and download/comment behavior.
-- **[PROPOSED]** An inherited Profile Owner/Admin capability takes precedence
+- **[APPROVED BY OWNER DELEGATION]** `WorkspaceMember.ADMIN` maps to Workspace
+  Admin for narrow, single-Workspace administration.
+- **[APPROVED BY OWNER DELEGATION]** `WorkspaceMember.MEMBER` maps to Editor.
+- **[APPROVED BY OWNER DELEGATION]** `WorkspaceMember.VIEWER` maps to read-only
+  access. No write operation may treat it as sufficient authorization.
+- **[APPROVED BY OWNER DELEGATION]** An inherited Profile Owner/Admin capability takes precedence
   over a lower explicit Workspace role in that same Profile, but never grants
-  rights in another Profile.
+  rights in another Profile. Profile Owner/Admin may assign Workspace
+  `ADMIN`, `MEMBER`, or `VIEWER`; Workspace Admin may assign only `MEMBER` or
+  `VIEWER`; no supported actor may assign Workspace `OWNER`.
 
 ## 4. Capability matrix
 
@@ -139,7 +244,7 @@ Profile and does not automatically make that manager a contributor/assignee.
 |---|---|---|---|---|---|---|
 | List/select own active Profiles | A | A | A | A | A | A |
 | List Workspaces in Profile | A: all | A: all | Assigned only | Assigned only | Assigned only | DENY |
-| Read assigned Workspace metadata | A | A | R/P | R/P | P: limited | DENY |
+| Read assigned Workspace metadata | A | A | A | A | A: read-only | DENY |
 | Create Workspace / monthly rollover | R/P | R/P | DENY | DENY | DENY | DENY |
 | Edit Workspace name/description | R/P | R/P | P | DENY | DENY | DENY |
 | Soft-delete/restore Workspace | P: Owner only | DENY | DENY | DENY | DENY | DENY |
@@ -147,24 +252,25 @@ Profile and does not automatically make that manager a contributor/assignee.
 | Edit Profile settings/branding | P: Owner only | DENY | DENY | DENY | DENY | DENY |
 | Soft-delete/restore Profile | P: Owner only | DENY | DENY | DENY | DENY | DENY |
 | Read full Profile roster/PII | R/P | R/P | DENY | P: minimal assigned roster | DENY | Self only |
-| Invite Profile `MEMBER` | R/P | P | DENY | DENY | DENY | DENY |
-| Invite/promote/deactivate Profile `ADMIN` | P: Owner only | DENY | DENY | DENY | DENY | DENY |
-| List/revoke/reinvite pending invitations | P: all roles | P: `MEMBER` invites only | DENY | DENY | DENY | DENY |
+| Invite Profile `MEMBER` | A | A | DENY | DENY | DENY | DENY |
+| Invite Profile `ADMIN` | A: Owner only | DENY | DENY | DENY | DENY | DENY |
+| Promote/deactivate Profile `ADMIN` | P: Owner only | DENY | DENY | DENY | DENY | DENY |
+| List/revoke/reinvite pending invitations | DEFER: Invitation API | DEFER: `MEMBER` ceiling | DENY | DENY | DENY | DENY |
 | Appoint/demote/deactivate Profile `OWNER` | A: Owner only + lock | DENY | DENY | DENY | DENY | DENY |
 | Remove/deactivate Profile Member | R/P | P: `MEMBER` only | DENY | DENY | DENY | DENY |
-| Leave Profile voluntarily | P: only if another usable Owner | P: self | P: self Profile membership | P: self Profile membership | P: self Profile membership | P: self |
-| Direct-add active Profile member to Workspace | A | A | DENY | DENY | DENY | DENY |
-| Assign/remove WS Admin/Member/Viewer | P | P | DENY initially | DENY | DENY | DENY |
+| Leave Profile voluntarily | P: only if another active Owner membership remains | P: self | P: self Profile membership | P: self Profile membership | P: self Profile membership | P: self |
+| Direct-add active Profile member to Workspace | A: Admin/Editor/Viewer | A: Admin/Editor/Viewer | A: Editor/Viewer only | DENY | DENY | DENY |
+| Assign/remove WS Admin/Editor/Viewer | A: no WS Owner | A: no WS Owner | A: Editor/Viewer only | DENY | DENY | DENY |
 | Leave/remove own Workspace participation | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | N/A |
-| Read Task in authorized Workspace | R/P: all | R/P: all | R/P: all | P: assigned + published pool | P: limited | DENY |
+| Read Task in authorized Workspace | R/P: all | R/P: all | R/P: all | P: assigned + published pool | A: read-only, fields deferred | DENY |
 | Create/assign/edit any Task | R/P | R/P | R/P | DENY | DENY | DENY |
 | Claim/return eligible Task | P: only as contributor | P: only as contributor | P: only as contributor | R/P | DENY | DENY |
 | Edit assigned Task / allowed status | R/P | R/P | R/P | R/P | DENY | DENY |
 | Comment/upload Deliverable | P: only as contributor | P: only as contributor | P: only as contributor | R/P | DENY | DENY |
-| Internal approval/send to Client | DEFER | DEFER | DEFER | DENY | DENY | DENY |
+| Internal approval/send to Client | DEFER: explicit Review capability, not own submission | DEFER: explicit Review capability, not own submission | DEFER: explicit Review capability, not own submission | DEFER: explicit Review capability, not own submission | DENY | DENY |
 | Manage Profile Client/Project | R/P | R/P | DENY | DENY | DENY | DENY |
 | Reference existing same-Profile Client/Project from Task | R/P | R/P | P: scoped selection | P: task-linked only | P: task-linked read | DENY |
-| Read/manage Invoice, Payment, payroll | R/P | R/P | DENY | DENY | DENY | DENY |
+| Read/manage Invoice, Payment, payroll | R/P | DENY: no implicit sensitive Finance | DENY | DENY | DENY | DENY |
 | Manage Client Portal link | DEFER | DEFER | DENY | DENY | DENY | DENY |
 | Manage task-scoped Guest Review link | DEFER | DEFER | DEFER | DEFER | DENY | DENY |
 | Read tenant AuditLog | P | P | P: Workspace subset | DENY | DENY | DENY |
@@ -173,14 +279,21 @@ The requirement to keep a Task, Client, Project, and Workspace in the same
 Profile is approved (`A`); the matrix row above concerns who may perform the
 reference action and therefore remains `R/P` or `P`.
 
-### 4.1 Viewer proposal
+The approved Task lifecycle also constrains every future role: no capability
+may mark a Task complete before its Deliverable is approved, and the submitter
+cannot perform that approval. The exact state machine, concrete role(s) granted
+Review capability, and payroll effect remain deferred, so the approval row
+stays `DEFER` rather than inventing an action grant here.
 
-If retained, Viewer may read only approved Workspace metadata, Task
-summary/detail, and explicitly visible Deliverable metadata in the assigned
-Workspace. Responses must omit finance/payroll, member email/PII, secrets,
-integration fields, and Profile-wide Client data. Viewer cannot create,
-update, delete, claim, comment, upload, manage members, export, or download
-until each action is explicitly approved. Every unsafe HTTP method is denied.
+### 4.1 Approved Viewer read-only boundary
+
+The delegated decision approves the read-only invariant, not a complete API
+field set. A Viewer can satisfy only a read capability in its assigned
+Workspace and cannot create, update, delete, claim, comment, upload, or manage
+members. Future responses must omit finance/payroll, member email/PII, secrets,
+integration fields, and Profile-wide Client data unless a later contract says
+otherwise. Export, download, and every unsafe HTTP method remain denied until
+explicitly reviewed. `HT-RBAC-P1-03` opens no Viewer endpoint.
 
 ### 4.2 Important non-inheritance rules
 
@@ -202,8 +315,10 @@ until each action is explicitly approved. Every unsafe HTTP method is denied.
 Two operations occur before the normal active-membership context and must not
 be mistaken for tenant access:
 
-- **Profile creation — [CURRENT + PROPOSED API]:** the existing foundation
-  service can atomically create a Profile and its initial Owner. If the owner
+- **Profile creation — [CURRENT; API POLICY OPEN]:** the approved schema
+  foundation already provides a service that atomically creates a Profile and
+  its initial Owner. This bootstrap is not an exception to joining an existing
+  Profile: the tenant does not exist before the transaction. If the owner
   approves self-service `POST /api/v1/profiles/`, an eligible active
   authenticated User acts in a creation-only bootstrap context and becomes the
   first Owner; invitation is not applicable because no existing Profile is
@@ -225,7 +340,8 @@ after all consumers have moved to Profile authority.
 
 ### 5.1 Per-request access context
 
-**[PROPOSED]** Resolve an immutable `ProfileAccessContext` per request:
+**[APPROVED BY OWNER DELEGATION]** Resolve an immutable
+`ProfileAccessContext` for each request or sensitive service call:
 
 ```text
 SessionAuthentication
@@ -267,10 +383,10 @@ workspaces_visible_to(context)
 ```
 
 - Always exclude `Workspace.profile IS NULL`.
-- Fail closed for deprecated, unknown, or not-yet-enabled Workspace roles. A
-  row carrying current `OWNER` or unapproved `VIEWER` must not grant visibility
-  merely because it exists; migration/reconciliation or explicit policy must
-  make the role effective first.
+- Fail closed for deprecated or unknown Workspace roles. A row carrying legacy
+  `OWNER` must not grant visibility merely because it exists; it needs explicit
+  reconciliation. Current `ADMIN`, `MEMBER`, and `VIEWER` map respectively to
+  Workspace Admin, Editor, and read-only Viewer for this compatibility slice.
 - Task scopes through `task.workspace.profile`.
 - TaskAssignment and TaskComment scope through `task.workspace.profile`.
 - Deliverable and Review scope through `deliverable.task.workspace.profile`.
@@ -301,6 +417,11 @@ workspaces_visible_to(context)
 
 ### 5.4 Non-enumerating error contract
 
+**[APPROVED BY OWNER DELEGATION]** A future API must not disclose whether an
+object exists outside the caller's tenant scope. The table below is the
+least-privilege response mapping; exact shared error-envelope details remain an
+API implementation concern and no endpoint is added by `HT-RBAC-P1-03`.
+
 | Situation | Proposed response |
 |---|---|
 | Anonymous request to private SessionAuthentication endpoint | Preserve current DRF behavior: `403` |
@@ -321,9 +442,10 @@ UUID receive the same contract.
 
 ### 6.1 Structure
 
-No new Django app is required. A future implementation can place shared access
-selectors/capabilities in `apps/workspace/access.py` or `selectors.py`, DRF
-permissions in `permissions.py`, and mutations in the existing `services.py`.
+No new Django app is required. `HT-RBAC-P1-03` placed shared access
+selectors/capabilities in `apps/workspace/access.py` and mutations in the
+existing `services.py`. Future DRF permissions may use `permissions.py` only
+when an API task is approved.
 
 Sensitive service signatures must include the authorized parents, for example:
 
@@ -346,18 +468,24 @@ Before API exposure, refactor both current membership services to:
 7. mutate and write AuditLog in the same transaction; and
 8. translate constraint conflicts to stable domain errors.
 
-Every sensitive mutation locks `Profile` first. The remaining order is
-operation-specific so no path acquires Invitation after Membership:
+Every sensitive mutation locks `Profile` first. That Profile lock serializes
+the current same-Profile membership mutations before their operation-specific
+actor/target row reads. The remaining order is:
 
 ```text
 Workspace/membership: Profile → Workspace (when relevant)
-                      → ProfileMembership / WorkspaceMember ordered by UUID
+                      → actor ProfileMembership / WorkspaceMember
+                      → target ProfileMembership / WorkspaceMember
                       → business resource → AuditLog write
 
 Invitation:           Profile → Invitation
                       → relevant ProfileMembership rows ordered by UUID
                       → AuditLog write
 ```
+
+Stable UUID ordering remains mandatory for future operations that lock multiple
+Profiles or cannot serialize first on one Profile. The current services do not
+lock multiple Profiles.
 
 Read-only requests need no lock. Task/content writes should lock only the rows
 needed to make membership validation race-safe; locking an entire Profile for
@@ -374,7 +502,7 @@ every content write would be unnecessarily expensive.
 | Visibility and IDOR | Tenant-scoped queryset |
 | Action permission | Central capability policy plus DRF permission |
 | Same-Profile cross-table relationship | Transactional service validation; DB constraint where representable |
-| Last usable Owner | Locked service plus available DB defenses |
+| Last active Owner membership | Locked service plus available DB defenses |
 | Invitation one-time/concurrent acceptance | Constraint plus locked service |
 | Syntax/field shape | Serializer |
 | Material audit event | Same transaction as mutation |
@@ -403,14 +531,28 @@ by bulk/raw operations.
 - Any future tenant-aware Admin must scope `get_queryset()` and FK choices,
   disable unsafe bulk actions, make sensitive fields read-only, route writes
   through services, and have cross-tenant tests.
-- Superuser/platform operations are distinct from Profile roles and require a
-  separately approved bypass/audit policy.
+- Superuser/platform operations are distinct from Profile roles. The delegated
+  decision permits tenant-wide Django Admin access only for platform
+  superusers until tenant-scoped Admin exists; it does not create an API tenant
+  bypass. Sensitive maintenance mutations still require an explicit audited
+  operational path.
 
-### 6.4 User deactivation and usable-Owner invariant
+### 6.4 User deactivation and the active-Owner boundary
 
-`User.is_active=False` currently bypasses ProfileMembership services and can
-make the last Owner unusable. **[PROPOSED]** Before any account-deactivation or
-User-delete flow is exposed:
+The approved invariant requires at least one active Owner membership. Current
+supported membership mutations go further and also require that Owner's User
+account be active, but a direct `User.is_active=False` write can bypass those
+services.
+
+**[APPROVED BY OWNER DELEGATION]** A supported User-deactivation flow must
+revoke the account's ability to continue using established sessions, preserve
+the last-active-Owner invariant in every affected Profile, and must not
+cascade-delete business or historical data. The account-lifecycle service and
+Admin restrictions needed to make that global guarantee are not part of
+`HT-RBAC-P1-03`; direct ORM/Admin writes remain a documented bypass until that
+separate implementation is completed.
+
+The approved target for that later account-lifecycle implementation is:
 
 1. use a dedicated account-lifecycle service, not direct User Admin/ORM write;
 2. enumerate every active Profile where the target User is an Owner;
@@ -418,23 +560,27 @@ User-delete flow is exposed:
    their relevant Owner memberships in stable UUID order;
 4. recheck that every affected Profile retains another active Owner whose User
    is active, otherwise reject the operation;
-5. deactivate the User, revoke their sessions as approved, and write per-Profile
+5. deactivate the User, revoke their sessions, and write per-Profile
    plus account audit events atomically; and
 6. make `is_active` and User deletion unavailable through default Admin paths,
    or route a reviewed Admin action through the same service.
 
-Tests must cover a User who owns several Profiles, concurrent owner demotion
-versus deactivation, sole-owner denial, session-established-then-deactivated
-requests, rollback/audit, and stable multi-Profile lock ordering. Direct SQL
+Tests for the future account-lifecycle implementation must cover a User who owns
+several Profiles, concurrent owner demotion versus deactivation, sole-owner
+handling, session-established-then-deactivated requests, rollback/audit, and
+stable multi-Profile lock ordering. Direct SQL
 outside reviewed application/maintenance services remains an operational
 privilege and must be audited; a simple row constraint cannot enforce this
 cross-row/cross-table invariant.
 
 ## 7. Profile Invitation contract
 
-Unless a bullet is explicitly labeled **[APPROVED]** or **[REQUIREMENT]**, the
-record, role ceiling, state, token, identity-binding, delivery, API, and error
-details in this section are **[PROPOSED]** and require owner approval.
+The consent boundary, email binding, one-time expiring credential, role ceiling,
+seven-day TTL, resend invalidation, initial rate limits, and minimum metadata
+retention below are **[APPROVED BY OWNER DELEGATION]**. This remains a design
+contract only: `HT-RBAC-P1-03` does not add an Invitation model, migration,
+service, endpoint, token, or delivery flow. Bullets still labeled
+**[PROPOSED]**, **[OPEN]**, or **[DEFER]** remain unavailable.
 
 ### 7.1 Aggregate and consent boundary
 
@@ -447,7 +593,7 @@ details in this section are **[PROPOSED]** and require owner approval.
 - **[APPROVED]** Only after acceptance may Profile Owner/Admin use the separate
   direct-add operation to create Workspace membership for that active Profile
   member.
-- **[PROPOSED]** A combined UI may orchestrate these two explicit operations
+- **[DEFER]** A combined UI may orchestrate these two explicit operations
   later, but it must not hide or bypass the Profile-consent transition.
 
 ### 7.2 Authority and requested role
@@ -455,19 +601,22 @@ details in this section are **[PROPOSED]** and require owner approval.
 - **[REQUIREMENT]** The outsource assigns invitation sending to Owner/Admin.
   It described a Workspace invitation; the later approved consent boundary
   requires the invitation to join Profile first.
-- **[PROPOSED]** Active Profile Owner/Admin in the exact Profile may
-  create/list/revoke that Profile invitation; Profile Member and every
+- **[APPROVED BY OWNER DELEGATION]** Active Profile Owner/Admin in the exact
+  Profile may create a Profile invitation; Profile Member and every
   Workspace-only role are denied.
-- **[PROPOSED]** Owner may invite `MEMBER` or `ADMIN`.
-- **[PROPOSED]** Admin may invite `MEMBER` only. Whether Admin may grant Admin
-  remains **[OPEN]**.
-- **[PROPOSED]** Owner may list/revoke/reinvite every permitted requested role;
-  Admin may manage only `MEMBER` invitations. Admin cannot revoke or rotate an
-  Owner-created `ADMIN` invitation. The exact management ceiling is **[OPEN]**.
-- **[PROPOSED]** Invitation cannot grant `OWNER`. Ownership is a separate
+- **[APPROVED BY OWNER DELEGATION]** Owner may invite `MEMBER` or `ADMIN`.
+- **[APPROVED BY OWNER DELEGATION]** Admin may invite `MEMBER` only and cannot
+  invite `ADMIN`.
+- **[DEFER]** Exact list/revoke/reinvite authority and visibility remain part of
+  the later Invitation API contract. No role may use those operations to exceed
+  its approved creation ceiling.
+- **[APPROVED BY OWNER DELEGATION]** Invitation cannot grant `OWNER`.
+  Ownership is a separate
   Owner-only, locked transition after accepted membership. This avoids an
   invitation bypass around last-owner/Owner governance.
-- **[PROPOSED]** Only the bound recipient may accept or decline.
+- **[APPROVED BY OWNER DELEGATION]** The invitation is bound to its recipient
+  email. Exact account binding still depends on verified-email support as
+  described in section 7.4.
 
 ### 7.3 Proposed future record
 
@@ -482,14 +631,16 @@ This is schema design only; no model or migration exists:
 | `invited_by` | Actor snapshot/FK subject to retention policy |
 | `status` | `PENDING`, `ACCEPTED`, `DECLINED` (recipient reject), `EXPIRED`, `REVOKED` |
 | `token_hash` | Unique digest only; raw token is never persisted |
-| `expires_at` | Required; exact default/max TTL is open |
-| terminal metadata | Terminal timestamp, actor/reason where applicable, optional superseded link |
+| `expires_at` | Required; approved initial TTL is 7 days |
+| terminal metadata | Retained for at least 12 months after terminal state; terminal timestamp, actor/reason where applicable, optional superseded link |
 | uniqueness | At most one `PENDING` invitation per Profile/normalized email and, when bound, per Profile/recipient User; stale pending is terminalized under lock before replacement |
 | indexes | Profile/status/expiry and safe recipient-inbox lookup |
 
-**[PROPOSED]** Only `PENDING` may transition. Terminal states are immutable. A
-reinvite or resend revokes/replaces the old pending credential and creates a
-new token; it never revives a terminal row or extends/reuses a token silently.
+**[APPROVED BY OWNER DELEGATION]** Reinvite/resend invalidates the prior
+credential and issues a new one; it never silently extends or reuses the old
+token. The proposed state machine keeps terminal records immutable and retains
+their metadata for at least 12 months. Automated purge is explicitly outside
+this task.
 
 ### 7.4 Recipient and account binding
 
@@ -502,12 +653,14 @@ new token; it never revives a terminal row or extends/reuses a token silently.
   email has no race-proof case-insensitive DB constraint, an existing-account
   lookup must fail closed unless it resolves exactly one User; identity
   hardening may require HT-AUTH-P1-02 before launch.
-- **[PROPOSED / OPEN]** Acceptance requires an active authenticated Django
-  session, CSRF, a valid raw token, an active account, and an unambiguous
-  account email matching the invitation snapshot. The owner must decide
-  whether mailbox-token possession plus session match is sufficient for an
-  existing account or whether a separately persisted verified-email state is
-  a prerequisite. Token possession alone never grants tenant read access.
+- **[DEPENDENCY]** Production Profile Invitation must not be enabled until the
+  recipient account has a reviewed, persisted verified-email signal and the
+  acceptance flow binds the active authenticated account to the invitation's
+  normalized email. A hashed one-time token alone does not verify email
+  identity and is not sufficient to claim that the flow is production-safe.
+  Exact registration/linking behavior for an unregistered recipient belongs to
+  `HT-AUTH-P1-02` and the later Invitation task. Token possession alone never
+  grants tenant read access.
 - If the target is already an active Profile member, invitation creation
   returns a deterministic `already_member` conflict and never changes their
   role. Role change and Workspace add are separate flows.
@@ -517,9 +670,9 @@ new token; it never revives a terminal row or extends/reuses a token silently.
   Workspace access. The current WorkspaceMember schema would make old rows
   effective again once Profile membership is active, so implementation needs
   an owner-approved deactivate/archive/remove strategy before rejoin ships.
-- Invitations to unregistered email addresses are **[OPEN]** because current
-  authentication has no verified-email invitation onboarding flow. Ambiguous
-  case-insensitive account matches must fail closed.
+- Invitations to unregistered email addresses remain **[DEFER]** because
+  current authentication has no verified-email invitation onboarding flow.
+  Ambiguous case-insensitive account matches must fail closed.
 
 ### 7.5 Token and delivery security
 
@@ -539,9 +692,11 @@ new token; it never revives a terminal row or extends/reuses a token silently.
   a uniform non-enumerating response. An already-accepted token may return the
   same logical success only to the same authenticated recipient, with no new
   write; every other replay uses the generic invalid response.
-- Endpoint throttling is required, but exact limits and distributed cache
-  deployment are **[OPEN]**. Legacy 14-day/legacy rate limits are evidence,
-  not accepted defaults.
+- **[APPROVED BY OWNER DELEGATION]** Initial limits are five invitation
+  attempts per recipient email per 24 hours and 30 invitations per inviter per
+  24 hours. The implementation must use a deployment-appropriate shared
+  enforcement mechanism before production; these approved limits are not
+  implemented by this task.
 
 ### 7.6 State and concurrency contract
 
@@ -557,9 +712,10 @@ PENDING ──accept──> ACCEPTED
 - Token lookup may identify the Profile; inside `atomic`, lock in the order
   Profile → Invitation → relevant ProfileMembership rows, then revalidate all
   actor/recipient/status/expiry/role conditions.
-- Accept activates at most one membership using the owner-approved
-  create-versus-reactivate strategy, marks the invite accepted, and writes both
-  invitation and membership audit events atomically.
+- Accept activates at most one membership using the create-versus-reactivate
+  history strategy selected in the later Invitation implementation review,
+  marks the invite accepted, and writes both invitation and membership audit
+  events atomically.
 - Concurrent accept/accept, accept/revoke, and accept/reinvite produce exactly
   one terminal winner. Reconcile any `IntegrityError` by rereading; never
   overwrite an existing membership role.
@@ -567,8 +723,8 @@ PENDING ──accept──> ACCEPTED
   same logical result without another write. Other replays get the generic
   invalid response.
 - Whether acceptance revalidates the inviter's current authority, or pending
-  invitations survive inviter demotion/removal, is **[OPEN]**. Revalidation is
-  the proposed fail-closed policy.
+  invitations survive inviter demotion/removal, is **[DEFER]** to the Invitation
+  implementation review. Revalidation is the proposed fail-closed policy.
 
 ### 7.7 Audit events
 
@@ -623,8 +779,9 @@ Proposed validation contract:
   parent/context; body values cannot reparent or impersonate ownership.
 - Direct Workspace add accepts `{target_profile_membership_id, role}`, not a
   global User ID. The target membership must be active in the nested Profile;
-  the role must be owner-approved and effective. Current/deprecated
-  `WorkspaceMember.OWNER` and unapproved Viewer assignment fail closed.
+  the role must be approved and effective. `ADMIN`, `MEMBER` (Editor), and
+  `VIEWER` are supported subject to the actor's ceiling;
+  `WorkspaceMember.OWNER` always fails closed and is never newly assigned.
 - Profile/Workspace membership mutations accept only the exact approved
   role/active operation. Actor, tenant, target User, audit fields, and owner
   status are never writable implicitly. Profile leave and Workspace removal/
@@ -661,8 +818,10 @@ error-contract review):
 
 Request serializers reject/ignore server-owned fields including Profile,
 recipient User, inviter, status, digest, expiry overrides, terminal metadata,
-membership User, and audit metadata. The unregistered-recipient, email
-verification, TTL, throttle, and exact error-envelope choices remain open.
+membership User, and audit metadata. The seven-day TTL, resend invalidation,
+and initial throttle ceilings are approved but not implemented. Verified email
+remains a production dependency; unregistered-recipient onboarding, delivery,
+and exact error-envelope details remain deferred.
 
 ### 8.3 Deliberately deferred APIs
 
@@ -687,8 +846,9 @@ verification, TTL, throttle, and exact error-envelope choices remain open.
 - Profile Owner/Admin sees all mapped Workspaces in the same Profile without
   needing Workspace membership.
 - Existing WorkspaceMember plus inactive ProfileMembership is denied.
-- A WorkspaceMember row with deprecated, unknown, or not-yet-enabled role is
-  denied until explicitly reconciled/approved; mere row existence is not access.
+- A WorkspaceMember row with legacy `OWNER` or an unknown role is denied;
+  approved `ADMIN`, `MEMBER`, and `VIEWER` rows map only to their documented
+  Workspace-scoped capabilities.
 - Inactive User is denied.
 - `Workspace.profile=NULL` is never listed or retrieved.
 - Nested Profile A with Workspace B returns `404`.
@@ -714,12 +874,16 @@ verification, TTL, throttle, and exact error-envelope choices remain open.
 - Admin cannot create/update/deactivate/remove Owner or mint Workspace Owner.
 - Workspace Admin cannot manage Profile membership/invitations, Profile-wide
   Client data, or Finance.
+- Workspace Admin can assign only Editor (`MEMBER`) or Viewer in its own
+  Workspace; it cannot grant Workspace Admin/Owner or act in another Workspace.
 - Viewer is denied every mutation and all unapproved export/download paths.
 - Transitional `Workspace.owner` and `WorkspaceMember.OWNER` do not grant
   Profile authority.
 - Client/Guest credentials cannot call internal endpoints.
 - Task creator, assignee, commenter, uploader, and reviewer are authorized in
   the Task Workspace at write time.
+- A submitter cannot approve their own Deliverable; approval remains unavailable
+  until a concrete Review capability and workflow are implemented.
 
 ### 9.4 Invitation and concurrency
 
@@ -732,6 +896,9 @@ verification, TTL, throttle, and exact error-envelope choices remain open.
   expired, declined, revoked, and replayed token cases are non-enumerating.
 - Concurrent accept/accept creates/reactivates exactly one active membership
   with one effective transition; accept versus revoke/reinvite has one winner.
+- Invitation expiry uses the approved seven-day TTL; resend/reinvite invalidates
+  the previous credential. Creation enforces five attempts per recipient email
+  and 30 invitations per inviter in 24 hours.
 - Invitation acceptance never creates Workspace membership automatically.
 - Direct Workspace add still rejects missing/inactive/cross-Profile membership.
 - Raw token/hash is absent from serialized responses, AuditLog, and captured
@@ -741,10 +908,10 @@ verification, TTL, throttle, and exact error-envelope choices remain open.
 
 ### 9.5 Bypass and regression
 
-- Last-owner and role-revocation races preserve a usable Owner.
-- Sole-Owner User deactivation is denied; multi-Profile deactivation locks in
-  stable order; a session established before `is_active=False` cannot continue
-  using private tenant endpoints.
+- Last-owner and role-revocation races preserve an active Owner membership.
+- The future approved account-lifecycle implementation denies unsafe sole-Owner
+  deactivation, locks multi-Profile changes in stable order, revokes continued
+  use of sessions established before `is_active=False`, and preserves history.
 - Duplicate direct-add cannot create duplicate Workspace membership.
 - Audit write rolls back with the state mutation.
 - Constraint conflicts become domain errors, never unhandled `500` responses.
@@ -755,20 +922,24 @@ verification, TTL, throttle, and exact error-envelope choices remain open.
 
 ## 10. Dependency-ordered implementation plan
 
-1. Owner approves or edits this capability matrix, role vocabulary, tenant
-   error/bypass policy, and invitation decisions.
+1. **Completed 2026-10-17:** owner delegation approved the role compatibility
+   mapping, tenant non-disclosure rule, account-lifecycle target, and invitation
+   ceilings/TTL/throttles/retention listed in section 2.4.
 2. Repeat target-environment read-only inventory, apply backup policy, then
    safely apply existing `workspace.0002` before exercising Workspace APIs in
    development. Never synthesize mappings for unknown legacy rows.
-3. Implement request access context, tenant-scoped selectors, capability
-   primitives, and stable domain exception mapping without opening broad CRUD.
-4. Refactor current membership services to authorize/scoped-resolve before
-   target lookup; add IDOR, service, and concurrency tests.
+3. **Completed 2026-10-18:** implement verified access contexts,
+   tenant-scoped Profile/Workspace selectors, revalidated capability primitives,
+   and stable domain exception mapping without opening CRUD.
+4. **Completed 2026-10-18:** refactor membership services to
+   authorize/scoped-resolve before target lookup and add IDOR, role-ceiling,
+   stale/forged-context, service, duplicate, and concurrency tests.
 5. Add minimal Profile/Workspace read endpoints, then approved membership and
    Workspace lifecycle mutations under `/api/v1/`.
-6. After invitation decisions are accepted, add only a new additive migration
-   (expected `workspace/0003+`), migration rehearsals, locked service, hashed
-   token/delivery flow, audit events, and invitation API tests.
+6. After verified-email/account-binding dependencies and the remaining
+   Invitation implementation details are reviewed, add only a new additive
+   migration (expected `workspace/0003+`), migration rehearsals, locked service,
+   hashed token/delivery flow, audit events, and Invitation API tests.
 7. Design/approve Task visibility and workflow; only then open Task APIs.
 8. Add Client/Project/Finance/Audit tenant schema and APIs in their own
    reviewed migrations/tasks.
@@ -792,56 +963,70 @@ No slice may claim a pass from this design document. These gates become
 executable acceptance criteria only after the corresponding implementation is
 authorized and the listed tests are actually run.
 
-## 11. Owner decisions required before implementation
+### 10.2 HT-RBAC-P1-03 implementation evidence — 2026-10-18
 
-Every `R/P` and `P` cell in the capability matrix remains pending. The grouped
-questions below are a review checklist, not implicit approval for any proposal
-that is not named word-for-word.
+- Final targeted Workspace suite: PASS, 51/51.
+- Final full PostgreSQL suite: PASS, 80/80, including all 19 Authentication and
+  10 API Foundation regressions.
+- `pip check`, Python compile, Django system check and
+  `makemigrations --check --dry-run`: PASS.
+- Independent review found a `dataclasses.replace()` context-forgery risk; the
+  context marker was changed to non-init state, capabilities now revalidate
+  exact database roles, and forged/stale-context regressions pass.
+- No model, migration, route, authentication mechanism or development data
+  changed. `workspace.0002` remains unapplied to development.
+- Direct ORM/bulk/raw/Admin writes and the unimplemented global User
+  deactivation/session-revocation flow remain explicit boundaries.
 
-1. Keep Workspace Admin as narrow Workspace content manager, or use only
-   inherited Profile Owner/Admin management?
-2. Deprecate `WorkspaceMember.OWNER` and prohibit new API assignments?
-3. Retain Viewer with the limited scope above, or disable it? If retained,
-   exactly which comments, Deliverables, downloads, exports, and member fields
-   are visible?
-4. May Profile Admin invite/grant/deactivate another Admin, or only Members?
-   Which pending invitations may Admin list/revoke/reinvite, including an
-   Owner-created `ADMIN` invitation? Proposed default: Owner-only Admin
-   governance and Admin management of `MEMBER` invitations only.
-5. Who may soft-delete/restore Workspace and Profile? Proposed default:
-   Profile Owner only; hard delete remains deferred.
-6. May Workspace Admin change Workspace membership? Proposed first phase: no;
-   Profile Owner/Admin only.
-7. Does Workspace Member read all Workspace Tasks, only assigned Tasks, or
-   assigned plus a published claimable pool?
-8. Must inherited Profile Owner/Admin also be explicit Workspace members to be
-   assigned/upload as contributors? Proposed: yes for operational attribution.
-9. For an existing account, is mailbox-token possession plus a matching active
-   session sufficient, or is persisted verified-email state required? Are
-   unregistered recipients supported? Approve normalization, registration/
-   linking, ambiguous account, and email-change behavior.
-10. Invitation default/max TTL, resend/reinvite semantics, throttle limits,
-    and delivery channels.
-11. On voluntary Profile/Workspace leave and later Profile rejoin, what is
-    deactivated/retained/audited? Reactivate an old membership or create a new
-    row, and how are historical WorkspaceMember rows prevented from silently
-    restoring access?
-12. Do pending invitations survive inviter demotion/deactivation/removal, or
-    must acceptance revalidate current issuer authority? Proposed: revalidate.
-13. Is a Profile-only invitation sufficient, or should a later combined UI
-    collect a requested Workspace role while preserving two distinct state
-    transitions?
-14. Approve `404`/`403`/generic `400` semantics, `409` domain conflict shape,
-    whether any API platform-operator bypass exists, and the User lifecycle/
-    Admin policy for `is_active`, deletion, sole/multi-Profile Owners, and
-    session revocation.
-15. Retention/anonymization and hard-delete authority for terminal invitations
-    and recipient PII.
-16. Is Profile creation self-service for every active authenticated User, or
-    staff-mediated/limited? Approve eligibility, quotas/abuse controls, and the
-    creation-only initial-Owner bootstrap exception to invitation consent.
+## 11. Delegated decisions resolved and downstream review gates
 
-Detailed Task/Review transitions, Finance numbering, public-link capabilities,
-and global retention policy remain separate roadmap decisions and are not
-implicitly approved by this design.
+The former seven-group RBAC owner-review blocker is resolved by the decisions
+in section 2.4. `HT-RBAC-DESIGN-P0-01` is complete and approved by owner
+delegation. In particular, no later review may silently reopen these rules:
+
+- Profile Owner/Admin inherit same-Profile Workspace content management, while
+  Profile Admin receives no implicit sensitive Finance capability.
+- Workspace `ADMIN`, `MEMBER`, and `VIEWER` map to Workspace Admin, Editor, and
+  read-only Viewer. Legacy Workspace `OWNER` fails closed and is never newly
+  assigned. Workspace Admin can manage only its own Workspace and may grant
+  only Editor or Viewer participation.
+- Profile Admin follows a least-privilege membership ceiling: it may manage an
+  ordinary Profile `MEMBER`, but cannot grant or alter `ADMIN` or `OWNER`.
+- Profile creation and last-active-Owner protection are transactional. A future
+  supported User-deactivation flow must revoke session usability and preserve
+  historical/business data.
+- Invitation email binding, one-time expiry, no-`OWNER` ceiling, Owner/Admin
+  invite ceilings, seven-day TTL, resend invalidation, initial 5/email/24h and
+  30/inviter/24h limits, and 12-month minimum terminal-metadata retention are
+  fixed target rules. They are not runtime behavior yet.
+- Cross-tenant existence is non-enumerating. Global Django Admin is not tenant
+  RBAC, and tenant-wide business-model access remains platform-superuser-only
+  until a tenant-scoped Admin exists.
+- Deliverable approval requires a distinct Review capability and forbids
+  self-approval. The concrete reviewer role and workflow states remain for the
+  dedicated Task/Review task.
+
+The following are separate downstream review gates, not stale questions that
+block `HT-RBAC-P1-03`:
+
+1. Exact Task visibility, contributor/assignee attribution, state transitions,
+   concrete Review-role assignment, and payroll trigger.
+2. Profile/Workspace create, rollover, edit, soft-delete/restore, self-leave,
+   rejoin/history, and self-service eligibility beyond the approved foundation
+   invariants.
+3. Verified-email persistence and account linking before production
+   Invitation, plus unregistered-recipient onboarding, delivery channel,
+   inviter-authority revalidation, exact terminal-state/history strategy,
+   anonymization, legal hold, and controlled purge after the approved minimum.
+   Token hashing by itself is not sufficient email-identity verification.
+4. Exact API error envelope/status choices beyond the approved non-disclosure
+   requirement, plus any future audited platform-operator API bypass.
+5. Invoice numbering/detailed billing; Client Portal/Guest Review exact
+   capabilities, account linking, and default expiry; and broader retention/
+   purge policy.
+
+Every `R/P`, `P`, or `DEFER` capability not covered by an approved rule remains
+denied/unimplemented until its own task. An unknown row discovered in a target
+database remains an environment-specific mapping blocker to escalate with
+evidence, never permission to invent a tenant mapping.
 

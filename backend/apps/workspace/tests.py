@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import FrozenInstanceError, replace
 from threading import Barrier, Event
 from unittest.mock import patch
+from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -17,9 +19,22 @@ from django.test import TestCase, TransactionTestCase
 
 from apps.audit.models import AuditLog
 
+from .access import (
+    ProfileAccessContext,
+    TenantAccessNotFound,
+    WorkspaceAccessContext,
+    can_edit_workspace,
+    can_manage_workspace_members,
+    can_read_workspace,
+    profiles_visible_to,
+    resolve_profile_access_context,
+    resolve_workspace_access_context,
+    workspaces_visible_to,
+)
 from .models import Profile, ProfileMembership, Workspace, WorkspaceMember
 from .services import (
     LastActiveProfileOwnerError,
+    WorkspaceMembershipConflict,
     add_workspace_member,
     create_profile_with_owner,
     update_profile_membership,
@@ -199,6 +214,330 @@ class ProfileFoundationTests(WorkspaceTestDataMixin, TestCase):
             membership.full_clean()
 
 
+class TenantAccessContextTests(WorkspaceTestDataMixin, TestCase):
+
+    def setUp(self):
+        self.owner = self.create_user("access-owner")
+        self.admin = self.create_user("access-admin")
+        self.member = self.create_user("access-member")
+        self.other_owner = self.create_user("access-other-owner")
+
+        self.profile = create_profile_with_owner(
+            name="Access Profile",
+            owner=self.owner,
+        )
+        self.admin_membership = ProfileMembership.objects.create(
+            profile=self.profile,
+            user=self.admin,
+            role=ProfileMembership.Role.ADMIN,
+        )
+        self.member_membership = ProfileMembership.objects.create(
+            profile=self.profile,
+            user=self.member,
+            role=ProfileMembership.Role.MEMBER,
+        )
+        self.other_profile = create_profile_with_owner(
+            name="Other Access Profile",
+            owner=self.other_owner,
+        )
+        self.other_member_membership = ProfileMembership.objects.create(
+            profile=self.other_profile,
+            user=self.member,
+            role=ProfileMembership.Role.MEMBER,
+        )
+
+        self.admin_workspace = self._create_workspace("Workspace Admin")
+        self.editor_workspace = self._create_workspace("Workspace Editor")
+        self.viewer_workspace = self._create_workspace("Workspace Viewer")
+        self.legacy_owner_workspace = self._create_workspace(
+            "Legacy Workspace Owner"
+        )
+        self.unassigned_workspace = self._create_workspace(
+            "Unassigned Workspace"
+        )
+        self.other_workspace = Workspace.objects.create(
+            name="Other Profile Workspace",
+            profile=self.other_profile,
+            owner=self.other_owner,
+        )
+        self.unmapped_workspace = Workspace(
+            name="Unmapped Legacy Workspace",
+            owner=self.owner,
+        )
+        Workspace.objects.bulk_create((self.unmapped_workspace,))
+
+        for workspace, role in (
+            (self.admin_workspace, WorkspaceMember.Role.ADMIN),
+            (self.editor_workspace, WorkspaceMember.Role.MEMBER),
+            (self.viewer_workspace, WorkspaceMember.Role.VIEWER),
+            (self.legacy_owner_workspace, WorkspaceMember.Role.OWNER),
+        ):
+            WorkspaceMember.objects.create(
+                workspace=workspace,
+                user=self.member,
+                role=role,
+            )
+
+    def _create_workspace(self, name):
+        return Workspace.objects.create(
+            name=name,
+            profile=self.profile,
+            owner=self.owner,
+        )
+
+    def test_profile_visibility_uses_current_active_account_and_memberships(self):
+        self.assertSetEqual(
+            set(profiles_visible_to(self.member).values_list("id", flat=True)),
+            {self.profile.id, self.other_profile.id},
+        )
+
+        self.other_member_membership.is_active = False
+        self.other_member_membership.save(
+            update_fields=("is_active", "updated_at")
+        )
+        self.assertSetEqual(
+            set(profiles_visible_to(self.member).values_list("id", flat=True)),
+            {self.profile.id},
+        )
+
+        User.objects.filter(id=self.member.id).update(is_active=False)
+        self.assertFalse(profiles_visible_to(self.member).exists())
+
+    def test_profile_context_is_id_based_immutable_and_tenant_scoped(self):
+        context = resolve_profile_access_context(
+            self.member,
+            self.profile.id,
+        )
+
+        self.assertIsInstance(context, ProfileAccessContext)
+        self.assertEqual(context.user_id, self.member.id)
+        self.assertEqual(context.profile_id, self.profile.id)
+        self.assertEqual(context.membership_id, self.member_membership.id)
+        self.assertEqual(context.profile_role, ProfileMembership.Role.MEMBER)
+        with self.assertRaises(FrozenInstanceError):
+            context.profile_role = ProfileMembership.Role.OWNER
+
+    def test_profile_context_hides_unknown_and_out_of_scope_profiles(self):
+        failures = []
+        for profile_id in (self.profile.id, uuid4()):
+            with self.assertRaises(TenantAccessNotFound) as raised:
+                resolve_profile_access_context(self.other_owner, profile_id)
+            failures.append(str(raised.exception))
+
+        self.assertEqual(failures[0], failures[1])
+
+    def test_profile_managers_see_every_mapped_workspace_in_profile(self):
+        expected_ids = {
+            self.admin_workspace.id,
+            self.editor_workspace.id,
+            self.viewer_workspace.id,
+            self.legacy_owner_workspace.id,
+            self.unassigned_workspace.id,
+        }
+
+        for actor in (self.owner, self.admin):
+            with self.subTest(actor=actor.username):
+                profile_context = resolve_profile_access_context(
+                    actor,
+                    self.profile.id,
+                )
+                self.assertSetEqual(
+                    set(
+                        workspaces_visible_to(profile_context).values_list(
+                            "id",
+                            flat=True,
+                        )
+                    ),
+                    expected_ids,
+                )
+
+    def test_profile_member_sees_only_explicit_effective_workspace_roles(self):
+        profile_context = resolve_profile_access_context(
+            self.member,
+            self.profile.id,
+        )
+
+        self.assertSetEqual(
+            set(
+                workspaces_visible_to(profile_context).values_list(
+                    "id",
+                    flat=True,
+                )
+            ),
+            {
+                self.admin_workspace.id,
+                self.editor_workspace.id,
+                self.viewer_workspace.id,
+            },
+        )
+
+        with self.assertRaises(TenantAccessNotFound):
+            resolve_workspace_access_context(
+                profile_context,
+                self.legacy_owner_workspace.id,
+            )
+        with self.assertRaises(TenantAccessNotFound):
+            resolve_workspace_access_context(
+                profile_context,
+                self.unassigned_workspace.id,
+            )
+
+    def test_workspace_capabilities_match_effective_role_mapping(self):
+        owner_context = resolve_profile_access_context(
+            self.owner,
+            self.profile.id,
+        )
+        inherited_context = resolve_workspace_access_context(
+            owner_context,
+            self.unassigned_workspace.id,
+        )
+        self.assertIsNone(inherited_context.workspace_role)
+        self.assertTrue(can_read_workspace(inherited_context))
+        self.assertTrue(can_edit_workspace(inherited_context))
+        self.assertTrue(can_manage_workspace_members(inherited_context))
+
+        profile_context = resolve_profile_access_context(
+            self.member,
+            self.profile.id,
+        )
+        role_expectations = (
+            (self.admin_workspace, True, True, True),
+            (self.editor_workspace, True, True, False),
+            (self.viewer_workspace, True, False, False),
+        )
+        for workspace, can_read, can_edit, can_manage in role_expectations:
+            with self.subTest(workspace=workspace.name):
+                context = resolve_workspace_access_context(
+                    profile_context,
+                    workspace.id,
+                )
+                self.assertIsInstance(context, WorkspaceAccessContext)
+                self.assertEqual(can_read_workspace(context), can_read)
+                self.assertEqual(can_edit_workspace(context), can_edit)
+                self.assertEqual(
+                    can_manage_workspace_members(context),
+                    can_manage,
+                )
+
+        legacy_context = WorkspaceAccessContext(
+            profile_context=profile_context,
+            workspace_id=self.legacy_owner_workspace.id,
+            workspace_role=WorkspaceMember.Role.OWNER,
+        )
+        self.assertFalse(can_read_workspace(legacy_context))
+        self.assertFalse(can_edit_workspace(legacy_context))
+        self.assertFalse(can_manage_workspace_members(legacy_context))
+
+    def test_replaced_workspace_context_cannot_forge_capabilities(self):
+        profile_context = resolve_profile_access_context(
+            self.member,
+            self.profile.id,
+        )
+        viewer_context = resolve_workspace_access_context(
+            profile_context,
+            self.viewer_workspace.id,
+        )
+
+        forged_context = replace(
+            viewer_context,
+            workspace_role=WorkspaceMember.Role.ADMIN,
+        )
+
+        self.assertFalse(can_read_workspace(forged_context))
+        self.assertFalse(can_edit_workspace(forged_context))
+        self.assertFalse(can_manage_workspace_members(forged_context))
+
+    def test_workspace_capabilities_fail_closed_after_role_or_user_revocation(self):
+        profile_context = resolve_profile_access_context(
+            self.member,
+            self.profile.id,
+        )
+        admin_context = resolve_workspace_access_context(
+            profile_context,
+            self.admin_workspace.id,
+        )
+
+        WorkspaceMember.objects.filter(
+            workspace=self.admin_workspace,
+            user=self.member,
+        ).update(role=WorkspaceMember.Role.VIEWER)
+
+        self.assertFalse(can_read_workspace(admin_context))
+        self.assertFalse(can_edit_workspace(admin_context))
+        self.assertFalse(can_manage_workspace_members(admin_context))
+
+        viewer_context = resolve_workspace_access_context(
+            profile_context,
+            self.admin_workspace.id,
+        )
+        self.assertTrue(can_read_workspace(viewer_context))
+        self.assertFalse(can_edit_workspace(viewer_context))
+        self.assertFalse(can_manage_workspace_members(viewer_context))
+
+        User.objects.filter(id=self.member.id).update(is_active=False)
+        self.assertFalse(can_read_workspace(viewer_context))
+
+        forged_profile_context = ProfileAccessContext(
+            user_id=self.member.id,
+            profile_id=self.profile.id,
+            membership_id=self.member_membership.id,
+            profile_role=ProfileMembership.Role.OWNER,
+        )
+        forged_workspace_context = WorkspaceAccessContext(
+            profile_context=forged_profile_context,
+            workspace_id=self.unassigned_workspace.id,
+            workspace_role=None,
+        )
+        self.assertFalse(can_read_workspace(forged_workspace_context))
+        self.assertFalse(can_edit_workspace(forged_workspace_context))
+        self.assertFalse(
+            can_manage_workspace_members(forged_workspace_context)
+        )
+        with self.assertRaises(TenantAccessNotFound):
+            workspaces_visible_to(forged_profile_context)
+
+    def test_workspace_context_hides_unknown_and_out_of_scope_workspaces(self):
+        other_context = resolve_profile_access_context(
+            self.other_owner,
+            self.other_profile.id,
+        )
+        failures = []
+        for workspace_id in (self.unassigned_workspace.id, uuid4()):
+            with self.assertRaises(TenantAccessNotFound) as raised:
+                resolve_workspace_access_context(other_context, workspace_id)
+            failures.append(str(raised.exception))
+
+        self.assertEqual(failures[0], failures[1])
+
+    def test_stale_profile_context_fails_closed(self):
+        member_context = resolve_profile_access_context(
+            self.member,
+            self.profile.id,
+        )
+        unevaluated_scope = workspaces_visible_to(member_context)
+        self.member_membership.is_active = False
+        self.member_membership.save(
+            update_fields=("is_active", "updated_at")
+        )
+
+        self.assertFalse(unevaluated_scope.exists())
+        with self.assertRaises(TenantAccessNotFound):
+            workspaces_visible_to(member_context)
+        with self.assertRaises(TenantAccessNotFound):
+            resolve_workspace_access_context(
+                member_context,
+                self.editor_workspace.id,
+            )
+
+        admin_context = resolve_profile_access_context(
+            self.admin,
+            self.profile.id,
+        )
+        User.objects.filter(id=self.admin.id).update(is_active=False)
+        with self.assertRaises(TenantAccessNotFound):
+            workspaces_visible_to(admin_context)
+
+
 class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
 
     def setUp(self):
@@ -227,6 +566,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
     def test_last_active_owner_cannot_be_deactivated_or_demoted(self):
         with self.assertRaises(LastActiveProfileOwnerError):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=self.owner_membership.id,
                 actor=self.owner,
                 is_active=False,
@@ -234,6 +574,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
 
         with self.assertRaises(LastActiveProfileOwnerError):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=self.owner_membership.id,
                 actor=self.owner,
                 role=ProfileMembership.Role.ADMIN,
@@ -248,11 +589,13 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
 
     def test_owner_can_promote_second_owner_then_deactivate_self(self):
         update_profile_membership(
+            profile_id=self.profile.id,
             membership_id=self.member_membership.id,
             actor=self.owner,
             role=ProfileMembership.Role.OWNER,
         )
         update_profile_membership(
+            profile_id=self.profile.id,
             membership_id=self.owner_membership.id,
             actor=self.owner,
             is_active=False,
@@ -276,6 +619,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
     def test_admin_cannot_appoint_or_modify_owner(self):
         with self.assertRaises(PermissionDenied):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=self.member_membership.id,
                 actor=self.admin,
                 role=ProfileMembership.Role.OWNER,
@@ -283,14 +627,89 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
 
         with self.assertRaises(PermissionDenied):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=self.owner_membership.id,
                 actor=self.admin,
                 is_active=False,
             )
 
+    def test_admin_can_deactivate_current_profile_member(self):
+        updated_membership = update_profile_membership(
+            profile_id=self.profile.id,
+            membership_id=self.member_membership.id,
+            actor=self.admin,
+            is_active=False,
+        )
+
+        self.assertFalse(updated_membership.is_active)
+        audit = AuditLog.objects.get(
+            action="profile.membership.updated",
+            entity_id=self.member_membership.id,
+        )
+        self.assertEqual(audit.user, self.admin)
+
+    def test_admin_cannot_manage_admin_or_promote_member(self):
+        attempts = (
+            {
+                "membership_id": self.admin_membership.id,
+                "role": ProfileMembership.Role.MEMBER,
+            },
+            {
+                "membership_id": self.member_membership.id,
+                "role": ProfileMembership.Role.ADMIN,
+            },
+        )
+
+        for attempt in attempts:
+            with self.subTest(attempt=attempt):
+                with self.assertRaises(PermissionDenied):
+                    update_profile_membership(
+                        profile_id=self.profile.id,
+                        actor=self.admin,
+                        **attempt,
+                    )
+
+        self.assertFalse(
+            AuditLog.objects.filter(
+                action="profile.membership.updated"
+            ).exists()
+        )
+
+    def test_target_lookup_hides_cross_profile_and_unknown_memberships(self):
+        other_owner = self.create_user("scoped-target-other-owner")
+        other_profile = create_profile_with_owner(
+            name="Scoped Target Other Profile",
+            owner=other_owner,
+        )
+        failures = []
+
+        for membership_id in (
+            ProfileMembership.objects.get(
+                profile=other_profile,
+                user=other_owner,
+            ).id,
+            uuid4(),
+        ):
+            with self.assertRaises(TenantAccessNotFound) as raised:
+                update_profile_membership(
+                    profile_id=self.profile.id,
+                    membership_id=membership_id,
+                    actor=self.owner,
+                    is_active=False,
+                )
+            failures.append(str(raised.exception))
+
+        self.assertEqual(failures[0], failures[1])
+        self.assertFalse(
+            AuditLog.objects.filter(
+                action="profile.membership.updated"
+            ).exists()
+        )
+
     def test_non_manager_cannot_change_profile_membership(self):
         with self.assertRaises(PermissionDenied):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=self.admin_membership.id,
                 actor=self.member,
                 is_active=False,
@@ -298,13 +717,14 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
 
     def test_manager_role_does_not_apply_to_another_profile(self):
         other_owner = self.create_user("other-profile-owner")
-        create_profile_with_owner(
+        other_profile = create_profile_with_owner(
             name="Other Profile",
             owner=other_owner,
         )
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(TenantAccessNotFound):
             update_profile_membership(
+                profile_id=other_profile.id,
                 membership_id=self.member_membership.id,
                 actor=other_owner,
                 role=ProfileMembership.Role.ADMIN,
@@ -320,8 +740,9 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
         self.admin.is_active = False
         self.admin.save(update_fields=("is_active",))
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(TenantAccessNotFound):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=self.member_membership.id,
                 actor=self.admin,
                 role=ProfileMembership.Role.ADMIN,
@@ -331,6 +752,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
         self.member.save(update_fields=("is_active",))
         with self.assertRaises(ValidationError):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=self.member_membership.id,
                 actor=self.owner,
                 role=ProfileMembership.Role.OWNER,
@@ -349,6 +771,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
 
         with self.assertRaises(LastActiveProfileOwnerError):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=self.owner_membership.id,
                 actor=self.owner,
                 is_active=False,
@@ -365,6 +788,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
 
         with self.assertRaises(ValidationError):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=membership.id,
                 actor=self.owner,
                 is_active=True,
@@ -386,6 +810,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
 
         with self.assertRaises(ValidationError):
             update_profile_membership(
+                profile_id=self.profile.id,
                 membership_id=second_membership.id,
                 actor=self.owner,
                 is_active=False,
@@ -394,6 +819,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
         workspace.owner = self.owner
         workspace.save(update_fields=("owner",))
         updated_membership = update_profile_membership(
+            profile_id=self.profile.id,
             membership_id=second_membership.id,
             actor=self.owner,
             is_active=False,
@@ -411,7 +837,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="Workspace Company",
             owner=self.owner,
         )
-        ProfileMembership.objects.create(
+        self.member_profile_membership = ProfileMembership.objects.create(
             profile=self.profile,
             user=self.member,
             role=ProfileMembership.Role.MEMBER,
@@ -547,8 +973,9 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
         )
 
         membership = add_workspace_member(
+            profile_id=self.profile.id,
             workspace_id=workspace.id,
-            user=self.member,
+            target_profile_membership_id=self.member_profile_membership.id,
             role=WorkspaceMember.Role.MEMBER,
             actor=self.owner,
         )
@@ -575,8 +1002,9 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
         )
 
         membership = add_workspace_member(
+            profile_id=self.profile.id,
             workspace_id=workspace.id,
-            user=self.member,
+            target_profile_membership_id=self.member_profile_membership.id,
             role=WorkspaceMember.Role.VIEWER,
             actor=admin_user,
         )
@@ -590,18 +1018,22 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             owner=self.owner,
         )
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(TenantAccessNotFound):
             add_workspace_member(
+                profile_id=self.profile.id,
                 workspace_id=workspace.id,
-                user=self.member,
+                target_profile_membership_id=(
+                    self.member_profile_membership.id
+                ),
                 role=WorkspaceMember.Role.MEMBER,
                 actor=self.member,
             )
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(TenantAccessNotFound):
             add_workspace_member(
+                profile_id=self.profile.id,
                 workspace_id=workspace.id,
-                user=self.outsider,
+                target_profile_membership_id=uuid4(),
                 role=WorkspaceMember.Role.MEMBER,
                 actor=self.owner,
             )
@@ -613,15 +1045,18 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             owner=self.owner,
         )
         other_owner = self.create_user("cross-profile-owner")
-        create_profile_with_owner(
+        other_profile = create_profile_with_owner(
             name="Cross Profile Company",
             owner=other_owner,
         )
 
-        with self.assertRaises(PermissionDenied):
+        with self.assertRaises(TenantAccessNotFound):
             add_workspace_member(
+                profile_id=other_profile.id,
                 workspace_id=workspace.id,
-                user=self.member,
+                target_profile_membership_id=(
+                    self.member_profile_membership.id
+                ),
                 role=WorkspaceMember.Role.MEMBER,
                 actor=other_owner,
             )
@@ -646,6 +1081,347 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
         self.assertIs(
             Workspace._meta.get_field("owner").remote_field.on_delete,
             models.PROTECT,
+        )
+
+
+class WorkspaceMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
+
+    def setUp(self):
+        self.owner = self.create_user("membership-service-owner")
+        self.profile_admin = self.create_user(
+            "membership-service-profile-admin"
+        )
+        self.workspace_admin = self.create_user(
+            "membership-service-workspace-admin"
+        )
+        self.editor = self.create_user("membership-service-editor")
+        self.viewer = self.create_user("membership-service-viewer")
+        self.target = self.create_user("membership-service-target")
+
+        self.profile = create_profile_with_owner(
+            name="Membership Service Profile",
+            owner=self.owner,
+        )
+        ProfileMembership.objects.create(
+            profile=self.profile,
+            user=self.profile_admin,
+            role=ProfileMembership.Role.ADMIN,
+        )
+        for user in (
+            self.workspace_admin,
+            self.editor,
+            self.viewer,
+        ):
+            ProfileMembership.objects.create(
+                profile=self.profile,
+                user=user,
+                role=ProfileMembership.Role.MEMBER,
+            )
+        self.target_membership = ProfileMembership.objects.create(
+            profile=self.profile,
+            user=self.target,
+            role=ProfileMembership.Role.MEMBER,
+        )
+
+        self.workspace = Workspace.objects.create(
+            name="Membership Service Workspace",
+            profile=self.profile,
+            owner=self.owner,
+        )
+        self.other_workspace = Workspace.objects.create(
+            name="Other Membership Service Workspace",
+            profile=self.profile,
+            owner=self.owner,
+        )
+        for user, role in (
+            (self.workspace_admin, WorkspaceMember.Role.ADMIN),
+            (self.editor, WorkspaceMember.Role.MEMBER),
+            (self.viewer, WorkspaceMember.Role.VIEWER),
+        ):
+            WorkspaceMember.objects.create(
+                workspace=self.workspace,
+                user=user,
+                role=role,
+            )
+
+    def _create_target_membership(self, suffix):
+        user = self.create_user(f"membership-target-{suffix}")
+        return ProfileMembership.objects.create(
+            profile=self.profile,
+            user=user,
+            role=ProfileMembership.Role.MEMBER,
+        )
+
+    def test_profile_managers_assign_supported_roles_but_never_legacy_owner(self):
+        for actor_label, actor in (
+            ("owner", self.owner),
+            ("profile-admin", self.profile_admin),
+        ):
+            for role in (
+                WorkspaceMember.Role.ADMIN,
+                WorkspaceMember.Role.MEMBER,
+                WorkspaceMember.Role.VIEWER,
+            ):
+                with self.subTest(actor=actor_label, role=role):
+                    target = self._create_target_membership(
+                        f"{actor_label}-{role.lower()}"
+                    )
+                    membership = add_workspace_member(
+                        actor=actor,
+                        profile_id=self.profile.id,
+                        workspace_id=self.workspace.id,
+                        target_profile_membership_id=target.id,
+                        role=role,
+                    )
+                    self.assertEqual(membership.role, role)
+
+            denied_target = self._create_target_membership(
+                f"{actor_label}-legacy-owner"
+            )
+            with self.subTest(actor=actor_label, role="legacy-owner"):
+                with self.assertRaises(PermissionDenied):
+                    add_workspace_member(
+                        actor=actor,
+                        profile_id=self.profile.id,
+                        workspace_id=self.workspace.id,
+                        target_profile_membership_id=denied_target.id,
+                        role=WorkspaceMember.Role.OWNER,
+                    )
+
+    def test_workspace_admin_assigns_editor_or_viewer_only_in_own_workspace(self):
+        for role in (
+            WorkspaceMember.Role.MEMBER,
+            WorkspaceMember.Role.VIEWER,
+        ):
+            with self.subTest(role=role):
+                target = self._create_target_membership(
+                    f"workspace-admin-{role.lower()}"
+                )
+                membership = add_workspace_member(
+                    actor=self.workspace_admin,
+                    profile_id=self.profile.id,
+                    workspace_id=self.workspace.id,
+                    target_profile_membership_id=target.id,
+                    role=role,
+                )
+                self.assertEqual(membership.role, role)
+
+        denied_target = self._create_target_membership(
+            "workspace-admin-denied"
+        )
+        audit_count = AuditLog.objects.filter(
+            action="workspace.membership.created"
+        ).count()
+        for role in (
+            WorkspaceMember.Role.ADMIN,
+            WorkspaceMember.Role.OWNER,
+        ):
+            with self.subTest(role=role):
+                with self.assertRaises(PermissionDenied):
+                    add_workspace_member(
+                        actor=self.workspace_admin,
+                        profile_id=self.profile.id,
+                        workspace_id=self.workspace.id,
+                        target_profile_membership_id=denied_target.id,
+                        role=role,
+                    )
+
+        with self.assertRaises(TenantAccessNotFound):
+            add_workspace_member(
+                actor=self.workspace_admin,
+                profile_id=self.profile.id,
+                workspace_id=self.other_workspace.id,
+                target_profile_membership_id=denied_target.id,
+                role=WorkspaceMember.Role.MEMBER,
+            )
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action="workspace.membership.created"
+            ).count(),
+            audit_count,
+        )
+
+    def test_editor_and_viewer_cannot_manage_workspace_members(self):
+        for actor in (self.editor, self.viewer):
+            with self.subTest(actor=actor.username):
+                with self.assertRaises(PermissionDenied):
+                    add_workspace_member(
+                        actor=actor,
+                        profile_id=self.profile.id,
+                        workspace_id=self.workspace.id,
+                        target_profile_membership_id=(
+                            self.target_membership.id
+                        ),
+                        role=WorkspaceMember.Role.MEMBER,
+                    )
+
+        self.assertFalse(
+            AuditLog.objects.filter(
+                action="workspace.membership.created"
+            ).exists()
+        )
+
+    def test_target_lookup_requires_active_same_profile_membership_and_user(self):
+        inactive_membership_user = self.create_user(
+            "inactive-target-membership"
+        )
+        inactive_membership = ProfileMembership.objects.create(
+            profile=self.profile,
+            user=inactive_membership_user,
+            role=ProfileMembership.Role.MEMBER,
+            is_active=False,
+        )
+        inactive_user = self.create_user(
+            "inactive-target-user",
+            is_active=False,
+        )
+        inactive_user_membership = ProfileMembership.objects.create(
+            profile=self.profile,
+            user=inactive_user,
+            role=ProfileMembership.Role.MEMBER,
+        )
+        other_owner = self.create_user("target-other-profile-owner")
+        other_profile = create_profile_with_owner(
+            name="Target Other Profile",
+            owner=other_owner,
+        )
+        other_membership = ProfileMembership.objects.get(
+            profile=other_profile,
+            user=other_owner,
+        )
+
+        failures = []
+        for target_id in (
+            inactive_membership.id,
+            inactive_user_membership.id,
+            other_membership.id,
+            uuid4(),
+        ):
+            with self.subTest(target_id=target_id):
+                with self.assertRaises(TenantAccessNotFound) as raised:
+                    add_workspace_member(
+                        actor=self.owner,
+                        profile_id=self.profile.id,
+                        workspace_id=self.workspace.id,
+                        target_profile_membership_id=target_id,
+                        role=WorkspaceMember.Role.MEMBER,
+                    )
+                failures.append(str(raised.exception))
+
+        self.assertEqual(len(set(failures)), 1)
+        self.assertFalse(
+            AuditLog.objects.filter(
+                action="workspace.membership.created"
+            ).exists()
+        )
+
+    def test_duplicate_workspace_membership_has_stable_domain_conflict(self):
+        first = add_workspace_member(
+            actor=self.owner,
+            profile_id=self.profile.id,
+            workspace_id=self.workspace.id,
+            target_profile_membership_id=self.target_membership.id,
+            role=WorkspaceMember.Role.MEMBER,
+        )
+
+        with self.assertRaises(WorkspaceMembershipConflict) as raised:
+            add_workspace_member(
+                actor=self.owner,
+                profile_id=self.profile.id,
+                workspace_id=self.workspace.id,
+                target_profile_membership_id=self.target_membership.id,
+                role=WorkspaceMember.Role.VIEWER,
+            )
+
+        self.assertEqual(
+            raised.exception.message_dict,
+            {
+                "target_profile_membership_id": [
+                    WorkspaceMembershipConflict.default_message
+                ]
+            },
+        )
+        self.assertEqual(
+            WorkspaceMember.objects.filter(
+                workspace=self.workspace,
+                user=self.target,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action="workspace.membership.created",
+                entity_id=first.id,
+            ).count(),
+            1,
+        )
+
+
+class WorkspaceMembershipConcurrencyTests(
+    WorkspaceTestDataMixin,
+    TransactionTestCase,
+):
+
+    reset_sequences = False
+
+    def test_concurrent_direct_add_creates_one_membership_and_one_audit(self):
+        owner = self.create_user("concurrent-member-owner")
+        target = self.create_user("concurrent-member-target")
+        profile = create_profile_with_owner(
+            name="Concurrent Membership Profile",
+            owner=owner,
+        )
+        target_membership = ProfileMembership.objects.create(
+            profile=profile,
+            user=target,
+            role=ProfileMembership.Role.MEMBER,
+        )
+        workspace = Workspace.objects.create(
+            name="Concurrent Membership Workspace",
+            profile=profile,
+            owner=owner,
+        )
+        barrier = Barrier(2)
+
+        def direct_add():
+            close_old_connections()
+            try:
+                thread_actor = User.objects.get(id=owner.id)
+                barrier.wait(timeout=10)
+                try:
+                    add_workspace_member(
+                        actor=thread_actor,
+                        profile_id=profile.id,
+                        workspace_id=workspace.id,
+                        target_profile_membership_id=target_membership.id,
+                        role=WorkspaceMember.Role.MEMBER,
+                    )
+                except WorkspaceMembershipConflict:
+                    return "conflict"
+                return "created"
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = (
+                executor.submit(direct_add),
+                executor.submit(direct_add),
+            )
+            results = [future.result(timeout=20) for future in futures]
+
+        self.assertCountEqual(results, ("created", "conflict"))
+        self.assertEqual(
+            WorkspaceMember.objects.filter(
+                workspace=workspace,
+                user=target,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action="workspace.membership.created",
+            ).count(),
+            1,
         )
 
 
@@ -682,6 +1458,7 @@ class ProfileOwnerConcurrencyTests(
                 barrier.wait(timeout=10)
                 try:
                     update_profile_membership(
+                        profile_id=profile.id,
                         membership_id=membership_id,
                         actor=actor,
                         is_active=False,
@@ -757,6 +1534,7 @@ class ProfileOwnerConcurrencyTests(
                 barrier.wait(timeout=10)
                 try:
                     update_profile_membership(
+                        profile_id=profile.id,
                         membership_id=workspace_owner_membership.id,
                         actor=actor,
                         role=ProfileMembership.Role.MEMBER,
