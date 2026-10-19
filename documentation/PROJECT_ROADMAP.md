@@ -1,6 +1,6 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 ## Giai đoạn hiện tại
 
@@ -12,10 +12,18 @@ Nguyên tắc thực hiện: hoàn thành P0/P1 và test gate trước khi mở 
 `HT-RBAC-DESIGN-P0-01` đã được chốt qua ủy quyền của Owner. Slice
 `HT-RBAC-P1-03 - Tenant Access Context and Scoped Service Foundation` đã hoàn
 thành và được Owner cho phép dùng làm nền cho `HT-API-P1-04`. Slice read-only
-`HT-API-P1-04 - Profile/Workspace Read API & DRF Permission Integration` cũng
-đã hoàn thành và đang dừng tại `OWNER REVIEW GATE`; chưa mở Workspace write,
-membership hay Invitation API và chưa áp dụng `workspace.0002` lên development
-database.
+`HT-API-P1-04 - Profile/Workspace Read API & DRF Permission Integration` đã
+hoàn thành. Owner sau đó phê duyệt có điều kiện task vận hành
+`HT-DB-P1-05` để inventory, backup, áp dụng `workspace.0002` trên development
+và smoke API. Task đã `COMPLETE / OWNER REVIEW GATE`: backup và restore
+rehearsal đạt, migration đã áp dụng an toàn trên development, direct smoke đạt,
+và full PostgreSQL suite PASS 101/101. Sau khi Owner review và mở task kế tiếp,
+`HT-WORK-P2-02` đang triển khai phần schema-free của Workspace write/membership:
+create Workspace, update metadata, list/direct-add/update role. Phần này đã qua
+full PostgreSQL suite 140/140. Archive/restore, month/period, Profile lifecycle
+và membership revoke/deactivate chưa thể triển khai đúng policy trên schema
+hiện tại, nên task vẫn ở `IN PROGRESS — SCHEMA APPROVAL GATE`; Invitation vẫn
+ngoài scope.
 
 ## P0 - An toàn và khả năng kiểm chứng
 
@@ -135,7 +143,7 @@ database.
   DRF permission integration tối thiểu. Invitation vẫn để sau account/email
   verification và một task được phê duyệt riêng.
 
-### HT-API-P1-04 - Profile/Workspace Read API & DRF Permission Integration — COMPLETE / OWNER REVIEW GATE
+### HT-API-P1-04 - Profile/Workspace Read API & DRF Permission Integration — COMPLETE
 
 - **Mục tiêu:** mở read-only Profile/Workspace API an toàn dưới `/api/v1/` và
   nối trực tiếp DRF với access context/scoped selector của P1-03.
@@ -160,9 +168,39 @@ database.
   checks PASS ngày 2026-10-18.
 - **Không thuộc scope:** write/CRUD lifecycle, membership management,
   Invitation, Client/Project/Task/Finance, model/schema/migration và frontend.
-- **Operational gate:** `workspace.0002` vẫn chưa apply development. Sau owner
-  review phải có authorization riêng cho inventory/backup/apply/smoke; không
-  coi test database thành bằng chứng migration đã được rollout.
+- **Operational gate:** HT-DB-P1-05 đã hoàn tất rollout development-only: plan
+  khớp migration additive, `workspace.0002` đã apply, direct smoke và current
+  101-test PostgreSQL regression đều PASS. Việc này không mở write/membership/
+  Invitation API hoặc tạo bằng chứng rollout cho môi trường khác.
+
+### HT-DB-P1-05 - Controlled Development Migration & API Smoke Verification — COMPLETE / OWNER REVIEW GATE
+
+- **Mục tiêu:** áp dụng an toàn migration đã có
+  `workspace.0002_profile_workspace_foundation` lên đúng development database,
+  sau đó smoke read API và chạy regression gate.
+- **Authorization:** development database only; không production, không reset,
+  delete, fake migration, auto-rollback, mapping giả định hay tạo hạ tầng mới.
+- **Đã hoàn thành:** xác minh local Compose target; inventory/schema/relationship
+  checks; review migration additive; Git-ignored backup với SHA-256/TOC/full
+  read; restore rehearsal trên database tạm; target-specific plan; apply đúng
+  `workspace.0002`; post-check schema/data/constraints; direct HTTP smoke; và
+  full regression gate.
+- **Inventory trước/sau:** trước apply có 3 active Users, 0 checked business
+  rows, 26 migration rows và chưa có Profile schema. Sau apply có 27 migration
+  rows, Profile/ProfileMembership và nullable `Workspace.profile_id`; business
+  counts vẫn 0, không mapping giả định, orphan hoặc constraint chưa validate.
+- **Environment:** không tạo `.env`; dùng secret development ngẫu nhiên chỉ
+  trong process và runtime credential sẵn có, không log giá trị. Owner host
+  shell báo venv hoạt động nhưng Codex managed context exit 103 và không thấy
+  base path; vì vậy dùng cached Python 3.12 container tạm với source read-only
+  và xóa sau khi chạy, không sửa venv.
+- **Verification:** direct health `200`; bốn tenant route anonymous `403`;
+  CSRF behavior đúng; targeted API 21/21, auth/API 29/29, full PostgreSQL
+  101/101; system/migration consistency checks PASS; không còn database hoặc
+  container tạm.
+- **Review gate:** dừng để Owner review. Không tự động mở HT-WORK-P2-02 hoặc
+  Workspace Write/Membership/Invitation; mọi môi trường khác vẫn cần inventory,
+  backup và authorization riêng.
 
 ## P2 - Business domains tiếp theo
 
@@ -183,26 +221,52 @@ database.
 - **Mục tiêu:** hiện thực phần tenant foundation nhỏ nhất mà không mở Workspace API hay RBAC.
 - **Phạm vi implemented in source:** `Profile`, `ProfileMembership`; Profile roles `OWNER/ADMIN/MEMBER`; partial unique active/check/index membership constraints; nullable transitional `Workspace.profile`; protected `Workspace.owner`; one-way tenant mapping guard including stale legacy-save locking; transactional Profile-owner service; audited direct Workspace add cho active Profile member; model persistence validators; additive migration `workspace/0002_profile_workspace_foundation.py`; model/migration tests.
 - **Dữ liệu:** read-only inventory development PostgreSQL có 0 business rows và 3 User rows. Không tạo tenant mapping giả định.
-- **Migration state:** `0002` chỉ chạy trên disposable PostgreSQL test databases, gồm empty schema và populated relationship fixture; chưa apply development database.
+- **Migration state:** `0002` đã được kiểm chứng trên disposable PostgreSQL test databases và được áp dụng có kiểm soát trên development ngày 2026-10-19 sau inventory, backup và restore rehearsal; chưa có authorization cho môi trường khác.
 - **Verification:** rerun 2026-10-17; targeted `apps.workspace` 32/32 PASS; full PostgreSQL suite 61/61 PASS, gồm Authentication/API regressions; `pip check`, `manage.py check` và `makemigrations --check --dry-run` PASS.
 - **Không thuộc task:** Invitation/API, Project/Client/Finance migrations, soft delete, full RBAC/query scoping, public-link flows, detailed Task/Review workflow hoặc frontend.
-- **Review gate:** implementation/verification hoàn tất; owner đã cho phép đi
-  tiếp sang thiết kế RBAC nhưng chưa cho phép apply development migration hay
-  triển khai Workspace API/RBAC. Chỉ apply sau operational approval cùng
-  inventory/backup policy phù hợp.
+- **Review gate:** implementation/verification và controlled development apply
+  qua HT-DB-P1-05 đã hoàn tất. Authorization này không mở Workspace write,
+  membership, Invitation hoặc rollout sang môi trường khác.
 
-### HT-WORK-P2-02 - Workspace/membership API
+### HT-WORK-P2-02 - Workspace Write API & Membership Management — IN PROGRESS / SCHEMA APPROVAL GATE
 
-- **Mục tiêu:** hoàn tất F02/F03 sau tenancy decision.
-- **Phạm vi:** workspace CRUD có scope, invitation lifecycle và tests.
-- **Dependencies:** `HT-RBAC-DESIGN-P0-01`, `HT-RBAC-P1-03` và read-only
-  `HT-API-P1-04` đã hoàn tất; Owner duyệt P1-04 review gate; schema foundation
-  được áp dụng có kiểm soát ở môi trường đích sau inventory/backup.
-  Trước phần Invitation API còn cần account/email verification và identity
-  binding dù contract TTL/rate/retention đã được chốt.
-- **Acceptance criteria:** invitation expiry/accept/decline/revoke an toàn; owner/admin policy rõ; concurrency không tạo membership trùng.
-- **Kiểm thử:** role matrix, token expiry, duplicate/concurrent accept.
-- **Rủi ro:** invitation token phải hash-at-rest và không log.
+- **Mục tiêu:** mở write surface nhỏ nhất cho Workspace và direct membership
+  management sau tenancy/access foundation, không kéo theo Invitation hoặc
+  business domain khác.
+- **Đã implement trong source:** `POST` nested Workspace collection; `PATCH`
+  Workspace detail cho `name`/`description`; `GET`/`POST` nested member
+  collection; `PATCH` nested member detail. Strict input không cho mass
+  assignment/re-parent; response member không có User PII.
+- **Quyền:** Profile Owner/Admin tạo và sửa Workspace, quản lý membership cùng
+  Profile; Workspace Admin chỉ sửa metadata Workspace được phân công và quản lý
+  Editor/Viewer. Editor/Viewer bị deny; legacy Workspace `OWNER` fail closed.
+- **Service boundary:** resolve tenant trước target, revalidate dưới lock,
+  transaction + AuditLog atomic; duplicate direct-add map `409`, invalid input
+  `400`, thiếu action capability `403`, unknown/wrong-parent/cross-tenant `404`.
+- **Schema:** không sửa model, không tạo migration, development vẫn ở
+  `workspace.0002`; không có `0003`.
+- **Chưa implement:** Workspace archive/restore và WorkspaceMember revoke/
+  deactivate; `DELETE` vẫn `405`. Workspace chưa có lifecycle/month field và
+  WorkspaceMember chưa có active/history field; Profile cũng chưa có active/
+  lifecycle field. Cần Owner duyệt representation, uniqueness, visibility/
+  child-write, restore/rejoin/history và actor policy trước additive migration.
+- **Late-revocation hardening:** roster selector gắn authority hiện tại của
+  actor vào SQL và chỉ trả assignment có active same-Profile membership; revoke
+  role sau permission check nhưng trước lazy evaluation sẽ fail closed.
+- **Kiểm thử:** `pip check`, Django check, migration drift/check đều PASS;
+  Workspace service/read/write/API 111/111 PASS trong 62.011s; Authentication/
+  API regressions 29/29 PASS trong 7.295s; full PostgreSQL 140/140 PASS trong
+  69.873s; isolated test database đã được hủy.
+- **Development evidence:** read-only inventory trên loopback Compose
+  PostgreSQL 16.14 có 27 migration rows, `workspace.0002` applied, 3 User và 0
+  Profile/ProfileMembership/Workspace/WorkspaceMember/Task/AuditLog; không có
+  `0003` hoặc write dữ liệu/schema trong task này.
+- **Dependencies đã đạt:** `HT-RBAC-DESIGN-P0-01`, `HT-RBAC-P1-03`,
+  `HT-API-P1-04`, và controlled development rollout `HT-DB-P1-05`.
+- **Review gate:** dừng để Owner quyết định Profile lifecycle, Workspace month/
+  period và archive/restore, cùng WorkspaceMember deactivate/history/rejoin
+  trước thiết kế additive migration. Không tự tạo/apply migration, không mở task
+  mới, Invitation, Profile write API, Client/Project/Task/Finance hoặc frontend.
 
 ### HT-TASK-P2-03 - Task lifecycle/assignment/comments
 

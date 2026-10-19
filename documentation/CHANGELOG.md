@@ -2,7 +2,85 @@
 
 Lịch sử thay đổi của dự án HustlyTasker.
 
-## Unreleased - 2026-10-18
+## Unreleased - 2026-10-19
+
+### Workspace Write API & Membership Management (HT-WORK-P2-02)
+
+- Bổ sung `POST` cho Workspace collection và `PATCH` cho Workspace detail dưới
+  nested Profile; chỉ nhận `name`/`description`, mọi field server-owned hoặc
+  field lạ bị từ chối. Profile được lấy từ URL/context, không cho re-parent
+  Workspace hoặc giả mạo owner.
+- Bổ sung Workspace-member manager roster `GET`, direct-add `POST` bằng
+  `target_profile_membership_id`, và role-update `PATCH`. Response chỉ gồm ID
+  assignment, ProfileMembership ID, role và timestamps; không trả User ID,
+  email, username hoặc PII.
+- Áp dụng role ceilings đã duyệt: Profile Owner/Admin tạo/cập nhật Workspace và
+  quản lý `ADMIN/MEMBER/VIEWER`; Workspace Admin chỉ sửa metadata Workspace của
+  mình và quản lý `MEMBER/VIEWER`. Editor, Viewer, Profile Member chưa được gán,
+  legacy Workspace `OWNER`, staff/superuser và cross-tenant input đều fail
+  closed.
+- Roster được ràng buộc với authority hiện tại của actor ngay trong queryset và
+  chỉ trả assignment hiệu lực có active User + active same-Profile membership.
+  Lookup nested sai tenant/wrong parent không làm lộ tồn tại; API chuẩn hóa
+  validation/permission/not-found/conflict thành `400`/`403`/`404`/`409`.
+- Các write service dùng transaction, Profile-first row locks, revalidation và
+  AuditLog nguyên tử cho `workspace.created`, `workspace.updated`,
+  `workspace.membership.created`, `workspace.membership.updated`; rollback cả
+  mutation khi audit thất bại và xử lý duplicate/concurrency ổn định.
+- Giữ SessionAuthentication, CSRF cho unsafe methods, DRF deny-by-default và
+  không thêm `AllowAny`. Verification cuối: Workspace 111/111,
+  Authentication/API Foundation 29/29, full PostgreSQL 140/140; Django system
+  check và migration consistency đều PASS.
+- Đây là schema-free slice: không đổi model, không tạo `workspace.0003`, không
+  đổi development data; `workspace.0002` vẫn là migration mới nhất đã apply.
+  Archive/restore Workspace và DELETE/revoke/deactivate WorkspaceMember vẫn
+  trả `405` vì chưa có lifecycle/history schema và policy được Owner duyệt.
+
+### Controlled development migration completed (HT-DB-P1-05)
+
+- Khôi phục Django development runtime bằng biến môi trường chỉ tồn tại trong
+  process và cached Python 3.12 container; không tạo `.env`, không ghi secret,
+  không reset credential và không sửa venv/source.
+- Xác minh lại backup trước migration và thực hiện restore rehearsal đầy đủ
+  trên database tạm biệt lập; schema/data trước migration khớp archive và
+  database rehearsal đã được dọn.
+- Review `migrate --plan` và áp dụng đúng migration additive
+  `workspace.0002_profile_workspace_foundation` lên development. Hậu kiểm xác
+  nhận 27 migration rows, Profile/ProfileMembership tables,
+  `Workspace.profile_id`, constraints/indexes hợp lệ; 3 User và toàn bộ
+  business counts vẫn không đổi, không tạo tenant mapping giả định.
+- Direct HTTP smoke đạt: health `200`; bốn Profile/Workspace route và
+  `/api/auth/me/` anonymous `403`; CSRF bootstrap `200`; login giả thiếu token
+  `403`, có token hợp lệ `400`; không có `500` hoặc session mới.
+- Regression gate hiện thời PASS: targeted read API 21/21, Authentication/API
+  Foundation 29/29, full PostgreSQL suite 101/101; dependency, Django system,
+  migration drift/applied checks và cleanup checks đều đạt.
+- Không thay đổi backend source, model, migration file, authentication hoặc API
+  contract. Chỉ existing migration được apply trên development đã phê duyệt;
+  không production, không business fixture, không write/membership/Invitation
+  API.
+
+### Pre-migration safety checkpoint (superseded historical evidence)
+
+- Xác minh độc lập PostgreSQL development hiện hữu từ Compose của repository:
+  `workspace.0001` đã apply, `workspace.0002` chưa apply; Profile tables và
+  `Workspace.profile_id` chưa tồn tại.
+- Kiểm kê trước migration ghi nhận 3 User đều active và 0 Workspace,
+  WorkspaceMember, Task, Client, Invoice, Payment, AuditLog; không có orphan,
+  foreign key chưa validate hoặc test database còn sót.
+- Xác nhận migration `workspace.0002_profile_workspace_foundation` không đổi,
+  chỉ gồm thay đổi additive và không có backfill/delete/drop/rename hay mapping
+  tenant giả định.
+- Tạo backup PostgreSQL custom-format trong `.local_backups/HT-DB-P1-05/`,
+  thêm thư mục này vào `.gitignore`, và xác minh host/container SHA-256 khớp,
+  TOC đọc được, toàn bộ archive stream qua `pg_restore` thành công. Không restore
+  vào database nào.
+- Dừng trước `migrate --plan` và apply vì repository không có `.env`, runtime
+  không có `DJANGO_SECRET_KEY` development hợp lệ, còn Python/venv host không
+  hoạt động. Không tự tạo secret, trích xuất/reset credential hay lách settings.
+- Không thay đổi backend code, model, migration, API contract, authentication,
+  development schema hoặc row. Smoke/regression mới chưa chạy; kết quả 101/101
+  của P1-04 vẫn chỉ là bằng chứng lịch sử.
 
 ### Profile/Workspace read API and DRF tenant permissions
 

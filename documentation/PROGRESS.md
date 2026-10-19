@@ -1,9 +1,208 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-10-18 (HT-API-P1-04)
+## Current Snapshot - 2026-10-19 (HT-WORK-P2-02)
 
-This snapshot is the current source of truth. Earlier 2026-10-18 and
-2026-10-17 snapshots below are retained as superseded history.
+### Current Phase
+
+`PHASE 2.2 - API Architecture / Workspace write foundation`
+
+### HT-WORK-P2-02 - IN PROGRESS / SCHEMA APPROVAL GATE
+
+Owner authorization opened a limited Workspace Write API and Membership
+Management slice after `HT-DB-P1-05`. The schema-free implementation currently
+contains:
+
+- `POST /api/v1/profiles/{profile_id}/workspaces/` for Profile Owner/Admin;
+  server-owned Profile/owner fields cannot be mass-assigned or re-parented.
+- `PATCH /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/` for Profile
+  Owner/Admin or that Workspace's Admin; only `name` and `description` are
+  writable. Editor/Viewer and unassigned Profile Member are denied.
+- `GET`/`POST` on the nested Workspace member collection and `PATCH` on one
+  nested member for Profile Owner/Admin or that Workspace's Admin. The direct
+  add target is an active same-Profile `ProfileMembership`, not a global User.
+- Role ceilings remain least-privilege: Profile Owner/Admin may manage
+  `ADMIN`/`MEMBER`/`VIEWER`; Workspace Admin may manage only `MEMBER`/`VIEWER`;
+  legacy Workspace `OWNER` cannot be assigned or changed through the API.
+- Strict serializers reject unknown/server-owned fields. Responses omit User
+  ID, email, username, and other PII. Tenant/wrong-parent identifiers remain
+  non-enumerating; intended mappings are validation `400`, capability `403`,
+  scoped not-found `404`, and duplicate membership `409`.
+- Workspace create/update and membership add/role-update reuse scoped access
+  contexts and locked atomic services. Their AuditLog writes are in the same
+  transaction as the state change.
+
+The implementation deliberately does not expose Workspace archive/restore or
+Workspace membership revoke/deactivate. Authorized `DELETE` requests remain
+`405 Method Not Allowed`. Current `Workspace` has no lifecycle state or monthly
+period field, while `WorkspaceMember` has no active/history field. Selecting a
+state model, visibility/child-write effects, restore/rejoin semantics, and
+actor ceiling would be a schema/business-policy decision; it was not invented
+in this slice.
+
+No model changed, no migration was created, and no development database write
+was performed. The latest development schema remains the previously applied
+`workspace.0002_profile_workspace_foundation`; there is no `workspace.0003`.
+
+### Verification status
+
+Final verification for the schema-free slice is complete:
+
+- `python -m pip check`: PASS.
+- `python manage.py check`: PASS.
+- `python manage.py makemigrations --check --dry-run`: PASS; no changes.
+- `python manage.py migrate --check`: PASS.
+- Workspace service/read/write/API tests: PASS, 111/111 in 62.011s.
+- Authentication/API Foundation regressions: PASS, 29/29 in 7.295s.
+- Full PostgreSQL suite: PASS, 140/140 in 69.873s; the isolated test database
+  was destroyed.
+- `git diff --check`: PASS; only existing LF-to-CRLF conversion warnings were
+  reported.
+
+Coverage includes role and tenant boundaries, strict inputs, duplicate
+handling, CSRF/anonymous/method behavior, transaction and AuditLog rollback,
+existing last-active Profile Owner invariants, and lazy roster evaluation after
+a manager's authority is revoked. The roster selector now binds actor
+authority into SQL and requires every listed target to retain an active
+same-Profile membership, so late revocation fails closed.
+
+The development database was inspected read-only after verification: it is the
+existing loopback Compose PostgreSQL 16.14 target with 27 migration rows,
+`workspace.0002` applied, 3 Users, and zero Profile, ProfileMembership,
+Workspace, WorkspaceMember, Task, Client, Invoice, Payment, or AuditLog rows.
+There is no `0003`, no remaining `test_%` database, and no development
+business/schema write from this task.
+
+### Exact continuation / review gate
+
+1. Stop at `SCHEMA APPROVAL GATE`; do not open another task.
+2. Owner must approve Profile lifecycle/active semantics, Workspace month/
+   period representation, archive/restore state and effects, and
+   WorkspaceMember deactivate/history/rejoin semantics.
+3. Only after that decision may a separate additive migration/backfill plan be
+   prepared and reviewed. Do not create/apply `workspace.0003`, or expose
+   archive, restore, revoke, deactivate, or `DELETE` from this checkpoint.
+
+Invitation, Profile write API, downstream business domains, and frontend stay
+out of scope.
+
+---
+
+## Previous Snapshot - 2026-10-19 (HT-DB-P1-05, superseded)
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture / controlled development rollout`
+
+### HT-DB-P1-05 - COMPLETE / OWNER REVIEW GATE
+
+The condition-gated development rollout is complete without source changes,
+business fixtures, data deletion, credential reset, or production access.
+
+Completed and verified:
+
+- Reconfirmed the existing local Compose PostgreSQL 16.14 development target,
+  3 active Users, zero checked business rows, no orphan/unvalidated FK, and
+  the pre-apply state of 26 migrations with `workspace.0002` unapplied.
+- Revalidated the Git-ignored 66,721-byte custom backup by matching SHA-256,
+  TOC listing, and full archive read. A full restore rehearsal into a uniquely
+  named isolated database passed and the rehearsal database was removed.
+- Used a process-only development configuration in disposable Python 3.12
+  containers. No `.env` or secret file was created; no secret was printed or
+  documented. Although the Owner's host shell reported a working venv, the
+  Codex managed context exits 103 and reports its base path unavailable; the
+  venv was not modified or replaced.
+- Reviewed the exact additive migration plan and applied only
+  `workspace.0002_profile_workspace_foundation` to development. Final state is
+  27 migration rows with Profile/ProfileMembership tables and nullable
+  `Workspace.profile_id`; constraints/indexes validate and all business counts
+  remain zero. No tenant mapping was synthesized.
+- Direct development smoke passed: health `200`; all four tenant routes and
+  `/api/auth/me/` anonymous `403`; CSRF bootstrap `200`; invalid login without
+  CSRF `403` and with valid CSRF `400`; no `500` and no new Django session.
+- Current verification passed: `pip check`; Django system check;
+  `makemigrations --check --dry-run`; `migrate --check`; targeted read API
+  21/21; Authentication/API Foundation 29/29; full PostgreSQL suite 101/101.
+  Final checks found no test/rehearsal databases or temporary containers.
+
+Development after migration: 3 Users; 0 Profile, ProfileMembership, Workspace,
+WorkspaceMember, Task, Client, Invoice, Payment, and AuditLog rows; 1 existing
+Django session; zero unmapped Workspace/orphan/unvalidated constraints.
+
+### Review Gate
+
+Stop for Owner review. Do not begin Workspace Write, Membership, Invitation,
+or frontend work. `HT-WORK-P2-02` is only the roadmap candidate after an
+explicitly approved implementation scope; Invitation retains its account/email
+binding dependency.
+
+---
+
+## Superseded Snapshot - 2026-10-19 (pre-migration blocker)
+
+Historical only. The status and continuation instructions below were valid
+before the Owner-authorized runtime recovery, migration apply, and verification.
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture / controlled development rollout`
+
+### HT-DB-P1-05 - BLOCKED BEFORE MIGRATION / OWNER ACTION REQUIRED
+
+The owner conditionally authorized applying the existing
+`workspace.0002_profile_workspace_foundation` migration to the development
+database only, after identity, inventory, backup, plan, and risk gates.
+
+Completed and verified at this checkpoint:
+
+- Recovered a clean `main` worktree at `b8f1767`; did not redo P1-04.
+- Independently identified the existing local Compose PostgreSQL target:
+  `hustlytasker_postgres`, PostgreSQL 16.14, loopback port 5432, database
+  `hustlytasker_db`, and preserved named volume `docker_postgres_data`.
+- Confirmed 26 applied migration rows: `workspace.0001` is applied and
+  `workspace.0002` is not. Profile/ProfileMembership tables and
+  `Workspace.profile_id` are absent.
+- Inventoried 3 active Users and zero Workspace, WorkspaceMember, Task,
+  Client, Invoice, Payment, or AuditLog rows. Profile counts are not reported
+  as zero because their tables do not yet exist. No checked orphan,
+  unvalidated FK, or leftover test database was found.
+- Re-reviewed unchanged `0002`: additive create/add/alter-to-`PROTECT` only,
+  with no data migration, deletion, guessed mapping, or destructive operation.
+- Created a Git-ignored PostgreSQL custom archive under
+  `.local_backups/HT-DB-P1-05/`. Host/container SHA-256 matches; TOC listing
+  and a complete `pg_restore` stream to `/dev/null` both pass. No restore was
+  attempted.
+
+Blocking condition:
+
+- No ignored `.env` or complete approved runtime environment is available to
+  the Django management-command runner, including a legitimate development
+  `DJANGO_SECRET_KEY` and its database connection variables. The PostgreSQL
+  service retains its own internal variables, but settings deliberately fail
+  fast and do not auto-load `.env`.
+- Host Python is unavailable and the old virtualenv points to a removed
+  Python 3.12.5 installation. The cached Python image is usable only after the
+  approved development configuration is restored.
+- Per owner instruction, no secret/credential was generated, extracted,
+  reset, or substituted. Consequently `migrate --plan`, migration apply,
+  live API smoke, Django checks, and current regression suites have not run.
+  Development remains on `workspace.0001`; schema and rows are unchanged.
+
+### Review / Configuration Gate
+
+Owner must restore the legitimate local development environment variables
+without placing secrets in source, documentation, logs, or chat. Then resume
+at `migrate --plan`, apply only `workspace.0002` if the plan still matches,
+perform post-migration integrity checks, separate direct-development smoke
+from isolated-test verification, and run all required regressions.
+
+Do not begin Workspace Write, Membership, Invitation, or another task.
+
+---
+
+## Previous Snapshot - 2026-10-18 (HT-API-P1-04, superseded)
+
+This historical snapshot records the completed P1-04 state before the owner
+opened HT-DB-P1-05. Use the current snapshot above.
 
 ### Current Phase
 

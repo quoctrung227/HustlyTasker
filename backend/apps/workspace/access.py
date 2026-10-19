@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from django.core.exceptions import ValidationError
+from django.db.models import OuterRef, Q, Subquery
 
 from .models import Profile, ProfileMembership, Workspace, WorkspaceMember
 
@@ -328,8 +329,26 @@ def can_read_workspace(context):
     )
 
 
+def can_create_workspace(context):
+    """Revalidate a Profile context before allowing Workspace creation."""
+
+    try:
+        current_context = _refresh_profile_access_context(context)
+    except TenantAccessNotFound:
+        return False
+
+    return current_context.profile_role in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    )
+
+
 def can_edit_workspace(context):
-    """Revalidate and evaluate a resolver-produced Workspace context."""
+    """Authorize Workspace metadata changes from a verified context.
+
+    Editors (the legacy ``MEMBER`` value) may edit task content in a later
+    domain slice, but they do not administer Workspace metadata.
+    """
 
     if not _is_current_workspace_context(context):
         return False
@@ -340,10 +359,7 @@ def can_edit_workspace(context):
     ):
         return True
 
-    return context.workspace_role in (
-        WorkspaceMember.Role.ADMIN,
-        WorkspaceMember.Role.MEMBER,
-    )
+    return context.workspace_role == WorkspaceMember.Role.ADMIN
 
 
 def can_manage_workspace_members(context):
@@ -359,3 +375,49 @@ def can_manage_workspace_members(context):
         return True
 
     return context.workspace_role == WorkspaceMember.Role.ADMIN
+
+
+def workspace_members_visible_to_managers(context):
+    """Return effective assignments while keeping actor authority in SQL."""
+
+    if not can_manage_workspace_members(context):
+        raise TenantAccessNotFound()
+
+    profile_context = context.profile_context
+    actor_profile_scope = Q(
+        workspace__profile__memberships__id=profile_context.membership_id,
+        workspace__profile__memberships__user_id=profile_context.user_id,
+        workspace__profile__memberships__user__is_active=True,
+        workspace__profile__memberships__is_active=True,
+        workspace__profile__memberships__role=profile_context.profile_role,
+    )
+
+    actor_workspace_scope = Q()
+    if profile_context.profile_role == ProfileMembership.Role.MEMBER:
+        actor_workspace_scope = Q(
+            workspace__members__user_id=profile_context.user_id,
+            workspace__members__role=WorkspaceMember.Role.ADMIN,
+        )
+
+    active_profile_membership = ProfileMembership.objects.filter(
+        profile_id=context.profile_id,
+        user_id=OuterRef("user_id"),
+        user__is_active=True,
+        is_active=True,
+    ).order_by("id").values("id")[:1]
+
+    return WorkspaceMember.objects.filter(
+        actor_profile_scope,
+        actor_workspace_scope,
+        workspace_id=context.workspace_id,
+        workspace__profile_id=context.profile_id,
+        role__in=(
+            WorkspaceMember.Role.ADMIN,
+            WorkspaceMember.Role.MEMBER,
+            WorkspaceMember.Role.VIEWER,
+        ),
+    ).annotate(
+        profile_membership_id=Subquery(active_profile_membership),
+    ).filter(
+        profile_membership_id__isnull=False,
+    ).distinct()

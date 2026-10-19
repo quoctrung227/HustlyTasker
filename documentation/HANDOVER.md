@@ -1,6 +1,447 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-10-18 — HT-API-P1-04
+## Current checkpoint — 2026-10-19 — HT-WORK-P2-02
+
+Repository: `D:\da\HustlyTasker`
+
+Branch: `main`
+
+HEAD and local `origin/main`: `b8f1767`
+
+Current task: `HT-WORK-P2-02 — IN PROGRESS / SCHEMA APPROVAL GATE`
+
+Read root `AGENTS.md` before taking any later action. Preserve every dirty
+file, the migrated development database, and the verified HT-DB-P1-05 backup.
+Do not commit, push, reset, alter migration history, create/apply a new
+migration, write development business fixtures, or begin another roadmap task.
+
+Owner accepted `HT-DB-P1-05` and explicitly opened the limited Workspace Write
+API and Membership Management task. The schema-free portion is implemented and
+fully verified. The task is not `COMPLETE`, because the remaining lifecycle,
+monthly-period, and membership-history requirements need an approved additive
+schema and business contract.
+
+### Completed implementation
+
+- `POST /api/v1/profiles/{profile_id}/workspaces/` creates a Workspace for a
+  Profile Owner/Admin. Profile and legacy owner fields are server-owned; the
+  request cannot impersonate an owner or re-parent the Workspace.
+- `PATCH /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/` changes only
+  `name` and `description`. Profile Owner/Admin and the assigned Workspace
+  Admin may perform this action; Editor/Viewer and an unassigned Profile Member
+  are denied.
+- `GET`/`POST` on the nested Workspace member collection list the effective
+  roster and direct-add an active User who already has an active membership in
+  the same Profile. `PATCH` on the nested member detail changes the Workspace
+  role.
+- Profile Owner/Admin may manage `ADMIN`, `MEMBER` (Editor), and `VIEWER`.
+  Workspace Admin may manage only `MEMBER` and `VIEWER`. The legacy Workspace
+  `OWNER` role fails closed and cannot be assigned or changed through this API.
+- Strict input serializers reject unknown and server-owned fields. Member
+  output exposes the ProfileMembership reference and assignment metadata, but
+  no global User ID, username, email, or other User PII.
+- Tenant path and target resolution remain scoped. The implemented mappings are
+  invalid input `400`, insufficient capability `403`, unknown/wrong-parent/
+  cross-tenant resource `404`, and duplicate direct-add `409`.
+- Create, update, direct-add, and role-update run in locked transactions with
+  AuditLog writes in the same transaction. Audit failure rolls the state change
+  back.
+- The final roster hardening binds the queryset to the requesting actor's
+  current Profile/Workspace authority in SQL. It also rechecks that roster
+  targets still have an active same-Profile membership. A manager role revoked
+  after permission resolution but before lazy queryset evaluation therefore
+  fails closed instead of returning a late, stale roster.
+
+### Explicitly blocked remainder
+
+- Workspace archive/restore is not exposed. `Workspace` has no lifecycle field,
+  so archive state, default visibility, child-write behavior, restore rules,
+  and actor ceiling cannot be implemented without inventing policy.
+- The approved architectural description says Workspace is monthly, but the
+  current model has no month/period field or approved uniqueness semantics.
+- WorkspaceMember revoke/deactivate is not exposed. The model has no active or
+  history field, and deactivate/rejoin/history semantics are not approved.
+- Profile itself has no active/lifecycle field. Tenant lifecycle behavior must
+  be decided before relying on such a state in access enforcement.
+- `DELETE` remains `405 Method Not Allowed`; there is no hard-delete shortcut.
+
+No model changed and no migration was created or applied in HT-WORK-P2-02.
+Development remains at `workspace.0002_profile_workspace_foundation`; there is
+no `workspace.0003`.
+
+### Development database evidence
+
+- Read-only verification identified the existing loopback-bound Compose
+  PostgreSQL 16.14 development service. Production was not contacted.
+- `django_migrations` contains 27 rows and
+  `workspace.0002_profile_workspace_foundation` is applied.
+- Inventory remains 3 Users and 0 Profile, ProfileMembership, Workspace,
+  WorkspaceMember, Task, Client, Invoice, Payment, and AuditLog rows. No
+  business fixture or tenant mapping was created, and the final read-only
+  check found no `test_%` database left behind.
+- There is no `workspace.0003`. HT-WORK-P2-02 performed no development schema
+  or data write.
+
+### Verification actually run
+
+- `python -m pip check`: PASS, no broken requirements.
+- `python manage.py check`: PASS, zero issues.
+- `python manage.py makemigrations --check --dry-run`: PASS, no changes.
+- `python manage.py migrate --check`: PASS.
+- Workspace service/read/write/API tests: PASS, 111/111 in 62.011s.
+- Authentication/API Foundation regressions (`api apps.accounts`): PASS,
+  29/29 in 7.295s.
+- Full PostgreSQL suite: PASS, 140/140 in 69.873s.
+- The isolated Django test database was destroyed after each test run.
+- `git diff --check`: PASS; Git reports only existing LF-to-CRLF conversion
+  warnings for several dirty files.
+
+These results include permissions, tenant and wrong-parent isolation, strict
+inputs, duplicate handling, CSRF and anonymous denial, role ceilings,
+transaction/audit rollback, existing last-active Profile Owner invariants, and
+the late-revocation roster regression. They do not constitute approval for a
+new schema or for the blocked endpoints.
+
+### Files changed in the current worktree
+
+HT-WORK-P2-02 backend implementation and tests:
+
+- `backend/apps/workspace/access.py`
+- `backend/apps/workspace/permissions.py`
+- `backend/apps/workspace/serializers.py`
+- `backend/apps/workspace/services.py`
+- `backend/apps/workspace/urls.py`
+- `backend/apps/workspace/views.py`
+- `backend/apps/workspace/test_api.py`
+- `backend/apps/workspace/test_write_api.py` (new)
+- `backend/apps/workspace/tests.py`
+
+Current-state documentation:
+
+- `documentation/API_DOCUMENTATION.md`
+- `documentation/CHANGELOG.md`
+- `documentation/DATABASE_SCHEMA.md`
+- `documentation/DECISION_LOG.md`
+- `documentation/HANDOVER.md`
+- `documentation/PROGRESS.md`
+- `documentation/PROJECT_CONTEXT.md`
+- `documentation/PROJECT_ROADMAP.md`
+- `documentation/RBAC_DESIGN.md`
+- `documentation/REQUIREMENT_STATUS.md`
+
+The pre-existing `.gitignore` change and ignored HT-DB-P1-05 backup remain
+preserved. No file was reset, deleted, committed, or pushed.
+
+### Exact continuation / Owner decision required
+
+Stop at `SCHEMA APPROVAL GATE`. Do not start a new task. Owner must approve the
+small additive schema and exact contract for all of the following before any
+further implementation:
+
+1. Profile active/lifecycle representation and its access effects.
+2. Workspace month/period representation and uniqueness rules.
+3. Workspace archive/restore state, default visibility, child-write behavior,
+   restore rules, and authorized actors.
+4. WorkspaceMember revoke/deactivate representation, history retention,
+   rejoin semantics, and authorized actors.
+
+After that approval, the safe next step is a separately reviewed additive
+migration/backfill plan and test plan. Do not create or apply that migration to
+development from this checkpoint. Invitation, Profile Write API, downstream
+business domains, and frontend remain out of scope.
+
+---
+
+## Superseded checkpoint — 2026-10-19 — HT-DB-P1-05
+
+Historical only: HT-DB-P1-05 was accepted by the Owner before HT-WORK-P2-02
+opened. Its evidence remains below for traceability, but its continuation
+instruction is superseded by the current checkpoint above.
+
+Repository: `D:\da\HustlyTasker`
+
+Branch: `main`
+
+HEAD and local `origin/main`: `b8f1767`
+
+Current task: `HT-DB-P1-05 — COMPLETE / OWNER REVIEW GATE`
+
+Read root `AGENTS.md` before taking any later action. Preserve the verified
+backup, development database, and all dirty files. Do not commit, push, reset,
+recreate PostgreSQL, create business fixtures, or begin Workspace Write,
+Membership, Invitation, or frontend work without separate Owner authorization.
+
+### Resume classification and environment
+
+- `ALREADY DONE` before the final resume: repository/source/config audit,
+  development database identity and pre-migration inventory, additive
+  migration review, verified pre-migration backup, target-specific migration
+  plan, safe development apply, post-migration schema/integrity checks, and
+  direct HTTP smoke were complete. None was repeated destructively.
+- `IN PROGRESS` at the recovered checkpoint: regression evidence and permanent
+  documentation. These are now complete.
+- `NOT DONE` by design: development business fixtures and a successful login
+  using an existing development account. Development has no Profile/Workspace
+  rows and no account credential was requested, reset, or invented; successful
+  SessionAuthentication, tenant detail, cross-tenant, and IDOR paths were
+  verified in Django's isolated PostgreSQL test database instead.
+- `BLOCKED`: none inside HT-DB-P1-05. The task stops at Owner review by scope.
+- Root/backend `.env` remains absent and was not required or created. Django
+  settings do not auto-load `.env`. Commands used a development-only
+  cryptographically random Django key in process memory and the existing
+  PostgreSQL container runtime values, passed to disposable Python containers
+  without logging or persisting secret values.
+- The Owner-reported host PowerShell check returned Python 3.12.5 and a clean
+  `pip check`, but the live check from Codex's managed execution context exits
+  `103` and reports the referenced base interpreter path unavailable. This
+  environment-visibility discrepancy was not treated as a Django/database
+  failure and the venv was not modified. The approved cached
+  `python:3.12-slim` fallback was used; source was mounted read-only and pinned
+  requirements passed `pip check`.
+
+### Development target, backup, and restore rehearsal
+
+- The only target changed was the existing local Compose development service
+  `hustlytasker_postgres` (PostgreSQL 16.14), loopback-bound on port 5432,
+  database `hustlytasker_db`, named volume `docker_postgres_data`. Compose
+  labels point to this repository. Production was not contacted and no
+  PostgreSQL container or volume was recreated.
+- Before apply: 26 migration rows; `workspace.0001_initial` applied;
+  `workspace.0002_profile_workspace_foundation` unapplied; Profile tables and
+  `workspace_workspace.profile_id` absent. Inventory was 3 active Users and 0
+  Workspace, WorkspaceMember, Task, Client, Invoice, Payment, or AuditLog rows,
+  with no checked orphan, unvalidated FK, or tenant mapping to infer.
+- Backup artifact (Git ignored):
+  `.local_backups/HT-DB-P1-05/hustlytasker_dev_pre_workspace_0002_20261018T185438Z.dump`.
+  It is a 66,721-byte PostgreSQL custom archive. SHA-256 is
+  `118533290c6179e63d71b7abc7b591c0882012b91c0c0e810c1d27e3965c020e`;
+  host/container hashes match. `pg_restore --list` and a complete archive read
+  to `/dev/null` passed.
+- A full restore rehearsal also passed in a uniquely named isolated temporary
+  database: 26 migrations, `workspace.0002` absent, 3 Users, 0 Workspaces, and
+  the expected pre-migration schema. The exact rehearsal database was dropped;
+  final checks found zero `htdb_p105_restore_%` databases.
+
+### Migration applied and post-checked
+
+- `python manage.py check`: PASS before apply.
+- Exact plan for `workspace.0002_profile_workspace_foundation`: create
+  `Profile`, create `ProfileMembership`, add nullable `Workspace.profile`, and
+  alter `Workspace.owner` to the reviewed protected relationship. It matched
+  the unchanged additive source and contained no data backfill or destructive
+  operation.
+- Applied exactly
+  `python manage.py migrate workspace 0002_profile_workspace_foundation --noinput`
+  on the development database: PASS (`OK`). No `--fake`, rollback, reset, or
+  old-migration edit was used.
+- Final state: 27 migration rows and `workspace.0002` applied. Tables
+  `workspace_profile` and `workspace_profilemembership`, nullable
+  `workspace_workspace.profile_id`, reviewed FKs/check/partial-unique
+  constraints, and lookup indexes all exist and validate.
+- Post-apply inventory remains 3 Users and zero Profile, ProfileMembership,
+  Workspace, WorkspaceMember, Task, Client, Invoice, Payment, or AuditLog rows.
+  There are zero unmapped Workspaces, orphan Workspace/Profile references, and
+  unvalidated constraints. No tenant/backfill row was synthesized.
+
+### Direct development HTTP smoke
+
+- A disposable Django server started successfully against the migrated
+  development database; its source mount was read-only and it was removed
+  after the smoke.
+- `GET /api/health/`: `200`, body status `ok`, non-cacheable response.
+- Anonymous requests to all four `/api/v1/` Profile/Workspace routes: `403`;
+  none returned `500`. Anonymous `GET /api/auth/me/`: `403`.
+- `GET /api/auth/csrf/`: `200` with CSRF cookie. Invalid login without the
+  token: `403`; the same neutral invalid credential request with the token:
+  `400`. No token, cookie, password, or secret was recorded.
+- `django_session` count was `1` before and after smoke. No development
+  Profile/Workspace fixture or account/session data was created.
+
+### Verification actually run
+
+- `python -m pip check`: PASS, no broken requirements.
+- `python manage.py check`: PASS, zero issues.
+- `python manage.py makemigrations --check --dry-run`: PASS, no changes.
+- `python manage.py migrate --check`: PASS.
+- `showmigrations workspace --plan`: `0001` and `0002` both applied.
+- Targeted `apps.workspace.test_api`: PASS, 21/21 in 0.692s.
+- Authentication/API Foundation (`api apps.accounts`): PASS, 29/29 in 7.200s.
+- Full PostgreSQL suite: PASS, 101/101 in 55.762s. Every Django test database
+  was destroyed.
+- Final read-only database check: migration/data/session counts unchanged from
+  the intended post-apply state; zero `test_%` and restore-rehearsal databases.
+- `git diff --check`: PASS after documentation reconciliation; Git may report
+  only existing LF-to-CRLF conversion warnings.
+
+### Files and artifacts changed
+
+- `.gitignore` — excludes `/.local_backups/`.
+- Ignored local backup artifact listed above.
+- Current-state documentation: `HANDOVER.md`, `PROGRESS.md`,
+  `PROJECT_ROADMAP.md`, `CHANGELOG.md`, `REQUIREMENT_STATUS.md`,
+  `DATABASE_SCHEMA.md`, `API_DOCUMENTATION.md`, `PROJECT_CONTEXT.md`,
+  `DECISION_LOG.md`, and `RBAC_DESIGN.md`.
+
+No backend source, model, migration, API contract, authentication setting, or
+business row was changed in HT-DB-P1-05. The only application-database schema
+change was the already-reviewed existing `workspace.0002` migration on the
+approved development target.
+
+### Exact continuation
+
+Stop at `OWNER REVIEW GATE`. Review the backup/rehearsal, migration state,
+direct smoke, 101-test evidence, and documentation diff. The roadmap candidate
+after approval is `HT-WORK-P2-02`, but its exact Workspace write/membership
+slice must be separately authorized; Invitation remains gated by its account/
+email-binding dependency. Do not implement either automatically.
+
+---
+
+## Superseded checkpoint — 2026-10-19 — HT-DB-P1-05 pre-migration blocker
+
+Historical only: every status, blocker, instruction, and continuation step in
+this block is superseded by the completed checkpoint above.
+
+Repository: `D:\da\HustlyTasker`
+
+Branch: `main`
+
+HEAD and local `origin/main`: `b8f1767`
+
+Current task: `HT-DB-P1-05 — BLOCKED BEFORE MIGRATION / OWNER ACTION REQUIRED`
+
+Read root `AGENTS.md` before taking action. Preserve the verified backup and
+all dirty files. Do not commit, push, reset, recreate PostgreSQL, restore over
+development, synthesize a Django secret, or start another roadmap task.
+
+### Checkpoint recovered and verified
+
+- `HT-API-P1-04` is committed at `b8f1767`; the worktree was clean when this
+  operational task began. Its four read endpoints and 101-test historical
+  evidence were not reimplemented.
+- The only PostgreSQL container is the existing repository Compose service
+  `hustlytasker_postgres` (`postgres:16`), bound to `127.0.0.1:5432`, with the
+  existing `docker_postgres_data` named volume. Compose labels point to
+  `D:\da\HustlyTasker\docker\docker-compose.yml`. No container, database, or
+  volume was created, replaced, reset, or deleted.
+- Read-only SQL identified `hustlytasker_db` owned/used by
+  `hustlytasker_user`, PostgreSQL 16.14, database size 9,149,463 bytes. The
+  local Compose identity, loopback binding, project path, and named volume are
+  the evidence that this is the approved development target; production was
+  not contacted.
+- `django_migrations` has 26 rows. `workspace.0001_initial` and the swappable
+  User dependency are applied; `workspace.0002_profile_workspace_foundation`
+  is not applied. `workspace_profile`, `workspace_profilemembership`, and
+  `workspace_workspace.profile_id` remain absent.
+- Pre-migration inventory: 3 Users, all active; 0 Workspace,
+  WorkspaceMember, Task, Client, Invoice, Payment, and AuditLog rows. Profile
+  and ProfileMembership counts are `TABLE ABSENT`, not zero. Orphan checks for
+  Workspace owner, WorkspaceMember workspace/user, and Task workspace/creator
+  returned zero; no unvalidated foreign key or leftover test database exists.
+- Static review confirms existing migration `0002` is unchanged and additive:
+  it creates Profile/ProfileMembership with approved indexes/constraints,
+  adds nullable `Workspace.profile`, and changes `Workspace.owner` to
+  `PROTECT`. It contains no `RunPython`, backfill, delete, drop, rename, or
+  guessed tenant mapping. With zero Workspace rows, no mapping is required.
+
+### Backup completed and verified
+
+- Relative artifact:
+  `.local_backups/HT-DB-P1-05/hustlytasker_dev_pre_workspace_0002_20261018T185438Z.dump`.
+  The UTC filename corresponds to 2026-10-19 local time. The directory is now
+  excluded by root `.gitignore`; the archive is intentionally not tracked.
+- Format: PostgreSQL 16.14 custom archive; size: 66,721 bytes; source database
+  metadata: `hustlytasker_db`.
+- SHA-256:
+  `118533290c6179e63d71b7abc7b591c0882012b91c0c0e810c1d27e3965c020e`.
+  Host and container hashes match.
+- `pg_restore --list` succeeded and exposed the expected migration, User, and
+  Workspace schema/data entries. Streaming the entire archive through
+  `pg_restore --file=/dev/null` also exited 0 without connecting to a target
+  database. This verifies archive readability, not a restore rehearsal.
+- The archive requires a separately created empty target database for any
+  future rehearsal. Never restore it over development automatically.
+
+### Blocking condition before plan/apply
+
+- Root/backend `.env` files are absent. Required runtime variables are not
+  loaded at Process/User/Machine scope, including a legitimate development
+  `DJANGO_SECRET_KEY`; Django settings do not load `.env` automatically.
+- The PostgreSQL container holds only its database variables and is not a
+  source for the missing Django secret. Extracting or inventing credentials is
+  prohibited.
+- Host `python`, `python3`, and `py` are unavailable. The old
+  `backend/venv` launcher points to a removed Python 3.12.5 installation and
+  exits 103. A cached `python:3.12-slim` image exists, but it cannot make an
+  unapproved secret/configuration legitimate.
+- Therefore `manage.py migrate --plan`, the apply, Django system/migration
+  checks, live application smoke, targeted regressions, and the full suite
+  were not run in this checkpoint. `workspace.0002` remains unapplied and the
+  development schema/data remain unchanged. Historical 101/101 results are
+  not relabeled as current-task evidence.
+
+### Verification actually run
+
+- Independent Git/source/migration review and two read-only database
+  inventories: PASS. The final inventory used an explicit read-only
+  transaction and reconfirmed 3 Users, zero checked business rows, `0002`
+  unapplied, and all three target schema objects absent.
+- Backup hash comparison, `pg_restore --list`, and full archive read to
+  `/dev/null`: PASS.
+- `git diff --check`: PASS; Git reports only existing LF-to-CRLF conversion
+  warnings. Strict UTF-8/no-BOM/no-NUL validation passes for every changed
+  text file.
+- Django check, migration consistency command, API smoke, targeted tests,
+  Authentication/API regressions, and full PostgreSQL suite: **NOT RUN** due
+  to the blocking environment condition above.
+
+### Files and artifacts changed in this checkpoint
+
+- `.gitignore` — ignores `/.local_backups/` so operational dumps cannot be
+  committed accidentally.
+- `.local_backups/HT-DB-P1-05/...dump` — verified local backup, ignored by Git.
+- Current-state documentation: `HANDOVER.md`, `PROGRESS.md`,
+  `PROJECT_ROADMAP.md`, `CHANGELOG.md`, `REQUIREMENT_STATUS.md`,
+  `DATABASE_SCHEMA.md`, `API_DOCUMENTATION.md`, `PROJECT_CONTEXT.md`,
+  `DECISION_LOG.md`, and `RBAC_DESIGN.md`.
+
+No backend code, model, migration, authentication setting, API contract, or
+database row/schema was changed.
+
+### Exact safe continuation
+
+Owner action is required: restore the legitimate ignored development `.env`
+or load the approved development variables into the process, especially the
+existing/approved `DJANGO_SECRET_KEY`. Do not paste secrets into chat, source,
+logs, or documentation, and do not extract/reset PostgreSQL credentials.
+
+After that configuration is available:
+
+1. Reconfirm `DJANGO_ENVIRONMENT=development`, the same local Compose target,
+   migration state, counts, archive presence/hash, and absence of anomalies.
+2. Use the existing approved Python-container mechanism without recreating
+   PostgreSQL. Run `migrate --plan` for exactly
+   `workspace.0002_profile_workspace_foundation` and review the plan.
+3. Only if the plan still matches the additive source, apply exactly that
+   migration. Do not auto-rollback or use `--fake` if it fails.
+4. Verify migration history, new tables/column/indexes/constraints, counts,
+   relationships, and migration consistency.
+5. Smoke health and anonymous denial directly on development without creating
+   business fixtures. Because development has no Profile/Workspace and no
+   approved session credentials, verify authenticated/session/CSRF/detail,
+   tenant isolation, and IDOR behavior in Django's isolated PostgreSQL test
+   database.
+6. Run system check, migration drift check, targeted API tests,
+   Authentication/API Foundation regressions, the full PostgreSQL suite, and
+   `git diff --check`; then update this checkpoint with actual results.
+
+Do not mark `HT-DB-P1-05` complete until every acceptance condition above has
+current evidence. Stop at `OWNER REVIEW / CONFIGURATION GATE`; do not begin
+Workspace Write, Membership, Invitation, or any other task.
+
+---
+
+## Superseded checkpoint — 2026-10-18 — HT-API-P1-04 (historical only)
 
 Repository: `D:\da\HustlyTasker`
 

@@ -894,7 +894,7 @@ PostgreSQL
 
 ---
 
-# 13. Current Ownership Audit — verified 2026-10-18
+# 13. Current Ownership Audit — verified 2026-10-19
 
 This section describes the active Django source. The original sections above
 document the initial schema; their “future” indexes or relationships must not
@@ -920,13 +920,17 @@ checks, membership lookup indexes, Workspace/Profile model validation, and
 transactional membership services. `HT-RBAC-P1-03` now adds Profile/Workspace
 scoped selectors and verified access contexts without a schema change.
 `HT-API-P1-04` adds four read-only DRF endpoints and tenant permissions, also
-without a schema change. Write permissions, soft delete, and cross-domain
-same-Profile constraints are not implemented.
+without a schema change. `HT-WORK-P2-02` adds schema-free Workspace
+create/metadata-update and Workspace-member list/direct-add/role-update APIs
+through locked services. Workspace/member lifecycle operations, soft delete,
+and cross-domain same-Profile constraints are not implemented.
 
-The eight development domain apps remain at their existing
+The seven non-Workspace development domain apps remain at their existing
 `0001_initial.py` migrations. The additive
-`workspace/0002_profile_workspace_foundation.py` exists in source but has run
-only on disposable PostgreSQL test databases at this checkpoint.
+`workspace/0002_profile_workspace_foundation.py` exists unchanged in source,
+has run on disposable PostgreSQL test databases, and was applied to the
+approved development database on 2026-10-19 after inventory, backup, restore
+rehearsal, and plan review. This does not imply rollout to another environment.
 
 
 ---
@@ -935,13 +939,17 @@ only on disposable PostgreSQL test databases at this checkpoint.
 
 Architecture status: `ACCEPTED — 2026-10-16`
 
-Foundation status: `COMPLETE IN SOURCE; DEVELOPMENT MIGRATION NOT APPLIED`
+Foundation status:
+`COMPLETE IN SOURCE; DEVELOPMENT MIGRATION APPLIED — OWNER REVIEW GATE`
 
 RBAC/Invitation design status:
 `COMPLETE / ACCEPTED BY OWNER DELEGATION; INVITATION SCHEMA NOT IMPLEMENTED`
 
 Tenant access/service status:
 `HT-RBAC-P1-03 COMPLETE; NO MODEL OR MIGRATION CHANGE`
+
+Workspace API status:
+`HT-WORK-P2-02 SCHEMA-FREE SLICE VERIFIED; LIFECYCLE METHODS BLOCKED`
 
 The authoritative decisions and remaining detailed questions are in
 `documentation/DECISION_LOG.md`. This section distinguishes current schema
@@ -981,16 +989,19 @@ from the same Profile; Payment belongs to Invoice.
 | `WorkspaceMember` validation | `save()` validates an active same-Profile membership and active account. Existing one-row-per-Workspace/User constraint remains; Django Admin membership mutation is read-only. |
 | Foundation services | Create Profile plus initial active Owner atomically; tenant-scope Profile membership updates before target lookup; lock Profile during role/active changes; support multiple Owners; block removal/demotion of the last usable active Owner; restrict Profile Admin to current ordinary Members; directly add only an active same-Profile member with Profile/Workspace role ceilings; translate duplicate adds to a stable conflict; write membership AuditLog events atomically. |
 | Access contexts/selectors (no schema change) | Resolver-produced immutable Profile/Workspace contexts require active User and ProfileMembership; Profile/Workspace selectors fail closed across tenants; capability checks revalidate current role and reject forged/stale contexts. Existing WorkspaceMember values map `ADMIN` to Workspace Admin, `MEMBER` to Editor and `VIEWER` to read-only Viewer; legacy `OWNER` grants no capability and cannot be assigned by the service. |
+| Workspace write services/API (no schema change) | Profile Owner/Admin create Workspace rows in their Profile; Profile Owner/Admin and the assigned Workspace Admin may update only `name`/`description`. Profile and transitional owner are service-derived, cannot be mass-assigned or re-parented, and create/update write atomic AuditLog events under locks. |
+| Workspace-member manager API (no schema change) | Profile Owner/Admin and the assigned Workspace Admin may list effective assignments, direct-add an active same-Profile Profile member, and update a supported role within their ceiling. The roster query retains actor authority in SQL, excludes legacy `OWNER` and assignments without an active User/ProfileMembership, emits no User PII, and mutations revalidate under locks with atomic audit. |
 
 `Workspace.save()` and `WorkspaceMember.save()` call `full_clean()`, but bulk
 updates, raw SQL, and direct `ProfileMembership` ORM mutations can bypass
 service invariants. Direct User deactivation can also make an Owner account
 unusable without going through the owner service. Profile/ProfileMembership are
-not exposed in Admin and WorkspaceMember Admin is read-only, but future APIs
-that mutate data must use reviewed services. The read-only DRF layer now uses
-the scoped access contexts/selectors, but this foundation is not a complete
-cross-domain authorization layer or a database-wide guarantee of the aggregate
-last-owner invariant.
+not exposed in Admin and WorkspaceMember Admin is read-only. Supported
+Workspace metadata and membership mutations use reviewed services; direct
+ORM/bulk/raw paths remain unsupported bypasses. The DRF layer uses scoped
+access contexts/selectors, but this foundation is not a complete cross-domain
+authorization layer or a database-wide guarantee of the aggregate last-owner
+invariant.
 
 ## Migration and inventory evidence
 
@@ -998,14 +1009,66 @@ last-owner invariant.
   `workspace/0002_profile_workspace_foundation.py`.
 - No applied `0001_initial.py` was edited.
 - Read-only PostgreSQL development inventory before migration: 0 business
-  rows and 3 User rows; reconfirmed before and after tests on 2026-10-18.
+  rows and 3 active User rows; independently reconfirmed on 2026-10-19.
 - No synthetic Profile or tenant mapping was created.
 - `0002` was exercised on disposable PostgreSQL test databases, including an
   empty test schema and a populated migration fixture retaining Workspace,
   WorkspaceMember, Task, Deliverable, and Review relationships while leaving
   unknown `Workspace.profile` as null.
-- `0002` has **not** been applied to the development database. A different
-  environment must be inventoried and backed up independently before apply.
+- `0002` was applied to the approved development database on 2026-10-19 after
+  the controlled HT-DB-P1-05 gates passed. A different environment must still
+  be inventoried, backed up, rehearsed as appropriate, and separately
+  authorized before apply.
+
+### HT-DB-P1-05 development rollout checkpoint — 2026-10-19
+
+- Target evidence identifies the existing local Compose PostgreSQL 16.14
+  service, loopback-bound on port 5432 with named volume
+  `docker_postgres_data`, database `hustlytasker_db`. Production was not
+  contacted.
+- Before apply, `django_migrations` contained 26 rows: `workspace.0001` and the
+  swappable User dependency were applied; `workspace.0002`, Profile tables,
+  and `workspace_workspace.profile_id` were absent.
+- Counts before migration: User 3 (all active); Workspace, WorkspaceMember,
+  Task, Client, Invoice, Payment, and AuditLog 0. Profile and
+  ProfileMembership were `TABLE ABSENT`, not count zero. Checked ownership
+  relationships had no orphan and PostgreSQL reported no unvalidated FK.
+- The existing `0002` remains additive and unchanged. With zero Workspace rows
+  there is no tenant mapping or backfill to infer.
+- A PostgreSQL custom-format backup is stored under the Git-ignored
+  `.local_backups/HT-DB-P1-05/`. Its 66,721-byte host copy matches the
+  container SHA-256, `pg_restore --list` succeeds, and a full archive stream to
+  `/dev/null` exits 0. A full isolated restore rehearsal reproduced 26
+  migrations, 3 Users, zero Workspaces, and the expected pre-`0002` schema;
+  the temporary rehearsal database was removed.
+- A process-only development runtime was used without creating `.env` or
+  persisting/logging secrets. The reviewed plan matched the additive source,
+  then exactly `workspace.0002_profile_workspace_foundation` was applied.
+- Final state has 27 migration rows; `workspace_profile`,
+  `workspace_profilemembership`, nullable `workspace_workspace.profile_id`,
+  reviewed FKs/check/partial-unique constraints and indexes exist and validate.
+  Counts remain 3 Users and zero Profile, ProfileMembership, Workspace,
+  WorkspaceMember, Task, Client, Invoice, Payment, and AuditLog rows. There are
+  zero unmapped Workspaces, orphan Workspace/Profile references, unvalidated
+  constraints, test databases, or restore-rehearsal databases.
+
+### HT-WORK-P2-02 schema boundary — 2026-10-19
+
+- The authorized Workspace write/membership slice required no model change and
+  created no migration. `workspace.0002_profile_workspace_foundation` remains
+  the latest Workspace migration in source and development; no `0003` exists.
+- `Profile` has no active/archive/soft-delete lifecycle field. `Workspace` has
+  no archive state and no canonical month/period field. `WorkspaceMember` has
+  no active/revoked state or history representation.
+- Consequently, Workspace archive/restore and Workspace-member
+  revoke/deactivate/DELETE remain unavailable. Implementing them requires an
+  Owner-approved additive schema and policy covering lifecycle states,
+  visibility/write effects, restore/rejoin behavior, actor ceilings, and the
+  monthly period contract. No lifecycle value or retention rule is inferred by
+  this API slice.
+- Verification passed 111/111 targeted Workspace tests, 29/29
+  Authentication/API Foundation regressions, and 140/140 full PostgreSQL tests,
+  plus Django system and migration consistency checks.
 
 ## Approved target — implementation status
 
@@ -1016,7 +1079,7 @@ last-owner invariant.
 | Finance | Invoice belongs to Workspace and same-Profile Client; Payment belongs to Invoice. Current finance schema has not been migrated and numbering/billing details remain undecided. |
 | Public access | Client Portal account and secure link are supported targets; ClientPortalLink and GuestReviewLink are separate, hashed, expiring, revocable, capability-scoped principals. Replacements are absent. |
 | Soft delete/retention | Soft delete is the target default for Profile, Workspace, Client, Project, and Task; hard delete is controlled; Invoice/Payment/AuditLog are protected under the eventual retention policy; User departure must not cascade-delete business data. Current foundation adds no soft-delete fields/services. Retention periods and automated purge remain undecided. |
-| Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, action-level capability helpers, four read-only DRF endpoints/permissions, and IDOR tests now exist; write/membership endpoints and Client/Finance/Audit/Task/Review scoping remain absent. |
+| Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, action-level capability helpers, four read endpoints, Workspace create/metadata update, and Workspace-member manager list/direct-add/role-update now exist with IDOR/concurrency/audit tests. Profile writes, Workspace/member lifecycle endpoints, and Client/Finance/Audit/Task/Review scoping remain absent. |
 | Task/Review workflow | Assignment → Deliverable → Review → approval/completion or revision/resubmission is approved at high level; Task completion is allowed only after Deliverable approval. Detailed states, approvers, and payroll trigger remain undecided. |
 
 ## Approved ProfileInvitation contract — schema not implemented
@@ -1072,7 +1135,9 @@ scope.
   Client/AuditLog mapping may be guessed from unrelated records.
 - Before applying `0002` outside disposable tests: inventory that database,
   back it up where data must be retained, report any existing Workspaces, and
-  obtain explicit mappings for every unresolved row.
+  obtain explicit mappings for every unresolved row. The approved development
+  target completed this controlled sequence on 2026-10-19; no other target is
+  covered by that authorization or evidence.
 - Later migrations must add Client, Project, Invoice, public-link, AuditLog,
   and soft-delete changes additively in their approved tasks.
 
@@ -1081,4 +1146,8 @@ model/service/migration/access tests and the then-current 80-test full suite.
 After P1-04 added only the read API layer and tests, final verification passed
 21/21 targeted API tests and the 101-test full PostgreSQL suite. `pip check`,
 Django system check, and `makemigrations --check --dry-run` also passed. No
-schema migration was created or applied to development by P1-04.
+schema migration was created or applied to development by P1-04. HT-WORK-P2-02
+then completed the schema-free write/member slice with 111/111 targeted
+Workspace tests, 29/29 Authentication/API Foundation regressions, and 140/140
+full PostgreSQL tests; system and migration consistency checks passed and no
+model, migration, or development-data change occurred.

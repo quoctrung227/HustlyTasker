@@ -1,6 +1,6 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-10-18
+Last updated: 2026-10-19
 
 ## API boundary and public allowlist
 
@@ -42,11 +42,11 @@ not change its result while the Django request stack remains healthy. A future
 readiness endpoint must use a separate path and contract. The legacy
 `/api/test/` route has been removed and returns `404 Not Found`.
 
-## Profile and Workspace read API
+## Profile and Workspace API
 
 Base path: `/api/v1/`
 
-This is the first tenant-scoped business API slice. Every endpoint in this
+This is the tenant-scoped Profile/Workspace API foundation. Every endpoint in this
 section uses Django `SessionAuthentication`, requires a current active User,
 and has no `AllowAny` override. The selected Profile or any identifier supplied
 by the client is never authorization evidence; access is resolved from current
@@ -57,14 +57,83 @@ database membership through the tenant access foundation.
 | `GET` | `/api/v1/profiles/` | Active authenticated User | List Profiles in which the User has an active membership. |
 | `GET` | `/api/v1/profiles/{profile_id}/` | Active membership in the Profile | Return minimal Profile metadata. |
 | `GET` | `/api/v1/profiles/{profile_id}/workspaces/` | Active Profile access plus the Workspace rules below | List only Workspaces visible to the caller inside the nested Profile. |
+| `POST` | `/api/v1/profiles/{profile_id}/workspaces/` | Profile Owner or Profile Admin | Create a Workspace in the URL Profile. |
 | `GET` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/` | Effective read access to that Workspace in that Profile | Return minimal Workspace metadata. |
+| `PATCH` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/` | Profile Owner/Admin or that Workspace's Admin | Update `name` and/or `description`. |
+| `GET` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/` | Profile Owner/Admin or that Workspace's Admin | List effective Workspace assignments without User PII. |
+| `POST` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/` | Profile Owner/Admin or that Workspace's Admin | Direct-add an active same-Profile member within the caller's role ceiling. |
+| `PATCH` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/{membership_id}/` | Profile Owner/Admin or that Workspace's Admin | Change an effective Workspace assignment within the caller's role ceiling. |
 
-All four routes also support `HEAD` and `OPTIONS` for authorized callers.
-`POST`, `PUT`, `PATCH`, and `DELETE` are not implemented. DRF performs
-authentication, permission, and session-CSRF checks before method dispatch, so
-anonymous or CSRF-invalid unsafe requests may return `403 Forbidden`; an active
-authorized session with a valid CSRF token reaches method dispatch and returns
-`405 Method Not Allowed`. No branch writes data or creates audit events.
+Read/list routes support their normal DRF `HEAD`/`OPTIONS` behavior. All unsafe
+methods require a valid session CSRF token. Profile writes, `PUT`, Workspace
+`DELETE`/archive/restore, and Workspace-member `DELETE`/revoke/deactivate are
+not implemented; an otherwise authorized request that reaches method dispatch
+receives `405 Method Not Allowed`. Archive and revocation stay disabled because
+`Workspace` has no lifecycle field and `WorkspaceMember` has no active/history
+field. Defining those states and their visibility/rejoin effects requires an
+Owner-approved additive schema plan; no `workspace.0003` exists.
+
+### Workspace write contracts
+
+Workspace creation accepts exactly:
+
+```json
+{
+  "name": "October production",
+  "description": "Optional description"
+}
+```
+
+`name` is required for `POST`; `description` is optional and may be null.
+`PATCH` accepts only this field subset; an empty or unchanged patch is a no-op
+and writes no audit event. Unknown or server-owned fields such as
+`id`, `profile`, `profile_id`, `owner`, timestamps, members, or roles are
+rejected with `400 Bad Request`. The server derives the Profile from the nested
+URL and keeps the transitional owner field server-controlled, so the API cannot
+re-parent a Workspace or impersonate another creator. A successful create
+returns `201 Created`; a successful update returns `200 OK`.
+
+Workspace create/update run in atomic services, re-resolve authority under
+row locks, and write `workspace.created` or `workspace.updated` AuditLog events
+in the same transaction. Profile Owner/Admin can create and update Workspaces
+in their Profile. A Workspace Admin can update only its assigned Workspace's
+`name`/`description`. Workspace Editor (`MEMBER`), Viewer, an unassigned
+Profile Member, and legacy Workspace `OWNER` receive no metadata-write
+capability.
+
+### Workspace membership contracts
+
+Direct add accepts exactly:
+
+```json
+{
+  "target_profile_membership_id": "00000000-0000-0000-0000-000000000000",
+  "role": "MEMBER"
+}
+```
+
+The target is an active `ProfileMembership` in the URL Profile, not a global
+User identifier. Profile Owner/Admin may assign `ADMIN`, `MEMBER` (Editor), or
+`VIEWER`; Workspace Admin may assign or change only `MEMBER` and `VIEWER` and
+cannot alter an existing Admin. No supported caller may assign legacy
+Workspace `OWNER`. A duplicate assignment returns `409 Conflict`; invalid,
+inactive, or cross-Profile target membership input returns a generic validation
+`400` without exposing an account. Successful direct add returns `201 Created`.
+
+Role update accepts exactly one `role` field and returns `200 OK`. List and
+mutation results contain exactly:
+
+- `id`
+- `profile_membership_id`
+- `role`
+- `joined_at`
+- `updated_at`
+
+They intentionally omit global User ID, email, username, and other PII. Member
+list results use the standard bounded pagination envelope and stable
+`joined_at`, then `id`, ordering. Direct add and role update use locked atomic
+services and write `workspace.membership.created` or
+`workspace.membership.updated` AuditLog events in the same transaction.
 
 Profile responses contain exactly:
 
@@ -83,8 +152,8 @@ Workspace responses contain exactly:
 - `updated_at`
 
 IDs are canonical UUID strings and timestamps use DRF's ISO-8601 rendering.
-Transitional `Workspace.owner`, memberships, roles, emails, and other PII are
-not serialized.
+Transitional `Workspace.owner`, User identity/PII, and unrelated membership
+data are not serialized.
 
 List endpoints use the standard DRF page-number envelope:
 
@@ -98,9 +167,9 @@ List endpoints use the standard DRF page-number envelope:
 ```
 
 The default `page_size` is 20 and the client may request at most 100 with the
-`page_size` query parameter. Results have fixed stable ordering by
-`created_at`, then `id`; this slice exposes no client-controlled search,
-filter, or ordering.
+`page_size` query parameter. Profile/Workspace results have fixed stable
+ordering by `created_at`, then `id`; member results use `joined_at`, then `id`.
+This slice exposes no client-controlled search, filter, or ordering.
 
 Workspace visibility is fail-closed:
 
@@ -110,9 +179,9 @@ Workspace visibility is fail-closed:
   explicit `ADMIN`, `MEMBER` (Editor), or `VIEWER` membership.
 - Legacy `WorkspaceMember.OWNER`, transitional `Workspace.owner`, staff or
   superuser flags, and a selected Profile do not grant tenant API access.
-- An inactive User, inactive Profile membership, revoked Workspace membership,
-  cross-Profile relationship, or `Workspace.profile=NULL` cannot be used for
-  access.
+- An inactive User, inactive Profile membership, missing effective Workspace
+  assignment, cross-Profile relationship, or `Workspace.profile=NULL` cannot
+  be used for access.
 
 Anonymous access returns `403 Forbidden`. A malformed, unknown, cross-tenant,
 wrong-parent, or otherwise out-of-scope Profile/Workspace identifier returns
@@ -125,17 +194,38 @@ the same JSON `404` response:
 An accessible Profile with no visible Workspaces returns a successful empty
 page instead of disclosing hidden rows. Responses are marked non-cacheable.
 
+For write routes, syntactically or semantically invalid in-scope input is
+`400`; an authenticated caller who can resolve the object but lacks the action
+capability receives `403`; unknown, wrong-parent, and out-of-scope object IDs
+remain the same generic `404`; and a duplicate Workspace assignment is `409`.
+
 The `/api/v1/` prefix currently applies to tenant business endpoints only;
 the established `/api/auth/` and `/api/health/` paths remain unchanged. A
 project-wide error-envelope convention beyond this non-enumerating read
 contract is deferred to later API slices.
 
-Operational limitation: the source migration was exercised successfully on
-disposable PostgreSQL test databases that Django then destroyed, but
-`workspace.0002_profile_workspace_foundation` is intentionally still unapplied
-on the development database. A separately approved development sequence is:
-repeat read-only inventory, take the required backup, apply only the existing
-`0002`, then smoke these four routes.
+Operational rollout evidence (HT-DB-P1-05, 2026-10-19): after target inventory,
+verified backup and isolated restore rehearsal, the existing additive
+`workspace.0002_profile_workspace_foundation` migration was applied to the
+approved development database. Direct development smoke confirmed health
+`200`, anonymous denial (`403`) on all four tenant routes, CSRF bootstrap and
+login rejection behavior, with no `500` and no new session or business row.
+Because development contains no Profile/Workspace fixture and no approved
+account credential was changed or requested, successful SessionAuthentication,
+tenant detail, cross-tenant and IDOR cases were verified in Django's isolated
+PostgreSQL test database. This is environment-specific rollout evidence and
+does not change the API contract or authorize another environment.
+
+HT-WORK-P2-02 verification completed on 2026-10-19. The targeted Workspace
+suite passed 111/111 tests, Authentication/API Foundation regressions passed
+29/29, and the full PostgreSQL suite passed 140/140. Django system and migration
+consistency checks also passed. The manager roster remains actor-bound in its
+database query and returns only supported effective assignments backed by an
+active same-Profile membership and active User; a stale or downgraded actor
+fails closed. This schema-free slice created no model or migration change, and
+development remains at applied `workspace.0002` with 3 Users and zero business
+rows. Workspace archive/restore and membership revoke/deactivate remain outside
+the implemented contract and return `405`.
 
 ## Authentication foundation
 
@@ -207,6 +297,7 @@ returns `403` with DRF `SessionAuthentication`. Throttled requests return `429`.
   deliberate foundation-stage UX contract and permits account enumeration;
   revisit it together with activation and public-signup abuse controls.
 - OTP/email activation, password reset, logout-all, JWT, and OAuth are not part
-  of this foundation. The separately documented `/api/v1/` tenant slice adds
-  read-only Profile/Workspace authorization; Profile/Workspace writes,
-  membership management, and Invitation APIs remain unimplemented.
+  of this foundation. The separately documented `/api/v1/` tenant slice now
+  includes the limited Workspace metadata and membership operations above.
+  Profile writes, Workspace/member lifecycle operations, and Invitation APIs
+  remain unimplemented.

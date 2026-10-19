@@ -5,6 +5,8 @@ from .views import (
     ProfileListView,
     WorkspaceDetailView,
     WorkspaceListView,
+    WorkspaceMemberDetailView,
+    WorkspaceMemberListView,
 )
 
 
@@ -30,5 +32,21 @@ urlpatterns = [
         "profiles/<str:profile_id>/workspaces/<str:workspace_id>/",
         WorkspaceDetailView.as_view(),
         name="workspace-detail",
+    ),
+    path(
+        (
+            "profiles/<str:profile_id>/workspaces/"
+            "<str:workspace_id>/members/"
+        ),
+        WorkspaceMemberListView.as_view(),
+        name="workspace-member-list",
+    ),
+    path(
+        (
+            "profiles/<str:profile_id>/workspaces/"
+            "<str:workspace_id>/members/<str:membership_id>/"
+        ),
+        WorkspaceMemberDetailView.as_view(),
+        name="workspace-member-detail",
     ),
 ]

@@ -33,11 +33,15 @@ from .access import (
 )
 from .models import Profile, ProfileMembership, Workspace, WorkspaceMember
 from .services import (
+    InvalidWorkspaceMembershipReference,
     LastActiveProfileOwnerError,
     WorkspaceMembershipConflict,
     add_workspace_member,
     create_profile_with_owner,
+    create_workspace,
     update_profile_membership,
+    update_workspace,
+    update_workspace_member,
 )
 
 
@@ -402,7 +406,7 @@ class TenantAccessContextTests(WorkspaceTestDataMixin, TestCase):
         )
         role_expectations = (
             (self.admin_workspace, True, True, True),
-            (self.editor_workspace, True, True, False),
+            (self.editor_workspace, True, False, False),
             (self.viewer_workspace, True, False, False),
         )
         for workspace, can_read, can_edit, can_manage in role_expectations:
@@ -987,6 +991,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
         )
         self.assertEqual(audit.entity_name, "WorkspaceMember")
         self.assertEqual(audit.metadata["profile_id"], str(self.profile.id))
+        self.assertEqual(audit.metadata["workspace_id"], str(workspace.id))
 
     def test_profile_admin_can_directly_add_existing_profile_member(self):
         admin_user = self.create_user("workspace-profile-admin")
@@ -1029,7 +1034,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
                 actor=self.member,
             )
 
-        with self.assertRaises(TenantAccessNotFound):
+        with self.assertRaises(InvalidWorkspaceMembershipReference):
             add_workspace_member(
                 profile_id=self.profile.id,
                 workspace_id=workspace.id,
@@ -1082,6 +1087,203 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             Workspace._meta.get_field("owner").remote_field.on_delete,
             models.PROTECT,
         )
+
+
+class WorkspaceMutationServiceTests(WorkspaceTestDataMixin, TestCase):
+
+    def setUp(self):
+        self.owner = self.create_user("workspace-mutation-owner")
+        self.profile_admin = self.create_user("workspace-mutation-profile-admin")
+        self.workspace_admin = self.create_user(
+            "workspace-mutation-workspace-admin"
+        )
+        self.editor = self.create_user("workspace-mutation-editor")
+        self.viewer = self.create_user("workspace-mutation-viewer")
+        self.profile = create_profile_with_owner(
+            name="Workspace Mutation Profile",
+            owner=self.owner,
+        )
+        ProfileMembership.objects.create(
+            profile=self.profile,
+            user=self.profile_admin,
+            role=ProfileMembership.Role.ADMIN,
+        )
+        for user in (self.workspace_admin, self.editor, self.viewer):
+            ProfileMembership.objects.create(
+                profile=self.profile,
+                user=user,
+                role=ProfileMembership.Role.MEMBER,
+            )
+
+        self.workspace = Workspace.objects.create(
+            name="Original Workspace",
+            description="Original description",
+            profile=self.profile,
+            owner=self.owner,
+        )
+        for user, role in (
+            (self.workspace_admin, WorkspaceMember.Role.ADMIN),
+            (self.editor, WorkspaceMember.Role.MEMBER),
+            (self.viewer, WorkspaceMember.Role.VIEWER),
+        ):
+            WorkspaceMember.objects.create(
+                workspace=self.workspace,
+                user=user,
+                role=role,
+            )
+
+    def test_profile_owner_and_admin_create_workspace_with_server_owned_scope(self):
+        for label, actor in (
+            ("owner", self.owner),
+            ("profile-admin", self.profile_admin),
+        ):
+            with self.subTest(actor=label):
+                workspace = create_workspace(
+                    actor=actor,
+                    profile_id=self.profile.id,
+                    name=f"  {label} Workspace  ",
+                    description=f"Created by {label}",
+                )
+
+                self.assertEqual(workspace.name, f"{label} Workspace")
+                self.assertEqual(workspace.profile, self.profile)
+                self.assertEqual(workspace.owner, actor)
+                audit = AuditLog.objects.get(
+                    action="workspace.created",
+                    entity_id=workspace.id,
+                )
+                self.assertEqual(audit.user, actor)
+                self.assertEqual(
+                    audit.metadata["profile_id"],
+                    str(self.profile.id),
+                )
+                self.assertIsNone(audit.metadata["before"])
+
+    def test_profile_member_cannot_create_workspace(self):
+        for actor in (self.workspace_admin, self.editor, self.viewer):
+            with self.subTest(actor=actor.username):
+                with self.assertRaises(PermissionDenied):
+                    create_workspace(
+                        actor=actor,
+                        profile_id=self.profile.id,
+                        name="Denied Workspace",
+                    )
+
+        self.assertFalse(
+            Workspace.objects.filter(name="Denied Workspace").exists()
+        )
+        self.assertFalse(
+            AuditLog.objects.filter(action="workspace.created").exists()
+        )
+
+    def test_profile_managers_and_workspace_admin_update_metadata(self):
+        updates = (
+            (self.owner, {"name": "Owner update"}),
+            (self.profile_admin, {"description": "Profile Admin update"}),
+            (
+                self.workspace_admin,
+                {
+                    "name": "Workspace Admin update",
+                    "description": None,
+                },
+            ),
+        )
+        for actor, changes in updates:
+            with self.subTest(actor=actor.username):
+                workspace = update_workspace(
+                    actor=actor,
+                    profile_id=self.profile.id,
+                    workspace_id=self.workspace.id,
+                    **changes,
+                )
+                self.workspace.refresh_from_db()
+                self.assertEqual(workspace.name, self.workspace.name)
+                self.assertEqual(
+                    workspace.description,
+                    self.workspace.description,
+                )
+
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action="workspace.updated",
+                entity_id=self.workspace.id,
+            ).count(),
+            3,
+        )
+
+    def test_editor_viewer_and_cross_profile_manager_cannot_update_workspace(self):
+        for actor in (self.editor, self.viewer):
+            with self.subTest(actor=actor.username):
+                with self.assertRaises(PermissionDenied):
+                    update_workspace(
+                        actor=actor,
+                        profile_id=self.profile.id,
+                        workspace_id=self.workspace.id,
+                        name="Denied update",
+                    )
+
+        other_owner = self.create_user("workspace-mutation-other-owner")
+        other_profile = create_profile_with_owner(
+            name="Other Mutation Profile",
+            owner=other_owner,
+        )
+        with self.assertRaises(TenantAccessNotFound):
+            update_workspace(
+                actor=other_owner,
+                profile_id=other_profile.id,
+                workspace_id=self.workspace.id,
+                name="Cross-tenant update",
+            )
+
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.name, "Original Workspace")
+        self.assertFalse(
+            AuditLog.objects.filter(action="workspace.updated").exists()
+        )
+
+    def test_noop_update_writes_no_audit(self):
+        workspace = update_workspace(
+            actor=self.owner,
+            profile_id=self.profile.id,
+            workspace_id=self.workspace.id,
+        )
+
+        self.assertEqual(workspace.id, self.workspace.id)
+        self.assertFalse(
+            AuditLog.objects.filter(action="workspace.updated").exists()
+        )
+
+    def test_workspace_update_rolls_back_when_audit_write_fails(self):
+        with patch(
+            "apps.workspace.services.AuditLog.objects.create",
+            side_effect=RuntimeError("audit unavailable"),
+        ):
+            with self.assertRaises(RuntimeError):
+                update_workspace(
+                    actor=self.owner,
+                    profile_id=self.profile.id,
+                    workspace_id=self.workspace.id,
+                    name="Must roll back",
+                )
+
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.name, "Original Workspace")
+
+    def test_workspace_create_rolls_back_when_audit_write_fails(self):
+        before_count = Workspace.objects.count()
+
+        with patch(
+            "apps.workspace.services.AuditLog.objects.create",
+            side_effect=RuntimeError("audit unavailable"),
+        ):
+            with self.assertRaises(RuntimeError):
+                create_workspace(
+                    actor=self.owner,
+                    profile_id=self.profile.id,
+                    name="Must roll back",
+                )
+
+        self.assertEqual(Workspace.objects.count(), before_count)
 
 
 class WorkspaceMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
@@ -1298,7 +1500,9 @@ class WorkspaceMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
             uuid4(),
         ):
             with self.subTest(target_id=target_id):
-                with self.assertRaises(TenantAccessNotFound) as raised:
+                with self.assertRaises(
+                    InvalidWorkspaceMembershipReference
+                ) as raised:
                     add_workspace_member(
                         actor=self.owner,
                         profile_id=self.profile.id,
@@ -1354,6 +1558,227 @@ class WorkspaceMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
                 entity_id=first.id,
             ).count(),
             1,
+        )
+
+    def test_workspace_direct_add_rolls_back_when_audit_write_fails(self):
+        with patch(
+            "apps.workspace.services.AuditLog.objects.create",
+            side_effect=RuntimeError("audit unavailable"),
+        ):
+            with self.assertRaises(RuntimeError):
+                add_workspace_member(
+                    actor=self.owner,
+                    profile_id=self.profile.id,
+                    workspace_id=self.workspace.id,
+                    target_profile_membership_id=self.target_membership.id,
+                    role=WorkspaceMember.Role.MEMBER,
+                )
+
+        self.assertFalse(
+            WorkspaceMember.objects.filter(
+                workspace=self.workspace,
+                user=self.target,
+            ).exists()
+        )
+
+    def test_profile_managers_update_all_effective_workspace_roles(self):
+        workspace_admin_membership = WorkspaceMember.objects.get(
+            workspace=self.workspace,
+            user=self.workspace_admin,
+        )
+        editor_membership = WorkspaceMember.objects.get(
+            workspace=self.workspace,
+            user=self.editor,
+        )
+
+        updated_by_owner = update_workspace_member(
+            actor=self.owner,
+            profile_id=self.profile.id,
+            workspace_id=self.workspace.id,
+            membership_id=workspace_admin_membership.id,
+            role=WorkspaceMember.Role.VIEWER,
+        )
+        updated_by_admin = update_workspace_member(
+            actor=self.profile_admin,
+            profile_id=self.profile.id,
+            workspace_id=self.workspace.id,
+            membership_id=editor_membership.id,
+            role=WorkspaceMember.Role.ADMIN,
+        )
+
+        self.assertEqual(updated_by_owner.role, WorkspaceMember.Role.VIEWER)
+        self.assertEqual(updated_by_admin.role, WorkspaceMember.Role.ADMIN)
+        audits = AuditLog.objects.filter(
+            action="workspace.membership.updated"
+        ).order_by("created_at")
+        self.assertEqual(audits.count(), 2)
+        for audit in audits:
+            self.assertEqual(
+                audit.metadata["profile_id"],
+                str(self.profile.id),
+            )
+            self.assertEqual(
+                audit.metadata["workspace_id"],
+                str(self.workspace.id),
+            )
+
+    def test_workspace_admin_updates_editor_or_viewer_only(self):
+        editor_membership = WorkspaceMember.objects.get(
+            workspace=self.workspace,
+            user=self.editor,
+        )
+        viewer_membership = WorkspaceMember.objects.get(
+            workspace=self.workspace,
+            user=self.viewer,
+        )
+        admin_membership = WorkspaceMember.objects.get(
+            workspace=self.workspace,
+            user=self.workspace_admin,
+        )
+
+        updated_editor = update_workspace_member(
+            actor=self.workspace_admin,
+            profile_id=self.profile.id,
+            workspace_id=self.workspace.id,
+            membership_id=editor_membership.id,
+            role=WorkspaceMember.Role.VIEWER,
+        )
+        updated_viewer = update_workspace_member(
+            actor=self.workspace_admin,
+            profile_id=self.profile.id,
+            workspace_id=self.workspace.id,
+            membership_id=viewer_membership.id,
+            role=WorkspaceMember.Role.MEMBER,
+        )
+
+        self.assertEqual(updated_editor.role, WorkspaceMember.Role.VIEWER)
+        self.assertEqual(updated_viewer.role, WorkspaceMember.Role.MEMBER)
+
+        with self.assertRaises(PermissionDenied):
+            update_workspace_member(
+                actor=self.workspace_admin,
+                profile_id=self.profile.id,
+                workspace_id=self.workspace.id,
+                membership_id=editor_membership.id,
+                role=WorkspaceMember.Role.ADMIN,
+            )
+        with self.assertRaises(PermissionDenied):
+            update_workspace_member(
+                actor=self.workspace_admin,
+                profile_id=self.profile.id,
+                workspace_id=self.workspace.id,
+                membership_id=admin_membership.id,
+                role=WorkspaceMember.Role.MEMBER,
+            )
+
+    def test_editor_viewer_and_legacy_owner_cannot_update_workspace_roles(self):
+        target_membership = WorkspaceMember.objects.create(
+            workspace=self.workspace,
+            user=self.target,
+            role=WorkspaceMember.Role.OWNER,
+        )
+
+        for actor in (self.editor, self.viewer):
+            with self.subTest(actor=actor.username):
+                with self.assertRaises(PermissionDenied):
+                    update_workspace_member(
+                        actor=actor,
+                        profile_id=self.profile.id,
+                        workspace_id=self.workspace.id,
+                        membership_id=target_membership.id,
+                        role=WorkspaceMember.Role.MEMBER,
+                    )
+
+        with self.assertRaises(PermissionDenied):
+            update_workspace_member(
+                actor=self.owner,
+                profile_id=self.profile.id,
+                workspace_id=self.workspace.id,
+                membership_id=target_membership.id,
+                role=WorkspaceMember.Role.MEMBER,
+            )
+        with self.assertRaises(PermissionDenied):
+            update_workspace_member(
+                actor=self.owner,
+                profile_id=self.profile.id,
+                workspace_id=self.workspace.id,
+                membership_id=WorkspaceMember.objects.get(
+                    workspace=self.workspace,
+                    user=self.editor,
+                ).id,
+                role=WorkspaceMember.Role.OWNER,
+            )
+
+        self.assertFalse(
+            AuditLog.objects.filter(
+                action="workspace.membership.updated"
+            ).exists()
+        )
+
+    def test_workspace_role_update_scopes_path_and_requires_active_profile_member(self):
+        target_workspace_membership = WorkspaceMember.objects.create(
+            workspace=self.workspace,
+            user=self.target,
+            role=WorkspaceMember.Role.MEMBER,
+        )
+        other_workspace_membership = WorkspaceMember.objects.create(
+            workspace=self.other_workspace,
+            user=self.target,
+            role=WorkspaceMember.Role.MEMBER,
+        )
+
+        with self.assertRaises(TenantAccessNotFound):
+            update_workspace_member(
+                actor=self.owner,
+                profile_id=self.profile.id,
+                workspace_id=self.workspace.id,
+                membership_id=other_workspace_membership.id,
+                role=WorkspaceMember.Role.VIEWER,
+            )
+
+        self.target_membership.is_active = False
+        self.target_membership.save(
+            update_fields=("is_active", "updated_at")
+        )
+        with self.assertRaises(InvalidWorkspaceMembershipReference):
+            update_workspace_member(
+                actor=self.owner,
+                profile_id=self.profile.id,
+                workspace_id=self.workspace.id,
+                membership_id=target_workspace_membership.id,
+                role=WorkspaceMember.Role.VIEWER,
+            )
+
+        target_workspace_membership.refresh_from_db()
+        self.assertEqual(
+            target_workspace_membership.role,
+            WorkspaceMember.Role.MEMBER,
+        )
+
+    def test_workspace_role_update_rolls_back_when_audit_write_fails(self):
+        target_workspace_membership = WorkspaceMember.objects.create(
+            workspace=self.workspace,
+            user=self.target,
+            role=WorkspaceMember.Role.MEMBER,
+        )
+
+        with patch(
+            "apps.workspace.services.AuditLog.objects.create",
+            side_effect=RuntimeError("audit unavailable"),
+        ):
+            with self.assertRaises(RuntimeError):
+                update_workspace_member(
+                    actor=self.owner,
+                    profile_id=self.profile.id,
+                    workspace_id=self.workspace.id,
+                    membership_id=target_workspace_membership.id,
+                    role=WorkspaceMember.Role.VIEWER,
+                )
+
+        target_workspace_membership.refresh_from_db()
+        self.assertEqual(
+            target_workspace_membership.role,
+            WorkspaceMember.Role.MEMBER,
         )
 
 

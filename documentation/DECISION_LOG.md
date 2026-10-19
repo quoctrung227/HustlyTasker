@@ -821,9 +821,73 @@ Consequences:
 - The safe implementation order is: delegated design approval → access
   context/scoped selectors → membership-service refactor and IDOR tests →
   separately approved target inventory/backup and `workspace.0002` apply before
-  any development Workspace API exercise → minimal
-  Profile/Workspace endpoints → additive Invitation migration/service/API →
+  any development Workspace API exercise → minimal Profile/Workspace reads →
+  separately authorized schema-free Workspace write/member-manager slice →
+  Owner-approved lifecycle schema/policy or Invitation migration/service/API →
   later Task and tenant-domain work.
 - Any existing row that cannot be mapped from verified evidence remains an
   operational blocker for its constraint/backfill phase. It is not permission
   to synthesize a tenant mapping.
+
+
+Operational rollout checkpoint — 2026-10-19:
+
+- Owner authorized a development-only, condition-gated rollout of the existing
+  `workspace.0002_profile_workspace_foundation` migration through HT-DB-P1-05.
+  This does not change any accepted tenancy/RBAC decision or authorize a new
+  migration/API.
+- The target local Compose database was re-inventoried: 3 active Users and no
+  Workspace or other checked business rows. No mapping was needed or
+  synthesized.
+- A Git-ignored custom-format backup passed hash, TOC, and full archive-read
+  verification. An isolated full restore rehearsal reproduced the expected
+  pre-migration state and its temporary database was removed.
+- Runtime configuration was supplied only to disposable processes; no `.env`
+  or secret was persisted/logged and no credential was reset. The exact plan
+  matched the reviewed additive migration, after which `workspace.0002` was
+  applied to development and its schema/constraints/data were post-checked.
+- Direct development smoke and current PostgreSQL regressions passed (21/21
+  targeted read API, 29/29 Authentication/API Foundation, 101/101 full suite).
+  This closes only the authorized development rollout and does not change an
+  architecture decision or authorize another target. It did not itself open a
+  write/Invitation API; the later HT-WORK-P2-02 authorization is recorded
+  separately below.
+
+
+Workspace write/member implementation checkpoint — 2026-10-19:
+
+- After accepting HT-DB-P1-05, the Owner explicitly authorized
+  `HT-WORK-P2-02` for the schema-free Workspace write and membership-management
+  subset. This is implementation authorization under the existing delegated
+  RBAC decisions, not approval of a new lifecycle, retention, period, rejoin,
+  or deletion policy.
+- Current endpoints now include `POST` Workspace collection, `PATCH` Workspace
+  detail, `GET`/`POST` Workspace members, and `PATCH` Workspace-member detail.
+  Strict serializers allow only `name`/`description`,
+  `target_profile_membership_id`/`role`, or `role` as applicable; Profile,
+  transitional owner, actors, IDs, timestamps, and unknown fields remain
+  server-controlled or rejected.
+- Profile Owner/Admin may create and edit Workspaces and manage supported
+  `ADMIN/MEMBER/VIEWER` assignments in their Profile. The assigned Workspace
+  Admin may edit that Workspace's metadata and manage only `MEMBER/VIEWER`.
+  Editor, Viewer, unassigned Profile Member, legacy Workspace `OWNER`, and
+  platform staff/superuser flags grant no additional capability.
+- Manager roster queries retain current actor authority in SQL, include only
+  supported assignments backed by an active User and active same-Profile
+  ProfileMembership, and return no User ID/email/username/PII. Locked services
+  revalidate tenant scope and write atomic Workspace/membership AuditLog events.
+  API mapping is fail-closed: invalid body `400`, visible forbidden action
+  `403`, unknown/wrong-parent/out-of-scope URL resource `404`, duplicate direct
+  add `409`.
+- Verification passed 111/111 targeted Workspace tests, 29/29
+  Authentication/API Foundation regressions, and 140/140 full PostgreSQL tests,
+  plus Django system and migration consistency checks. No model, migration,
+  authentication, or development-data change occurred; development remains at
+  applied `workspace.0002` with 3 Users and zero business rows.
+- No lifecycle decision was inferred. `Profile` lacks an active lifecycle,
+  `Workspace` lacks archive state and a canonical month/period, and
+  `WorkspaceMember` lacks active/history state. Workspace archive/restore and
+  Workspace-member DELETE/revoke/deactivate remain unavailable (`405`) until
+  the Owner approves the additive schema and policies for lifecycle effects,
+  restore/rejoin, role ceilings, and the monthly period contract. No
+  `workspace.0003` exists.

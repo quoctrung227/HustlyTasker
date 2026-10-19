@@ -669,7 +669,7 @@ class ProfileWorkspaceReadApiTests(APITestCase):
             },
         )
 
-    def test_authenticated_unsafe_methods_are_not_implemented_and_do_not_write(self):
+    def test_unsupported_unsafe_methods_do_not_write(self):
         self.client.force_login(self.owner)
         before_counts = {
             "profiles": Profile.objects.count(),
@@ -682,16 +682,8 @@ class ProfileWorkspaceReadApiTests(APITestCase):
             ("PUT", self.profile_detail_url(self.profile.id)),
             ("PATCH", self.profile_detail_url(self.profile.id)),
             ("DELETE", self.profile_detail_url(self.profile.id)),
-            ("POST", self.workspace_list_url(self.profile.id)),
             (
                 "PUT",
-                self.workspace_detail_url(
-                    self.profile.id,
-                    self.unassigned_workspace.id,
-                ),
-            ),
-            (
-                "PATCH",
                 self.workspace_detail_url(
                     self.profile.id,
                     self.unassigned_workspace.id,
@@ -760,19 +752,31 @@ class ProfileWorkspaceReadApiTests(APITestCase):
             status.HTTP_405_METHOD_NOT_ALLOWED,
         )
 
-    def test_read_endpoints_support_only_get_head_and_options(self):
+    def test_endpoint_options_expose_only_implemented_methods(self):
         self.client.force_login(self.member)
-        urls = (
-            self.profile_list_url(),
-            self.profile_detail_url(self.profile.id),
-            self.workspace_list_url(self.profile.id),
-            self.workspace_detail_url(
-                self.profile.id,
-                self.viewer_workspace.id,
+        cases = (
+            (
+                self.profile_list_url(),
+                {"GET", "HEAD", "OPTIONS"},
+            ),
+            (
+                self.profile_detail_url(self.profile.id),
+                {"GET", "HEAD", "OPTIONS"},
+            ),
+            (
+                self.workspace_list_url(self.profile.id),
+                {"GET", "POST", "HEAD", "OPTIONS"},
+            ),
+            (
+                self.workspace_detail_url(
+                    self.profile.id,
+                    self.viewer_workspace.id,
+                ),
+                {"GET", "PATCH", "HEAD", "OPTIONS"},
             ),
         )
 
-        for url in urls:
+        for url, expected_methods in cases:
             with self.subTest(url=url):
                 head_response = self.client.head(url)
                 options_response = self.client.options(url)
@@ -789,5 +793,5 @@ class ProfileWorkspaceReadApiTests(APITestCase):
                         .replace(" ", "")
                         .split(",")
                     ),
-                    {"GET", "HEAD", "OPTIONS"},
+                    expected_methods,
                 )

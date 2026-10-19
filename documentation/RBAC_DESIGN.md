@@ -9,10 +9,12 @@ Date: 2026-10-18
 The owner delegated the remaining RBAC decisions to the Technical Advisor on
 2026-10-17. That approval first authorized `HT-RBAC-P1-03` Tenant Access
 Context and Scoped Service Foundation. The owner subsequently authorized
-`HT-API-P1-04`, which now implements only four read-only Profile/Workspace
-routes under `/api/v1/` using this contract. Neither authorization permits
-write/membership/Invitation APIs, a model or migration change, a data change,
-or applying the existing migration to the development database.
+`HT-API-P1-04`, the controlled development rollout `HT-DB-P1-05`, and the
+schema-free Workspace write/member slice `HT-WORK-P2-02`. Current `/api/v1/`
+behavior includes four Profile/Workspace reads, Workspace create/metadata
+update, and manager-only Workspace-member list/direct-add/role-update. None of
+these authorizations permits Profile writes, Workspace/member lifecycle,
+Invitation, a new migration, or a development-data change.
 
 ## 1. Evidence and decision labels
 
@@ -128,11 +130,13 @@ implementation completed on 2026-10-18.
   Unmapped Workspaces must never be exposed by a tenant API.
 - **[CURRENT]** `Workspace.owner` is a transitional protected User FK and is
   not authorization proof.
-- **[CURRENT — HT-API-P1-04]** Session authentication and global DRF
+- **[CURRENT — HT-API-P1-04 / HT-WORK-P2-02]** Session authentication and global DRF
   `IsAuthenticated` establish identity. `apps/workspace/access.py` supplies
-  the authorization facts, while `permissions.py` and four read-only
-  Profile/Workspace views adapt those facts to DRF with scoped querysets and
-  non-enumerating errors. There is still no write/membership or Invitation API.
+  the authorization facts, while `permissions.py` and tenant views adapt those
+  facts to DRF with scoped querysets, action permissions, and non-enumerating
+  errors. Four reads plus the limited Workspace write/member-manager operations
+  in section 8 are implemented; Profile writes, lifecycle, and Invitation are
+  still unavailable.
 - **[CURRENT]** Client, Invoice/Payment, and AuditLog do not yet have a safe
   canonical tenant path; Project does not exist. Those APIs must stay closed.
 - **[CURRENT — HT-RBAC-P1-03]** `update_profile_membership()` now establishes
@@ -195,7 +199,7 @@ slice.
 
 ### 3.1 Effective internal roles
 
-| Effective role | Scope and proposed meaning |
+| Effective role | Scope and effective meaning |
 |---|---|
 | Profile Owner | Tenant governance plus inherited Workspace management for every Workspace in the same Profile. Only this role may change Owner status, subject to last-owner locking. |
 | Profile Admin | Tenant operations plus inherited Workspace content management for every Workspace in the same Profile; never Owner governance and never implicit sensitive Finance access. |
@@ -247,13 +251,15 @@ Profile and does not automatically make that manager a contributor/assignee.
 | List/select own active Profiles | A | A | A | A | A | A |
 | List Workspaces in Profile | A: all | A: all | Assigned only | Assigned only | Assigned only | DENY |
 | Read assigned Workspace metadata | A | A | A | A | A: read-only | DENY |
-| Create Workspace / monthly rollover | R/P | R/P | DENY | DENY | DENY | DENY |
-| Edit Workspace name/description | R/P | R/P | P | DENY | DENY | DENY |
+| Create Workspace | A | A | DENY | DENY | DENY | DENY |
+| Monthly rollover | DEFER: period contract | DEFER: period contract | DENY | DENY | DENY | DENY |
+| Edit Workspace name/description | A | A | A | DENY | DENY | DENY |
 | Soft-delete/restore Workspace | P: Owner only | DENY | DENY | DENY | DENY | DENY |
 | Hard-delete Workspace | DEFER | DENY | DENY | DENY | DENY | DENY |
 | Edit Profile settings/branding | P: Owner only | DENY | DENY | DENY | DENY | DENY |
 | Soft-delete/restore Profile | P: Owner only | DENY | DENY | DENY | DENY | DENY |
-| Read full Profile roster/PII | R/P | R/P | DENY | P: minimal assigned roster | DENY | Self only |
+| Read full Profile roster/PII | R/P | R/P | DENY | DENY | DENY | Self only |
+| List effective Workspace assignments (no User PII) | A | A | A: assigned Workspace | DENY | DENY | DENY |
 | Invite Profile `MEMBER` | A | A | DENY | DENY | DENY | DENY |
 | Invite Profile `ADMIN` | A: Owner only | DENY | DENY | DENY | DENY | DENY |
 | Promote/deactivate Profile `ADMIN` | P: Owner only | DENY | DENY | DENY | DENY | DENY |
@@ -262,7 +268,8 @@ Profile and does not automatically make that manager a contributor/assignee.
 | Remove/deactivate Profile Member | R/P | P: `MEMBER` only | DENY | DENY | DENY | DENY |
 | Leave Profile voluntarily | P: only if another active Owner membership remains | P: self | P: self Profile membership | P: self Profile membership | P: self Profile membership | P: self |
 | Direct-add active Profile member to Workspace | A: Admin/Editor/Viewer | A: Admin/Editor/Viewer | A: Editor/Viewer only | DENY | DENY | DENY |
-| Assign/remove WS Admin/Editor/Viewer | A: no WS Owner | A: no WS Owner | A: Editor/Viewer only | DENY | DENY | DENY |
+| Update Workspace assignment role | A: Admin/Editor/Viewer | A: Admin/Editor/Viewer | A: Editor/Viewer only | DENY | DENY | DENY |
+| Revoke/deactivate/delete Workspace participation | DEFER: lifecycle/history | DEFER: lifecycle/history | DEFER: lifecycle/history | DENY | DENY | DENY |
 | Leave/remove own Workspace participation | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | N/A |
 | Read Task in authorized Workspace | R/P: all | R/P: all | R/P: all | P: assigned + published pool | A: read-only, fields deferred | DENY |
 | Create/assign/edit any Task | R/P | R/P | R/P | DENY | DENY | DENY |
@@ -748,22 +755,26 @@ record raw token, token hash, or unmasked recipient email in general logs.
 Current AuditLog lacks a canonical tenant FK; tenant-aware audit schema is a
 dependency before exposing tenant audit history.
 
-## 8. API surface — four reads implemented; remaining routes proposed
+## 8. API surface — reads and scoped Workspace mutations implemented
 
 All routes use global SessionAuthentication and `IsAuthenticated`; no tenant
-route receives `AllowAny`. `HT-API-P1-04` implements only the four read routes
-marked current below. Every proposed mutation remains unavailable and will
-require CSRF plus a separate implementation/review gate.
+route receives `AllowAny`. `HT-API-P1-04` supplies the four reads and
+`HT-WORK-P2-02` supplies only the schema-free Workspace write/member-manager
+operations marked current below. Every unsafe method requires CSRF. Profile
+writes, lifecycle operations, and Invitation remain unavailable behind their
+own implementation/review gates.
 
 ### 8.1 Profile, Workspace, and membership
 
-Current read-only routes:
+Current routes:
 
 ```text
 GET /api/v1/profiles/
 GET /api/v1/profiles/{profile_id}/
-GET /api/v1/profiles/{profile_id}/workspaces/
-GET /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/
+GET/POST /api/v1/profiles/{profile_id}/workspaces/
+GET/PATCH /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/
+GET/POST /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/
+PATCH /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/{membership_id}/
 ```
 
 Proposed and not implemented:
@@ -773,37 +784,54 @@ POST       /api/v1/profiles/
 PATCH      /api/v1/profiles/{profile_id}/
 GET        /api/v1/profiles/{profile_id}/members/
 PATCH      /api/v1/profiles/{profile_id}/members/{membership_id}/
-
-POST       /api/v1/profiles/{profile_id}/workspaces/
-PATCH      /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/
-GET/POST   /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/
-PATCH/DELETE
-           /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/{membership_id}/
+DELETE/RESTORE /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/
+DELETE     /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/{membership_id}/
 ```
 
-Delete/restore endpoints remain blocked until soft-delete and retention
-authority are approved. The final method set must be narrowed to the approved
-capability matrix.
+Archive/restore and member revoke/deactivate/DELETE remain blocked. `Profile`
+has no active lifecycle, `Workspace` has no archive state or canonical
+month/period, and `WorkspaceMember` has no active/history representation.
+Those operations require an Owner-approved additive schema and policy for
+state, visibility/write effects, restore/rejoin, role ceilings, and the monthly
+period contract. No `workspace.0003` exists.
 
-Proposed future write-validation contract:
+Current Workspace write-validation contract:
 
-- Profile creation accepts only approved mutable fields such as `{name}`;
-  creator/initial Owner and timestamps are server-set through the bootstrap
-  service. Self-service eligibility remains open.
-- Workspace creation accepts approved mutable metadata only. `profile`,
-  transitional `owner`, and timestamps are server-set from the authorized
-  parent/context; body values cannot reparent or impersonate ownership.
+- Workspace creation accepts exactly `name` and optional `description`;
+  metadata update accepts only that field subset; empty/unchanged input is a
+  no-op with no audit event. `profile`, transitional `owner`,
+  IDs, timestamps, membership data, roles, and unknown fields are rejected.
+  Profile and owner are server-set from the authorized parent/actor, so a body
+  cannot reparent or impersonate ownership.
 - Direct Workspace add accepts `{target_profile_membership_id, role}`, not a
   global User ID. The target membership must be active in the nested Profile;
   the role must be approved and effective. `ADMIN`, `MEMBER` (Editor), and
   `VIEWER` are supported subject to the actor's ceiling;
   `WorkspaceMember.OWNER` always fails closed and is never newly assigned.
-- Profile/Workspace membership mutations accept only the exact approved
-  role/active operation. Actor, tenant, target User, audit fields, and owner
-  status are never writable implicitly. Profile leave and Workspace removal/
-  `DELETE` stay disabled until lifecycle/history behavior is approved.
-- Responses expose only fields approved for the caller's effective role and
-  never treat nested IDs or serializer uniqueness checks as authorization.
+- Role update accepts exactly `role`. Profile Owner/Admin may manage
+  `ADMIN/MEMBER/VIEWER`; Workspace Admin may manage only `MEMBER/VIEWER` and
+  cannot alter an Admin. Editor, Viewer, an unassigned Profile Member, legacy
+  `OWNER`, staff/superuser flags, and transitional owner do not grant a write
+  capability.
+- The member roster is manager-only and actor-bound in SQL. It returns only
+  supported effective assignments backed by an active User and active
+  same-Profile ProfileMembership; stale/downgraded actor authority fails
+  closed. Results expose assignment ID, ProfileMembership ID, effective role,
+  and timestamps only—never User ID, email, username, or other PII.
+- Services re-resolve tenant authority under Profile-first locks and write
+  `workspace.created`, `workspace.updated`, `workspace.membership.created`, or
+  `workspace.membership.updated` audit events in the mutation transaction.
+  Audit failure rolls back the mutation; duplicate direct-add returns stable
+  `409` without creating a duplicate audit.
+- Invalid in-scope bodies use `400`, visible but forbidden actions use `403`,
+  malformed/unknown/wrong-parent/out-of-scope URL resources use the same
+  generic `404`, and duplicate assignment uses `409`. Nested IDs and serializer
+  checks are never authorization evidence.
+
+Profile creation/update and Profile membership mutation remain proposed, not
+implemented. Future Profile creation may accept approved mutable fields such
+as `{name}` with creator/initial Owner server-set through the bootstrap service,
+but self-service eligibility remains open.
 
 ### 8.2 Profile invitations
 
@@ -941,19 +969,22 @@ and exact error-envelope details remain deferred.
 1. **Completed 2026-10-17:** owner delegation approved the role compatibility
    mapping, tenant non-disclosure rule, account-lifecycle target, and invitation
    ceilings/TTL/throttles/retention listed in section 2.4.
-2. Repeat target-environment read-only inventory, apply backup policy, then
-   safely apply existing `workspace.0002` before exercising Workspace APIs on
-   development. Disposable test databases may apply it for isolated tests.
-   Never synthesize mappings for unknown legacy rows.
+2. **Completed 2026-10-19:** HT-DB-P1-05 verified the target inventory and
+   backup, completed an isolated restore rehearsal, reviewed the exact plan,
+   applied the existing `workspace.0002` to development, post-checked schema
+   and data, then passed direct smoke and the full regression gate. No mapping,
+   secret file, business fixture, or authorization for another environment was
+   synthesized.
 3. **Completed 2026-10-18:** implement verified access contexts,
    tenant-scoped Profile/Workspace selectors, revalidated capability primitives,
    and stable domain exception mapping without opening CRUD.
 4. **Completed 2026-10-18:** refactor membership services to
    authorize/scoped-resolve before target lookup and add IDOR, role-ceiling,
    stale/forged-context, service, duplicate, and concurrency tests.
-5. **Read slice completed 2026-10-18:** add four minimal Profile/Workspace read
-   endpoints with scoped DRF permissions under `/api/v1/`. Membership and
-   Workspace lifecycle mutations remain a later separately authorized task.
+5. **Read slice completed 2026-10-18; schema-free write/member slice completed
+   2026-10-19:** four minimal Profile/Workspace reads are joined by Workspace
+   create/metadata update and manager-only member list/direct-add/role-update.
+   Profile writes and Workspace/member lifecycle remain later tasks.
 6. After verified-email/account-binding dependencies and the remaining
    Invitation implementation details are reviewed, add only a new additive
    migration (expected `workspace/0003+`), migration rehearsals, locked service,
@@ -972,6 +1003,7 @@ and exact error-envelope details remain deferred.
 | Capability policy | Only owner-approved matrix actions are encoded; inheritance is same-Profile only; no enum, staff flag, selected Profile, or transitional owner FK grants an unstated capability | Parameterized role/action matrix tests; every deny case tested; Client/Guest rejected from internal endpoints |
 | Membership services | Parent scope established before target lookup; mutation revalidates under lock; last-owner, same-tenant, duplicate, and audit invariants are atomic; no supported direct/bulk bypass | Service tests for cross-tenant IDs and uniform domain errors; concurrent demote/remove/direct-add tests; rollback/audit tests |
 | Minimal Profile/Workspace read API — completed | Nested/scoped queryset used for every object; no new `AllowAny`; response fields follow approved role visibility; only safe read methods are exposed; unsupported unsafe methods still pass through session-CSRF enforcement; soft/hard delete remains absent | 21 permission/IDOR/API contract tests plus 29 Authentication/API Foundation regressions and full 101-test PostgreSQL suite |
+| Workspace write/member manager API — completed schema-free slice | Strict server-owned fields, same-tenant nested scope, approved action ceilings, actor-bound effective roster, locked revalidation, atomic audit, no PII, CSRF, and stable `400`/`403`/`404`/`409`; lifecycle methods remain `405` | 111 targeted Workspace tests, 29 Authentication/API Foundation regressions, 140 full PostgreSQL tests, Django system check, and migration consistency checks |
 | Invitation schema/migration | Additive migration only; token digest/status/role constraints and pending uniqueness match approved policy; existing rows are preserved; no plaintext token field | Migration consistency plus empty/populated PostgreSQL forward tests and constraint tests |
 | Invitation service | Authorized sender/recipient binding; expiry/replay/reinvite semantics; exactly one active membership and one terminal winner; Workspace membership is never implicit; audit is atomic | Token secrecy/log capture, duplicate/case variants, wrong-user/inactive/expired/revoked/replay, concurrent accept/accept and accept/revoke tests |
 | Invitation API/delivery | Authenticated session and CSRF; non-enumerating failures; scoped manager lists; no token/hash serialization; send only after commit; approved throttle/cache contract | API contract, CSRF, throttle, cache/header, delivery-failure, and cross-Profile negative tests |
@@ -1011,8 +1043,52 @@ unimplemented slices retain their later authorization and verification gates.
 - `pip check`, Python compile, Django system check, and
   `makemigrations --check --dry-run`: PASS.
 - No model, migration, authentication mechanism, membership-service rule, or
-  development data changed. Development still has only `workspace.0001`;
-  `workspace.0002` remains a separately controlled operational rollout.
+  development data changed in P1-04. The later HT-DB-P1-05 operational task
+  applied existing `workspace.0002` to development under separate controls.
+
+### 10.4 HT-DB-P1-05 operational evidence — 2026-10-19
+
+- Existing local Compose PostgreSQL development target independently verified.
+  Pre-apply inventory found 3 active Users and zero checked business rows, with
+  no checked orphan, unvalidated FK, or leftover test database. The unchanged
+  `0002` was additive and required no mapping for this inventory.
+- A Git-ignored custom archive passed host/container SHA-256 comparison,
+  `pg_restore --list`, and complete archive streaming to `/dev/null`. A full
+  isolated restore rehearsal reproduced the expected pre-`0002` state and was
+  removed afterward.
+- Development-only runtime values were passed in process without a persistent
+  `.env` or logged secret. The exact migration plan matched source;
+  `workspace.0002` then applied successfully. Final state is 27 migrations,
+  Profile/ProfileMembership tables and nullable `Workspace.profile_id`, with
+  reviewed constraints/indexes valid and all business counts still zero.
+- Direct smoke passed health, anonymous tenant denial and CSRF behavior with no
+  `500` or new session. Current isolated PostgreSQL tests passed 21/21 targeted
+  read API, 29/29 Authentication/API Foundation and 101/101 full suite. This is
+  not authorization for another environment or Invitation APIs; the later,
+  separate HT-WORK-P2-02 authorization and result are recorded below.
+
+### 10.5 HT-WORK-P2-02 implementation evidence — 2026-10-19
+
+- Implemented `POST` on the Workspace collection and `PATCH` on Workspace
+  detail, accepting only `name`/`description` while deriving Profile and
+  transitional owner server-side.
+- Implemented manager-only Workspace-member `GET`/`POST` collection and
+  `PATCH` detail. Direct add uses an active same-Profile
+  `target_profile_membership_id`; output omits User identity/PII. Profile
+  Owner/Admin and Workspace Admin ceilings match section 2.4, while legacy
+  `OWNER` and platform flags fail closed.
+- Roster visibility remains tied to current actor authority in SQL and includes
+  only effective supported assignments backed by active Profile membership and
+  active User. Mutations use scoped locked services and atomic AuditLog events;
+  cross-tenant/wrong-parent identifiers are non-enumerating and duplicate add
+  maps to stable `409`.
+- Verification passed 111/111 targeted Workspace tests, 29/29
+  Authentication/API Foundation regressions, and 140/140 full PostgreSQL tests,
+  together with Django system and migration consistency checks.
+- No model, migration, authentication, or development-data change occurred.
+  Development remains at applied `workspace.0002`, with 3 Users and zero
+  business rows. Archive/restore and member revoke/deactivate remain `405`
+  pending the schema/policy decisions recorded in section 8.1.
 
 ## 11. Delegated decisions resolved and downstream review gates
 
@@ -1047,9 +1123,10 @@ block `HT-RBAC-P1-03`:
 
 1. Exact Task visibility, contributor/assignee attribution, state transitions,
    concrete Review-role assignment, and payroll trigger.
-2. Profile/Workspace create, rollover, edit, soft-delete/restore, self-leave,
-   rejoin/history, and self-service eligibility beyond the approved foundation
-   invariants.
+2. Profile create/edit, Workspace rollover and canonical month/period,
+   Workspace archive/restore, membership revoke/deactivate, self-leave,
+   rejoin/history, and self-service eligibility beyond the implemented
+   schema-free Workspace metadata/member-manager slice.
 3. Verified-email persistence and account linking before production
    Invitation, plus unregistered-recipient onboarding, delivery channel,
    inviter-authority revalidation, exact terminal-state/history strategy,

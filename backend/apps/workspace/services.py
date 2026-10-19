@@ -5,11 +5,15 @@ from apps.audit.models import AuditLog
 
 from .access import (
     TenantAccessNotFound,
+    can_edit_workspace,
     can_manage_workspace_members,
     resolve_profile_access_context,
     resolve_workspace_access_context,
 )
 from .models import Profile, ProfileMembership, Workspace, WorkspaceMember
+
+
+_UNSET = object()
 
 
 class LastActiveProfileOwnerError(ValidationError):
@@ -25,24 +29,105 @@ class WorkspaceMembershipConflict(ValidationError):
         super().__init__({"target_profile_membership_id": self.default_message})
 
 
+class InvalidWorkspaceMembershipReference(ValidationError):
+    default_message = "Invalid Profile membership reference."
+
+    def __init__(self, field="target_profile_membership_id"):
+        super().__init__({field: self.default_message})
+
+
 def _write_membership_audit(*, actor, membership, action, before, after):
     if isinstance(membership, ProfileMembership):
         profile_id = membership.profile_id
+        workspace_id = None
     else:
         profile_id = membership.workspace.profile_id
+        workspace_id = membership.workspace_id
+
+    metadata = {
+        "profile_id": str(profile_id),
+        "target_user_id": str(membership.user_id),
+        "before": before,
+        "after": after,
+    }
+    if workspace_id is not None:
+        metadata["workspace_id"] = str(workspace_id)
 
     AuditLog.objects.create(
         user=actor,
         action=action,
         entity_name=membership.__class__.__name__,
         entity_id=membership.id,
+        metadata=metadata,
+    )
+
+
+def _write_workspace_audit(*, actor, workspace, action, before, after):
+    AuditLog.objects.create(
+        user=actor,
+        action=action,
+        entity_name="Workspace",
+        entity_id=workspace.id,
         metadata={
-            "profile_id": str(profile_id),
-            "target_user_id": str(membership.user_id),
+            "profile_id": str(workspace.profile_id),
             "before": before,
             "after": after,
         },
     )
+
+
+def _lock_workspace_mutation_context(*, actor, profile_id, workspace_id):
+    profile_context = resolve_profile_access_context(actor, profile_id)
+    workspace_context = resolve_workspace_access_context(
+        profile_context,
+        workspace_id,
+    )
+
+    Profile.objects.select_for_update().filter(
+        id=profile_context.profile_id
+    ).get()
+
+    workspace = Workspace.objects.select_for_update().filter(
+        id=workspace_context.workspace_id,
+        profile_id=profile_context.profile_id,
+    ).first()
+    if workspace is None:
+        raise TenantAccessNotFound()
+
+    actor_membership = ProfileMembership.objects.select_for_update().filter(
+        id=profile_context.membership_id,
+        profile_id=profile_context.profile_id,
+        user_id=profile_context.user_id,
+        user__is_active=True,
+        is_active=True,
+    ).first()
+    if actor_membership is None:
+        raise TenantAccessNotFound()
+
+    locked_workspace_role = None
+    if actor_membership.role == ProfileMembership.Role.MEMBER:
+        locked_workspace_role = WorkspaceMember.objects.select_for_update().filter(
+            workspace_id=workspace.id,
+            user_id=actor_membership.user_id,
+            role__in=(
+                WorkspaceMember.Role.ADMIN,
+                WorkspaceMember.Role.MEMBER,
+                WorkspaceMember.Role.VIEWER,
+            ),
+        ).values_list("role", flat=True).first()
+
+        if locked_workspace_role is None:
+            raise TenantAccessNotFound()
+
+    if (
+        actor_membership.role != workspace_context.profile_role
+        or locked_workspace_role != workspace_context.workspace_role
+    ):
+        # Role changes after initial resolution must be retried from a fresh
+        # context; a stale snapshot never broadens mutation authority.
+        raise TenantAccessNotFound()
+
+    return workspace_context, workspace, actor_membership
 
 
 @transaction.atomic
@@ -236,29 +321,13 @@ def update_profile_membership(
 
 
 @transaction.atomic
-def add_workspace_member(
-    *,
-    actor,
-    profile_id,
-    workspace_id,
-    target_profile_membership_id,
-    role,
-):
+def create_workspace(*, actor, profile_id, name, description=None):
     profile_context = resolve_profile_access_context(actor, profile_id)
-    workspace_context = resolve_workspace_access_context(
-        profile_context,
-        workspace_id,
-    )
 
-    Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(
         id=profile_context.profile_id
-    ).get()
-
-    workspace = Workspace.objects.select_for_update().filter(
-        id=workspace_context.workspace_id,
-        profile_id=profile_context.profile_id,
     ).first()
-    if workspace is None:
+    if profile is None:
         raise TenantAccessNotFound()
 
     actor_membership = ProfileMembership.objects.select_for_update().filter(
@@ -271,28 +340,100 @@ def add_workspace_member(
     if actor_membership is None:
         raise TenantAccessNotFound()
 
-    locked_workspace_role = None
-    if actor_membership.role == ProfileMembership.Role.MEMBER:
-        locked_workspace_role = WorkspaceMember.objects.select_for_update().filter(
-            workspace_id=workspace.id,
-            user_id=actor_membership.user_id,
-            role__in=(
-                WorkspaceMember.Role.ADMIN,
-                WorkspaceMember.Role.MEMBER,
-                WorkspaceMember.Role.VIEWER,
-            ),
-        ).values_list("role", flat=True).first()
-
-        if locked_workspace_role is None:
-            raise TenantAccessNotFound()
-
-    if (
-        actor_membership.role != workspace_context.profile_role
-        or locked_workspace_role != workspace_context.workspace_role
-    ):
-        # Role changes after initial resolution must be retried from a fresh
-        # context; a stale snapshot never broadens mutation authority.
+    if actor_membership.role != profile_context.profile_role:
         raise TenantAccessNotFound()
+
+    if actor_membership.role not in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    ):
+        raise PermissionDenied("Workspace creation is not allowed.")
+
+    workspace = Workspace(
+        profile=profile,
+        owner=actor,
+        name=(name or "").strip(),
+        description=description,
+    )
+    workspace.save()
+
+    _write_workspace_audit(
+        actor=actor,
+        workspace=workspace,
+        action="workspace.created",
+        before=None,
+        after={
+            "name": workspace.name,
+            "description": workspace.description,
+        },
+    )
+
+    return workspace
+
+
+@transaction.atomic
+def update_workspace(
+    *,
+    actor,
+    profile_id,
+    workspace_id,
+    name=_UNSET,
+    description=_UNSET,
+):
+    workspace_context, workspace, _ = _lock_workspace_mutation_context(
+        actor=actor,
+        profile_id=profile_id,
+        workspace_id=workspace_id,
+    )
+
+    if not can_edit_workspace(workspace_context):
+        raise PermissionDenied("Workspace metadata changes are not allowed.")
+
+    before = {
+        "name": workspace.name,
+        "description": workspace.description,
+    }
+
+    if name is not _UNSET:
+        workspace.name = (name or "").strip()
+    if description is not _UNSET:
+        workspace.description = description
+
+    after = {
+        "name": workspace.name,
+        "description": workspace.description,
+    }
+    if before == after:
+        return workspace
+
+    workspace.save(update_fields=("name", "description", "updated_at"))
+    _write_workspace_audit(
+        actor=actor,
+        workspace=workspace,
+        action="workspace.updated",
+        before=before,
+        after=after,
+    )
+
+    return workspace
+
+
+@transaction.atomic
+def add_workspace_member(
+    *,
+    actor,
+    profile_id,
+    workspace_id,
+    target_profile_membership_id,
+    role,
+):
+    workspace_context, workspace, actor_membership = (
+        _lock_workspace_mutation_context(
+            actor=actor,
+            profile_id=profile_id,
+            workspace_id=workspace_id,
+        )
+    )
 
     if not can_manage_workspace_members(workspace_context):
         raise PermissionDenied("Workspace membership management is not allowed.")
@@ -324,15 +465,15 @@ def add_workspace_member(
     try:
         target_membership = ProfileMembership.objects.select_for_update().filter(
             id=target_profile_membership_id,
-            profile_id=profile_context.profile_id,
+            profile_id=workspace.profile_id,
             user__is_active=True,
             is_active=True,
         ).first()
     except (TypeError, ValueError, ValidationError):
-        raise TenantAccessNotFound() from None
+        raise InvalidWorkspaceMembershipReference() from None
 
     if target_membership is None:
-        raise TenantAccessNotFound()
+        raise InvalidWorkspaceMembershipReference()
 
     existing_membership = WorkspaceMember.objects.select_for_update().filter(
         workspace_id=workspace.id,
@@ -364,6 +505,100 @@ def add_workspace_member(
         membership=membership,
         action="workspace.membership.created",
         before=None,
+        after={"role": membership.role},
+    )
+
+    return membership
+
+
+@transaction.atomic
+def update_workspace_member(
+    *,
+    actor,
+    profile_id,
+    workspace_id,
+    membership_id,
+    role,
+):
+    workspace_context, workspace, actor_membership = (
+        _lock_workspace_mutation_context(
+            actor=actor,
+            profile_id=profile_id,
+            workspace_id=workspace_id,
+        )
+    )
+
+    if not can_manage_workspace_members(workspace_context):
+        raise PermissionDenied("Workspace membership management is not allowed.")
+
+    if role not in WorkspaceMember.Role.values:
+        raise ValidationError({"role": "Unsupported Workspace membership role."})
+
+    try:
+        target_user_id = WorkspaceMember.objects.filter(
+            id=membership_id,
+            workspace_id=workspace.id,
+        ).values_list("user_id", flat=True).first()
+    except (TypeError, ValueError, ValidationError):
+        raise TenantAccessNotFound() from None
+
+    if target_user_id is None:
+        raise TenantAccessNotFound()
+
+    target_profile_membership = (
+        ProfileMembership.objects.select_for_update().filter(
+            profile_id=workspace.profile_id,
+            user_id=target_user_id,
+            user__is_active=True,
+            is_active=True,
+        ).first()
+    )
+    if target_profile_membership is None:
+        raise InvalidWorkspaceMembershipReference(field="membership_id")
+
+    membership = WorkspaceMember.objects.select_for_update().select_related(
+        "workspace"
+    ).filter(
+        id=membership_id,
+        workspace_id=workspace.id,
+        user_id=target_profile_membership.user_id,
+    ).first()
+    if membership is None:
+        raise TenantAccessNotFound()
+
+    if actor_membership.role in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    ):
+        manageable_roles = (
+            WorkspaceMember.Role.ADMIN,
+            WorkspaceMember.Role.MEMBER,
+            WorkspaceMember.Role.VIEWER,
+        )
+    else:
+        manageable_roles = (
+            WorkspaceMember.Role.MEMBER,
+            WorkspaceMember.Role.VIEWER,
+        )
+
+    if membership.role not in manageable_roles or role not in manageable_roles:
+        raise PermissionDenied(
+            "The Workspace membership role exceeds the actor's management "
+            "ceiling."
+        )
+
+    if membership.role == role:
+        return membership
+
+    before = {"role": membership.role}
+    membership.role = role
+    membership.save(update_fields=("role", "updated_at"))
+
+    _write_membership_audit(
+        actor=actor,
+        membership=membership,
+        action="workspace.membership.updated",
+        before=before,
         after={"role": membership.role},
     )
 

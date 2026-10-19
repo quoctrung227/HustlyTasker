@@ -20,6 +20,9 @@ env/
 media/
 staticfiles/
 
+# Local operational database backups
+/.local_backups/
+
 
 # =====================
 # Node / React
