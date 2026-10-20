@@ -2,9 +2,73 @@
 
 Lịch sử thay đổi của dự án HustlyTasker.
 
+## Unreleased - 2026-10-21
+
+### HT-TASK-P2-03 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
+
+- Bổ sung service/API foundation cho Task management và internal Deliverable
+  approval: create/update/assign/start, revisioned submit, approve và request
+  changes; completion chỉ xảy ra sau internal approval hợp lệ.
+- Áp dụng tenant-scoped permission hiện hữu: Profile Owner/Admin và Workspace
+  Admin manage/review; active Profile Member + Workspace Editor chỉ start/submit
+  Task đang được assign cho mình; self-review và stale/repeat review bị chặn.
+- Thêm nested `/api/v1/` routes, strict serializer inputs, no-PII attribution,
+  bounded pagination, non-enumerating IDOR behavior, SessionAuthentication và
+  CSRF; không expose PUT/DELETE hoặc arbitrary status mutation.
+- Thêm additive source migrations `tasks.0002_task_workflow_foundation` và
+  `reviews.0002_review_workflow_foundation`: actor FK `PROTECT`, status/priority
+  checks, indexes, một active assignment/Task, positive revision và một
+  Review/Deliverable. Legacy assignment được giữ nhưng inactive; legacy
+  revision giữ `NULL`; không guessed backfill.
+- Chuyển Task/TaskAssignment/TaskComment Admin thành inspection-only và chặn
+  Workspace hard delete trong Admin để tránh cascade xóa Task workflow history.
+- AuditLog được ghi atomic cho create/update/assign/reassign/start/submit/
+  approve/request-changes. Internal approval được đánh dấu riêng, không phải
+  Client approval và không tạo Payroll/Payment hay tính compensation.
+- Targeted PostgreSQL service/API/migration suite PASS 33/33 trong 7.673s;
+  existing Authentication/API/Workspace regression PASS 169/169 trong
+  87.783s; final full PostgreSQL PASS 202/202 trong 92.343s. Dependency,
+  Django system và migration-drift checks PASS; test DB được hủy; independent
+  final code review PASS.
+- Hai migration mới chưa apply development hoặc production. Trước rollout phải
+  inventory invalid enum, duplicate Review per Deliverable và legacy assignment,
+  backup, review plan và dừng nếu cần mapping/cleanup chưa được phê duyệt.
+- Read-only development post-check giữ nguyên 3 Users, 2 sessions và zero
+  checked workflow/business rows; `showmigrations` xác nhận Workspace 0001-0003
+  applied, Tasks/Reviews chỉ 0001. `migrate --plan` thành công và chỉ liệt kê
+  additive `tasks.0002` rồi `reviews.0002`; không migration nào được apply.
+
 ## Unreleased - 2026-10-20
 
-### HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
+### Controlled Workspace 0003 development rollout completed (HT-DB-P1-06)
+
+- Xác minh đúng local development target: Compose container
+  `hustlytasker_postgres`, PostgreSQL 16.14, database `hustlytasker_db`,
+  loopback-only port và named volume hiện hữu; production không được truy cập.
+- Kiểm kê pre-apply có 27 migrations, 3 active Users, 2 Django sessions và zero
+  checked business rows. History/schema cùng xác nhận `workspace.0003` chưa
+  tồn tại vật lý; exact plan chỉ có 11 additive operations đã review.
+- Tạo custom-format backup Git-ignored 73,521 bytes, xác minh SHA-256, TOC và
+  full archive read; full restore rehearsal tái tạo đúng 27 migrations/3 Users
+  trong database tạm rồi cleanup.
+- Áp dụng đúng `workspace.0003_workspace_lifecycle_and_period` lên development.
+  Post-check có 28 migrations, bốn field mới đúng nullability/no permanent DB
+  default, ba CHECK constraints validated, partial unique Profile/month và ba
+  lookup indexes valid/ready. Inventory không đổi; không có invalid lifecycle/
+  period, duplicate month, unvalidated constraint hoặc guessed mapping.
+- **DEV SMOKE PASSED** không tạo fixture: health `200`, CSRF/login behavior đúng,
+  mọi Profile/Workspace/membership route từ chối anonymous `403`, và row/session
+  counts không đổi. Authenticated role/tenant/IDOR/lifecycle success cases chỉ
+  được chạy trên isolated PostgreSQL test databases.
+- **ISOLATED INTEGRATION TEST PASSED:** lifecycle/schema 17/17, Workspace
+  140/140, Authentication/API Foundation 29/29 và full PostgreSQL 169/169;
+  dependency/system/migration checks PASS. Mọi test database và runner tạm đã
+  được hủy.
+- Không sửa backend source, applied migration, Authentication hay API contract;
+  không reverse/`--fake`, xóa dữ liệu, tạo business fixture hoặc tác động
+  production. Task dừng tại Owner review gate.
+
+### Historical HT-WORK-P2-02 implementation checkpoint — superseded by HT-DB-P1-06 rollout
 
 - Bổ sung additive source migration
   `workspace.0003_workspace_lifecycle_and_period`: Profile/Workspace lifecycle

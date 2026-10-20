@@ -23,6 +23,11 @@ class WorkspaceAdmin(admin.ModelAdmin):
             readonly_fields.append("period")
         return tuple(readonly_fields)
 
+    def has_delete_permission(self, request, obj=None):
+        # Workspace deletion would cascade into Task workflow history. Keep
+        # hard deletion behind a future controlled retention operation.
+        return False
+
 
 @admin.register(WorkspaceMember)
 class WorkspaceMemberAdmin(admin.ModelAdmin):

@@ -6,7 +6,7 @@ Status: `COMPLETE — APPROVED BY OWNER DELEGATION`
 
 Date: 2026-10-18
 
-Last implementation reconciliation: 2026-10-20
+Last implementation reconciliation: 2026-10-21
 
 The owner delegated the remaining RBAC decisions to the Technical Advisor on
 2026-10-17. That approval first authorized `HT-RBAC-P1-03` Tenant Access
@@ -18,8 +18,13 @@ four Profile/Workspace reads, canonical-month Workspace creation/metadata
 update, Profile/Workspace archive/restore, and manager-only Workspace-member
 list/direct-add/role-update/soft-revoke/reactivation. General Profile CRUD,
 Invitation, and downstream domain APIs remain unavailable. Additive
-`workspace.0003` exists in source and is verified only in isolated PostgreSQL;
-development migration requires separate Owner approval.
+`workspace.0003` completed its separately authorized controlled development
+rollout in `HT-DB-P1-06`; production and all other persistent environments
+remain behind separate approval gates. Owner then authorized the dedicated
+`HT-TASK-P2-03` contract. Its Task/Deliverable/internal Review permissions and
+routes are implemented in source and have passed 33/33 targeted, 169/169
+existing regression, and 202/202 full PostgreSQL tests. Its two additive
+migrations are not applied to development pending separate Owner approval.
 
 ## 1. Evidence and decision labels
 
@@ -91,8 +96,10 @@ Current source remains authoritative for what is actually implemented.
   Deliverable submission, Review, then approval/completion or revision and
   resubmission. A Task is complete only after its Deliverable is approved.
   Section 2.4 additionally requires explicit Review capability and forbids
-  self-approval. Exact states, the role(s) granted Review capability, and the
-  payroll trigger remain open for the dedicated workflow task.
+  self-approval. `HT-TASK-P2-03` now fixes the internal state machine and grants
+  management/review to same-Profile Owner/Admin or assigned Workspace Admin,
+  while execution requires the current active Editor assignee. Client/Guest
+  approval and Payroll/Payment pricing/eligibility remain separate.
 
 ### 2.2 Reconciliation with the 11 approved decisions — 2026-10-17
 
@@ -113,7 +120,7 @@ listed downstream details remain open.
 | 8 | Client Portal supports account and secure link; portal and guest-review links are independent, scoped, expiring, revocable, hash-only; no implicit internal membership. | The document mentioned external capability principals but omitted account access and most credential/lifecycle boundaries. | `NOT DOCUMENTED` | `MATCH` — all approved access boundaries are now explicit; exact capabilities/default expiries remain open. |
 | 9 | Default soft delete for core business aggregates; controlled hard delete; protect finance/audit; no User-departure cascade; retention/purge undecided. | The default soft-delete target and open retention were present, but finance/audit protection and no-cascade behavior were missing. | `NOT DOCUMENTED` | `MATCH` — the complete approved deletion boundary is now recorded. |
 | 10 | Inventory first; never assume empty or guess mapping; backup/rehearse risky changes; additive migrations only. | These controls existed in the implementation plan, but were not collected in the approved baseline. | `MATCH` | `MATCH` — elevated to the approved baseline; environment-specific unknown mappings remain operational blockers, not new policy questions. |
-| 11 | Assignment → execution → Deliverable → Review → approval/completion or revision/resubmission; completion only after approval. | The document deferred detailed workflow but omitted the already-approved high-level flow and completion invariant. | `NOT DOCUMENTED` | `MATCH` — fixed invariant recorded; exact states/concrete reviewer role/payroll trigger remain open. |
+| 11 | Assignment → execution → Deliverable → Review → approval/completion or revision/resubmission; completion only after approval. | The document deferred detailed workflow but omitted the already-approved high-level flow and completion invariant. | `NOT DOCUMENTED` | `MATCH` — fixed invariant recorded. The later HT-TASK-P2-03 contract resolves internal states/reviewer authority; external approval and Payroll effects remain separate. |
 
 This reconciliation found no conflict that changes an approved architecture
 decision. Row 4 was a documentation-labeling overreach and rows 6–9 and 11
@@ -171,8 +178,10 @@ The following decisions are **APPROVED BY OWNER DELEGATION**. They refine the
 3. Workspace Admin administers only its assigned Workspace; Editor performs
    work; Viewer is read-only.
 4. Deliverable approval requires an explicit Review capability, and a submitter
-   may not approve their own Deliverable. The concrete reviewer role and full
-   workflow remain deferred.
+   may not approve their own Deliverable. This design originally deferred the
+   concrete role/state machine; HT-TASK-P2-03 later approved Profile
+   Owner/Admin and Workspace Admin for internal review and the bounded
+   state/revision flow recorded in sections 4 and 8.2.
 5. Profile creation creates the initial Owner in the same transaction.
 6. Leave, deactivate, demote, or remove operations must be rejected when they
    would violate the last-active-Owner invariant.
@@ -277,12 +286,13 @@ Profile and does not automatically make that manager a contributor/assignee.
 | Update Workspace assignment role | A: Admin/Editor/Viewer | A: Admin/Editor/Viewer | A: Editor/Viewer only | DENY | DENY | DENY |
 | Soft-revoke/reactivate Workspace participation | A: Admin/Editor/Viewer | A: Admin/Editor/Viewer | A: Editor/Viewer only | DENY | DENY | DENY |
 | Leave/remove own Workspace participation | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | DEFER: lifecycle | N/A |
-| Read Task in authorized Workspace | R/P: all | R/P: all | R/P: all | P: assigned + published pool | A: read-only, fields deferred | DENY |
-| Create/assign/edit any Task | R/P | R/P | R/P | DENY | DENY | DENY |
+| Read Task/Deliverable history in authorized Workspace | A: all | A: all | A: assigned Workspace | A: assigned Workspace | A: assigned Workspace, read-only | DENY |
+| Create/assign/edit Task metadata | A | A | A: assigned Workspace | DENY | DENY | DENY |
 | Claim/return eligible Task | P: only as contributor | P: only as contributor | P: only as contributor | R/P | DENY | DENY |
-| Edit assigned Task / allowed status | R/P | R/P | R/P | R/P | DENY | DENY |
-| Comment/upload Deliverable | P: only as contributor | P: only as contributor | P: only as contributor | R/P | DENY | DENY |
-| Internal approval/send to Client | DEFER: explicit Review capability, not own submission | DEFER: explicit Review capability, not own submission | DEFER: explicit Review capability, not own submission | DEFER: explicit Review capability, not own submission | DENY | DENY |
+| Start assigned Task / submit Deliverable revision | DENY unless separately an eligible assigned Editor | DENY unless separately an eligible assigned Editor | DENY unless separately an eligible assigned Editor | A: current active assignee only | DENY | DENY |
+| Comment on Task | DEFER | DEFER | DEFER | DEFER | DENY | DENY |
+| Internal approve/request changes | A: not own submission | A: not own submission | A: assigned Workspace, not own submission | DENY | DENY | DENY |
+| Send to Client / Client or Guest approval | DEFER | DEFER | DEFER | DEFER | DENY | DENY |
 | Manage Profile Client/Project | R/P | R/P | DENY | DENY | DENY | DENY |
 | Reference existing same-Profile Client/Project from Task | R/P | R/P | P: scoped selection | P: task-linked only | P: task-linked read | DENY |
 | Read/manage Invoice, Payment, payroll | R/P | DENY: no implicit sensitive Finance | DENY | DENY | DENY | DENY |
@@ -294,11 +304,12 @@ The requirement to keep a Task, Client, Project, and Workspace in the same
 Profile is approved (`A`); the matrix row above concerns who may perform the
 reference action and therefore remains `R/P` or `P`.
 
-The approved Task lifecycle also constrains every future role: no capability
-may mark a Task complete before its Deliverable is approved, and the submitter
-cannot perform that approval. The exact state machine, concrete role(s) granted
-Review capability, and payroll effect remain deferred, so the approval row
-stays `DEFER` rather than inventing an action grant here.
+The implemented internal Task lifecycle constrains every role: no capability
+may mark a Task complete before its latest submitted Deliverable is approved,
+and the submitter cannot perform that approval. The concrete internal reviewer
+roles and state machine are no longer open. Client/Guest review and any Payroll
+pricing, eligibility, or payment effect remain deferred; internal approval
+does not create those records.
 
 ### 4.1 Approved Viewer read-only boundary
 
@@ -320,10 +331,10 @@ explicitly reviewed. `HT-RBAC-P1-03` itself opened no endpoint; the later
 - A Profile Member does not receive Viewer fallback access to every Workspace.
 - Client/Guest credentials cannot call internal member endpoints.
 - Profile Owner/Admin inheritance is limited to the same Profile.
-- Whether a Profile Owner/Admin must also have explicit Workspace membership
-  to act as an assignee/contributor is **[OPEN]**. The proposed secure split is
-  inherited management but explicit membership for operational assignment,
-  upload, and worker attribution.
+- Profile Owner/Admin management inheritance does not make that manager an
+  assignee/contributor. In `HT-TASK-P2-03`, operational execution requires an
+  active ordinary Profile Member with effective Workspace `MEMBER` (Editor)
+  assignment and the current active Task assignment.
 - Workspace self-leave/removal is **[DEFER]**: `WorkspaceMember.is_active` and
   the manager-only soft-revoke/reactivation service now preserve one historical
   row per Workspace/User, but self-service eligibility and its audit/rejoin
@@ -769,7 +780,7 @@ record raw token, token hash, or unmasked recipient email in general logs.
 Current AuditLog lacks a canonical tenant FK; tenant-aware audit schema is a
 dependency before exposing tenant audit history.
 
-## 8. API surface — scoped reads, lifecycle, and Workspace mutations implemented
+## 8. API surface — Workspace and internal Task workflow implemented
 
 All routes use global SessionAuthentication and `IsAuthenticated`; no tenant
 route receives `AllowAny`. `HT-API-P1-04` supplies the four reads and
@@ -777,6 +788,10 @@ route receives `AllowAny`. `HT-API-P1-04` supplies the four reads and
 Profile/Workspace lifecycle operations marked current below. Every unsafe
 method requires CSRF. General Profile CRUD/membership APIs, hard delete,
 self-leave, and Invitation remain unavailable behind their own gates.
+
+`HT-TASK-P2-03` additionally implements the bounded Task and internal Review
+routes in section 8.2. Those source routes are not deployed to development
+until `tasks.0002` and `reviews.0002` receive a separate controlled rollout.
 
 ### 8.1 Profile, Workspace, and membership
 
@@ -858,7 +873,38 @@ implemented. Future Profile creation may accept approved mutable fields such
 as `{name}` with creator/initial Owner server-set through the bootstrap service,
 but self-service eligibility remains open.
 
-### 8.2 Profile invitations
+### 8.2 Task and internal Review workflow
+
+Current source routes:
+
+```text
+GET/POST  /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/
+GET/PATCH /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/
+POST      /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/assign/
+POST      /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/start/
+GET/POST  /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/deliverables/
+POST      /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/deliverables/{deliverable_id}/approve/
+POST      /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/deliverables/{deliverable_id}/request-changes/
+```
+
+- Every effective Workspace reader may read Task and Deliverable history.
+  Viewer remains read-only. An unassigned Profile Member has no fallback.
+- Profile Owner/Admin and assigned Workspace Admin create/update/assign Tasks
+  and perform internal approval/request-changes. Only the current active
+  assignee with ordinary Profile `MEMBER` plus Workspace `MEMBER` (Editor)
+  capability may start or submit.
+- Workflow is `PENDING -> ASSIGNED -> WORKING -> REVIEW`, then `COMPLETED`
+  after approval or back to `WORKING` after changes are requested. There is no
+  arbitrary status, cancellation, PUT, delete, claim, or comments endpoint.
+- Review capability never permits self-review. Only the latest submitted
+  revision can be decided; repeat/stale decisions conflict.
+- Strict input, server-derived tenant ownership, no-PII attribution, scoped
+  querysets, lock-time capability revalidation, atomic audit, CSRF, and generic
+  wrong-parent/cross-tenant `404` apply throughout.
+- Internal approval is not Client/Guest approval and creates no Payroll,
+  Payment, Invoice, or compensation calculation.
+
+### 8.3 Profile invitations
 
 ```text
 GET/POST   /api/v1/profiles/{profile_id}/invitations/
@@ -892,10 +938,11 @@ and initial throttle ceilings are approved but not implemented. Verified email
 remains a production dependency; unregistered-recipient onboarding, delivery,
 and exact error-envelope details remain deferred.
 
-### 8.3 Deliberately deferred APIs
+### 8.4 Deliberately deferred APIs
 
-- Task endpoints wait for approved visibility, state, reviewer, and payroll
-  contracts after the tenant/RBAC foundation.
+- Task comments, Marketplace/claim, Task soft delete, cancellation, external
+  Client/Guest review, media upload/storage, and Payroll effects remain behind
+  their own contracts.
 - Client/Project/Finance/Audit endpoints wait for their canonical tenant schema.
 - Client Portal and Guest Review wait for separate capability contracts.
 
@@ -1017,15 +1064,21 @@ and exact error-envelope details remain deferred.
    stale/forged-context, service, duplicate, and concurrency tests.
 5. **Read slice completed 2026-10-18; schema-free write/member slice and its
    schema-dependent lifecycle/period extension completed in source
-   2026-10-19:** four minimal Profile/Workspace reads are joined by canonical
+   2026-10-19; development rollout completed 2026-10-20:** four minimal
+   Profile/Workspace reads are joined by canonical
    monthly Workspace create/metadata update, Profile/Workspace archive/restore,
    and manager-only member list/direct-add/role-update/soft-revoke/reactivation.
-   Development still requires separate approval to apply `workspace.0003`.
+   `workspace.0003` is applied only to the approved development database; every
+   other target still requires separate approval.
 6. After verified-email/account-binding dependencies and the remaining
    Invitation implementation details are reviewed, add only a new additive
    migration (now expected `workspace/0004+`), migration rehearsals, locked service,
    hashed token/delivery flow, audit events, and Invitation API tests.
-7. Design/approve Task visibility and workflow; only then open Task APIs.
+7. **Implementation complete 2026-10-21; development migration pending:** approved Task
+   visibility, management/execution/internal-review roles and state machine are
+   encoded in nested Task APIs. PostgreSQL verification is 33/33 targeted,
+   169/169 existing regression and 202/202 full; only the controlled
+   development migration approval remains pending.
 8. Add Client/Project/Finance/Audit tenant schema and APIs in their own
    reviewed migrations/tasks.
 9. Add Client Portal and Guest Review principals only after their independent
@@ -1040,7 +1093,8 @@ and exact error-envelope details remain deferred.
 | Membership services | Parent scope established before target lookup; mutation revalidates under lock; last-owner, same-tenant, duplicate, and audit invariants are atomic; no supported direct/bulk bypass | Service tests for cross-tenant IDs and uniform domain errors; concurrent demote/remove/direct-add tests; rollback/audit tests |
 | Minimal Profile/Workspace read API — completed historical slice | Nested/scoped queryset used for every object; no new `AllowAny`; response fields follow approved role visibility; at that slice only safe read methods were exposed and unsupported unsafe methods passed through session-CSRF enforcement | 21 permission/IDOR/API contract tests plus 29 Authentication/API Foundation regressions and full 101-test PostgreSQL suite |
 | Workspace write/member manager API — completed schema-free checkpoint | Strict server-owned fields, same-tenant nested scope, approved action ceilings, actor-bound effective roster, locked revalidation, atomic audit, no PII, CSRF, and stable `400`/`403`/`404`/`409`; at that checkpoint lifecycle methods remained `405` | 111 targeted Workspace tests, 29 Authentication/API Foundation regressions, 140 full PostgreSQL tests, Django system check, and migration consistency checks |
-| Workspace lifecycle/period extension — implementation complete, development migration pending | Additive lifecycle/period schema; canonical immutable unique Profile/month; Owner-only Profile lifecycle; Owner/Admin Workspace lifecycle; archived reads with normal writes blocked; same-row member revoke/reactivate; lock/role/audit/CSRF/IDOR boundaries; tenant hard-delete API absent | Isolated PostgreSQL `0002→0003` preservation test; 140/140 Workspace and 169/169 full PostgreSQL tests; `pip check`, Django system check, and migration-drift check; confirm development still lacks `0003` |
+| Workspace lifecycle/period extension — implementation and development rollout complete | Additive lifecycle/period schema; canonical immutable unique Profile/month; Owner-only Profile lifecycle; Owner/Admin Workspace lifecycle; archived reads with normal writes blocked; same-row member revoke/reactivate; lock/role/audit/CSRF/IDOR boundaries; tenant hard-delete API absent | Isolated PostgreSQL `0002→0003` preservation test; controlled development backup/restore/apply/post-check; direct non-mutating smoke; 17/17 targeted lifecycle/schema, 140/140 Workspace, 29/29 auth/API and 169/169 full PostgreSQL tests; dependency/system/migration checks |
+| Task/internal Review workflow — implementation complete; development migration pending | Nested tenant scope; manager vs current-assignee role split; one active assignment; revisioned submission; latest-only non-self review; completion only after approval; strict/no-PII API; transactional audit; no Client/Payroll side effects | 33/33 targeted, 169/169 existing regression and 202/202 full PostgreSQL tests; dependency/system/migration-drift checks and independent code review PASS; controlled development migration remains pending |
 | Invitation schema/migration | Additive migration only; token digest/status/role constraints and pending uniqueness match approved policy; existing rows are preserved; no plaintext token field | Migration consistency plus empty/populated PostgreSQL forward tests and constraint tests |
 | Invitation service | Authorized sender/recipient binding; expiry/replay/reinvite semantics; exactly one active membership and one terminal winner; Workspace membership is never implicit; audit is atomic | Token secrecy/log capture, duplicate/case variants, wrong-user/inactive/expired/revoked/replay, concurrent accept/accept and accept/revoke tests |
 | Invitation API/delivery | Authenticated session and CSRF; non-enumerating failures; scoped manager lists; no token/hash serialization; send only after commit; approved throttle/cache contract | API contract, CSRF, throttle, cache/header, delivery-failure, and cross-Profile negative tests |
@@ -1131,7 +1185,7 @@ source behavior by section 10.6.
   business rows. Archive/restore and member revoke/deactivate then remained
   `405`; the later approved extension is recorded below.
 
-### 10.6 HT-WORK-P2-02 schema-dependent evidence — 2026-10-19
+### 10.6 Historical HT-WORK-P2-02 schema-dependent evidence — 2026-10-19
 
 Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
 
@@ -1156,6 +1210,56 @@ Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
   3 Users, zero checked business rows, and no test database. A read-only check
   on 2026-10-20 found the existing development PostgreSQL container stopped;
   it was not started or changed. Production was not touched.
+
+### 10.7 HT-DB-P1-06 controlled development rollout evidence — 2026-10-20
+
+Status: `COMPLETE / OWNER REVIEW GATE`
+
+- The existing local Compose PostgreSQL 16.14 target was re-identified from
+  runtime labels, database, loopback port and named volume. Pre-apply history
+  and physical schema agreed at 27 migrations with `workspace.0003` absent;
+  inventory was 3 active Users, 2 sessions and zero checked business rows.
+- A fresh ignored backup passed SHA-256 comparison, TOC listing, full archive
+  read and isolated full restore rehearsal before the exact additive plan was
+  applied. `workspace.0003` completed successfully without guessed mapping,
+  `--fake`, reverse, deletion or production action.
+- Post-apply development has 28 migrations. The four new columns, three
+  validated checks, partial unique Profile/month index and three lookup indexes
+  are present and valid/ready; inventory is unchanged and no schema/data anomaly
+  or temporary database remains.
+- Direct development request-stack smoke used no business fixture and changed
+  no row/session. Fixture-dependent RBAC, tenant/IDOR, lifecycle, membership and
+  concurrency cases passed on isolated PostgreSQL: 17/17 targeted
+  lifecycle/schema, 140/140 Workspace, 29/29 auth/API and 169/169 full suite.
+- This operational evidence changes no approved RBAC contract and authorizes no
+  environment beyond the named development database.
+
+### 10.8 HT-TASK-P2-03 source evidence — 2026-10-21
+
+Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
+
+- Task read scope reuses the verified Profile/Workspace context and repeats
+  live tenant predicates in query evaluation. Malformed, wrong-parent,
+  cross-tenant and inaccessible nested resources share a generic `404`.
+- `can_manage_workspace_tasks`, `can_execute_workspace_tasks`, and
+  `can_review_workspace_deliverables` encode the approved manager/Editor split.
+  Services repeat those checks under Profile-first locks and bind execution to
+  the current active assignee.
+- Additive migrations enforce valid status/priority, one active assignment,
+  positive unique revisions and one Review per Deliverable. Protected actor
+  FKs and inspection-only Task Admin preserve attribution; Workspace Admin
+  delete is disabled to avoid the existing cascade into Task history.
+- Targeted service/API/migration verification passes 33/33 in 7.673s,
+  existing Authentication/API/Workspace regression passes 169/169 in 87.783s,
+  and the final full PostgreSQL suite passes 202/202 in 92.343s. `pip check`,
+  Django system check, migration-drift check and independent final code review
+  pass; test databases are destroyed.
+- Development remains at `tasks.0001` and `reviews.0001`. The source migrations
+  are not authorized for apply. `showmigrations` confirms Workspace 0001-0003
+  applied; `migrate --plan` succeeds with only additive `tasks.0002` then
+  `reviews.0002`. A future rollout must inventory invalid enum
+  values, duplicate Reviews and legacy assignments, back up the target and
+  stop rather than inventing a cleanup/mapping.
 
 ## 11. Delegated decisions resolved and downstream review gates
 
@@ -1182,14 +1286,19 @@ delegation. In particular, no later review may silently reopen these rules:
   RBAC, and tenant-wide business-model access remains platform-superuser-only
   until a tenant-scoped Admin exists.
 - Deliverable approval requires a distinct Review capability and forbids
-  self-approval. The concrete reviewer role and workflow states remain for the
-  dedicated Task/Review task.
+  self-approval. HT-TASK-P2-03 now grants internal review to Profile
+  Owner/Admin and assigned Workspace Admin, and fixes the bounded Task/
+  Deliverable/Review state machine. This does not grant Client/Guest approval
+  or any Payroll/Payment effect.
 
 The following are separate downstream review gates, not stale questions that
 block `HT-RBAC-P1-03`:
 
-1. Exact Task visibility, contributor/assignee attribution, state transitions,
-   concrete Review-role assignment, and payroll trigger.
+1. Task soft delete/retention, cancellation, comments, Marketplace/claim,
+   media upload/storage, Client/Guest review, and Payroll pricing/eligibility/
+   business trigger. The internal visibility, assignee attribution, state
+   transitions and reviewer authority implemented by HT-TASK-P2-03 are no
+   longer open questions.
 2. General Profile create/edit/settings API, Workspace self-leave,
    Profile-membership invitation/rejoin behavior, and self-service eligibility
    beyond the implemented canonical-period, archive/restore, and manager-only

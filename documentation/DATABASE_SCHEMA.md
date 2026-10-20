@@ -2,14 +2,16 @@
 
 # HustlyTasker Database Design
 
-Version: 0.4
+Version: 0.5
 
 Status:
 
-Profile/Workspace lifecycle and monthly-period foundation implemented in
-source and verified on isolated PostgreSQL; `workspace.0003` is not applied to
-development, and remaining tenant domains are approved targets not yet
-implemented
+Profile/Workspace lifecycle and monthly-period foundation implemented and
+verified; `workspace.0003` is applied to the approved development PostgreSQL
+database. Task/Deliverable/internal Review workflow hardening is implemented
+in source through additive `tasks.0002` and `reviews.0002`, verified by the
+final 202-test PostgreSQL gate, and not yet applied to development. Remaining
+tenant domains are approved targets not yet implemented.
 
 Initial schema implementation phase (historical):
 
@@ -262,7 +264,7 @@ Fields:
 | status | enum | Required |
 | priority | enum | Required |
 | deadline | datetime | Optional |
-| created_by | FK User | Required |
+| created_by | FK User (`PROTECT`) | Required |
 | created_at | timestamp | |
 | updated_at | timestamp | |
 
@@ -308,6 +310,17 @@ Task N --- N User
 
 through TaskAssignment
 
+Current source constraints/indexes (`tasks.0002`, pending development apply):
+
+- `task_valid_status` limits stored status to the six values above.
+- `task_valid_priority` limits priority to the four values above.
+- `task_ws_status_created_idx` supports scoped status/history reads.
+- Supported services derive Workspace/Profile from the nested authorized path;
+  a Task cannot be moved to another Workspace/Profile.
+- Task completion is service-controlled and occurs only after approval of the
+  latest submitted Deliverable. `CANCELLED` remains a storage choice without a
+  public transition in this slice.
+
 
 
 ---
@@ -333,7 +346,8 @@ Fields:
 |-|-|
 | id | UUID |
 | task_id | FK |
-| user_id | FK |
+| user_id | FK (`PROTECT`) |
+| is_active | boolean; default true for new rows |
 | assigned_at | timestamp |
 
 
@@ -342,6 +356,16 @@ Relationships:
 
 
 Task N --- N User
+
+Current source behavior (`tasks.0002`, pending development apply):
+
+- At most one assignment per `(task, user)` remains from the initial schema.
+- Partial unique constraint `uniq_active_task_assignment` permits at most one
+  current active assignment for a Task.
+- Migration adds `is_active` as false for every legacy row before changing the
+  model default to true. It deliberately does not guess which legacy assignee
+  is current.
+- `task_active_assigned_idx` supports current-assignment lookup and history.
 
 
 
@@ -368,7 +392,7 @@ Fields:
 |-|-|
 | id | UUID |
 | task_id | FK |
-| user_id | FK |
+| user_id | FK (`PROTECT`) |
 | content | text |
 | created_at | timestamp |
 
@@ -413,7 +437,8 @@ Fields:
 | id | UUID |
 | task_id | FK |
 | file_url | varchar |
-| uploaded_by | FK User |
+| uploaded_by | FK User (`PROTECT`) |
+| revision | positive integer, nullable only for legacy/unmapped rows |
 | status | enum |
 | created_at | timestamp |
 | updated_at | timestamp |
@@ -438,6 +463,16 @@ Relationships:
 
 Task 1 --- N Deliverable
 
+Current source constraints/indexes (`reviews.0002`, pending development apply):
+
+- `deliverable_valid_status` restricts status to the values above.
+- `deliverable_revision_positive` permits `NULL` legacy revisions or values
+  greater than or equal to 1.
+- `uniq_task_deliv_revision` makes every non-null `(task, revision)` unique.
+- `deliv_task_status_created_idx` supports revision/status history reads.
+- Supported submissions allocate revisions sequentially under a Task lock;
+  migration never invents revisions for existing rows.
+
 
 
 ---
@@ -458,7 +493,7 @@ Fields:
 |-|-|
 | id | UUID |
 | deliverable_id | FK |
-| reviewer_id | FK User |
+| reviewer_id | FK User (`PROTECT`) |
 | status | enum |
 | comment | text |
 | created_at | timestamp |
@@ -479,7 +514,15 @@ REQUEST_CHANGE
 Relationships:
 
 
-Deliverable 1 --- N Review
+Deliverable 1 --- 0..1 Review
+
+Current source constraints (`reviews.0002`, pending development apply):
+
+- `review_valid_status` restricts status to the values above.
+- `uniq_deliverable_review` enforces one internal Review record per
+  Deliverable.
+- The workflow service rejects self-review, stale/non-latest revision review,
+  repeat review, and review outside the Task's active tenant scope.
 
 
 
@@ -896,7 +939,7 @@ PostgreSQL
 
 ---
 
-# 13. Current Ownership Audit — verified 2026-10-19
+# 13. Current Ownership Audit — verified 2026-10-21
 
 This section describes the active Django source. The original sections above
 document the initial schema; their “future” indexes or relationships must not
@@ -908,9 +951,9 @@ be treated as implemented unless they also exist in models/migrations.
 | Profile/ProfileMembership | Tenant root + User membership | Profile now has an `ACTIVE`/`ARCHIVED` lifecycle in source; Invitation and general Profile CRUD remain absent. |
 | Workspace | `profile → Profile` plus transitional `owner → User` | Profile FK remains nullable for safe transition; supported new writes require a canonical non-null monthly period, while schema nullability preserves unresolved legacy rows. Lifecycle state is implemented in source, and owner remains a transitional second ownership representation. |
 | WorkspaceMember | `workspace + user` | One historical row per pair is retained; `is_active` distinguishes effective assignment from soft revocation, and validated activation requires active membership in the Workspace Profile. |
-| Task | `workspace → Workspace` | Creator is not required to be a member. |
-| TaskAssignment/TaskComment | `task → workspace` | Actor membership in that workspace is not enforced. |
-| Deliverable/Review | `task → workspace` | Uploader/reviewer membership is not enforced. |
+| Task | `workspace → Workspace → Profile` | Supported create/update/assignment transitions enforce an active tenant and manager capability; the creator is retained with `PROTECT`. Direct ORM/bulk writes remain outside that guarantee. |
+| TaskAssignment/TaskComment | `task → workspace → profile` | Supported assignment targets an active ordinary Profile Member with effective Workspace Editor access and retains one active assignee. TaskComment has no public workflow API yet. |
+| Deliverable/Review | `task → workspace → profile` | Supported submit/review paths enforce current assignee or internal manager capability, prevent self-review, and retain actor references with `PROTECT`; Client/Guest review is separate and absent. |
 | Client | None | Global row cannot be tenant-filtered safely. |
 | ShareLink | `client`, but Client is global | Raw token, no tenant, creator, capabilities, revoke state, or token hash. |
 | Invoice/Payment | `invoice → client`, but Client is global | No tenant boundary; invoice number is globally unique. |
@@ -925,11 +968,15 @@ scoped selectors and verified access contexts without a schema change.
 without a schema change. `HT-WORK-P2-02` now includes the original Workspace
 create/metadata-update and member-manager slice plus the approved
 schema-dependent monthly-period, archive/restore, soft-revoke, and reactivation
-behavior. Cross-domain same-Profile constraints and the broader retention/purge
-policy are not implemented.
+behavior. `HT-TASK-P2-03` now adds the scoped Task/Deliverable/internal Review
+service/API boundary and additive schema hardening described below. Cross-domain
+Client/Project constraints, external review, Task soft delete, and the broader
+retention/purge policy are not implemented.
 
-The seven non-Workspace development domain apps remain at their existing
-`0001_initial.py` migrations. The additive
+Five non-Workspace domain apps remain at their existing `0001_initial.py`
+migrations. Tasks and Reviews now also have additive source migrations
+`0002_task_workflow_foundation` and `0002_review_workflow_foundation`, while
+development remains at their `0001` state. The additive
 `workspace/0002_profile_workspace_foundation.py` exists unchanged in source,
 has run on disposable PostgreSQL test databases, and was applied to the
 approved development database on 2026-10-19 after inventory, backup, restore
@@ -952,7 +999,10 @@ Tenant access/service status:
 `HT-RBAC-P1-03 COMPLETE; NO MODEL OR MIGRATION CHANGE`
 
 Workspace API status:
-`HT-WORK-P2-02 IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
+`HT-WORK-P2-02 COMPLETE; DEVELOPMENT ROLLOUT VERIFIED BY HT-DB-P1-06`
+
+Task workflow status:
+`HT-TASK-P2-03 IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
 
 The authoritative decisions and remaining detailed questions are in
 `documentation/DECISION_LOG.md`. This section distinguishes current schema
@@ -997,6 +1047,9 @@ from the same Profile; Payment belongs to Invoice.
 | Profile lifecycle service/API | Profile Owner alone may archive/restore the Profile. Profile Admin cannot. Transitions are locked, idempotent, audited atomically, keep rows tenant-scoped/readable, and block normal child/membership writes while archived. Hard delete is not exposed. |
 | Workspace write/lifecycle services/API | Profile Owner/Admin create a Workspace for a required canonical period; Profile Owner/Admin and assigned Workspace Admin may update only `name`/`description` while active. Profile Owner/Admin may archive/restore a Workspace; Workspace Admin cannot. Lifecycle is locked, idempotent, audited, readable while archived, and blocks normal metadata/member mutations. Profile, transitional owner, period, and status cannot be mass-assigned or re-parented by update input. |
 | Workspace-member manager API | Profile Owner/Admin and assigned Workspace Admin may list effective assignments, direct-add or reactivate an active same-Profile member, update a supported role, and soft-revoke within their role ceiling. Revocation immediately removes effective access but retains the row; reactivation reuses it. The roster query retains actor authority in SQL, excludes inactive/legacy/ineffective assignments, emits no User PII, and mutations revalidate under locks with atomic audit. |
+| Task/assignment workflow | Task remains owned by exactly one Workspace and cannot be re-parented through supported APIs. Profile Owner/Admin or Workspace Admin create/update/assign. One active assignment is enforced; eligible targets are active Profile Members with effective Workspace `MEMBER` (Editor) access. The assigned Editor alone may start. Status/priority checks and scoped lookup index are provided by `tasks.0002`. |
+| Deliverable/internal Review workflow | The assigned Editor submits a URL-based, sequential positive revision from `WORKING`; Task enters `REVIEW`. A different Profile Owner/Admin or Workspace Admin may approve the latest submitted revision (Task becomes `COMPLETED`) or request changes (Task returns to `WORKING`). One Review per Deliverable, no self-review, stale/repeat protection, atomic audit, and status/revision constraints are provided. Client/Guest approval and Payroll/Payment are not coupled to this internal decision. |
+| Workflow actor retention/Admin boundary | Task creator, assignee, commenter, uploader, and reviewer FKs use `PROTECT`. Task/Assignment/Comment Admin is inspection-only, and Workspace Admin hard delete is disabled to avoid the existing aggregate CASCADE path. Task soft-delete fields/services and a full retention/purge mechanism remain unimplemented. |
 
 `Workspace.save()` and `WorkspaceMember.save()` call `full_clean()`, but bulk
 updates, raw SQL, and direct ORM mutations can bypass service invariants.
@@ -1015,7 +1068,9 @@ database-wide guarantee of the aggregate last-owner invariant.
 
 - Additive migrations:
   `workspace/0002_profile_workspace_foundation.py` and, in current source,
-  `workspace/0003_workspace_lifecycle_and_period.py`.
+  `workspace/0003_workspace_lifecycle_and_period.py`,
+  `tasks/0002_task_workflow_foundation.py`, and
+  `reviews/0002_review_workflow_foundation.py`.
 - No applied `0001_initial.py` was edited.
 - Read-only PostgreSQL development inventory before migration: 0 business
   rows and 3 active User rows; independently reconfirmed on 2026-10-19.
@@ -1028,10 +1083,18 @@ database-wide guarantee of the aggregate last-owner invariant.
   the controlled HT-DB-P1-05 gates passed. A different environment must still
   be inventoried, backed up, rehearsed as appropriate, and separately
   authorized before apply.
-- `0003` was applied only through isolated PostgreSQL migration tests. It is
-  not applied to development, and production was not touched. Development
-  migration still requires explicit Owner approval and its controlled rollout
-  gates.
+- `0003` first passed isolated PostgreSQL migration tests, then completed the
+  Owner-approved controlled development rollout in `HT-DB-P1-06` on
+  2026-10-20. Production and every other persistent target remain untouched and
+  require their own explicit authorization and safety gates.
+- `tasks.0002` depends on `workspace.0003`; `reviews.0002` depends on
+  `tasks.0002`. Both workflow migrations have run only on Django-created
+  isolated PostgreSQL test databases. They are not applied to development or
+  production, and this implementation task grants no permission to apply them.
+- Current migration rehearsal preserves existing Task/Assignment/Deliverable/
+  Review relations, sets every legacy assignment inactive, and leaves each
+  legacy Deliverable revision null. It never selects a current assignee or
+  invents a revision.
 
 ### HT-DB-P1-05 development rollout checkpoint — 2026-10-19
 
@@ -1085,9 +1148,9 @@ current source behavior** by the schema-dependent checkpoint below.
   Authentication/API Foundation regressions, and 140/140 full PostgreSQL tests,
   plus Django system and migration consistency checks.
 
-### Current HT-WORK-P2-02 schema-dependent checkpoint — 2026-10-19
+### Historical HT-WORK-P2-02 schema-dependent source checkpoint — 2026-10-19
 
-Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
+Status at that checkpoint: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
 
 - Additive `workspace.0003_workspace_lifecycle_and_period` adds
   `Profile.status`, `Workspace.period`, `Workspace.status`, and
@@ -1116,6 +1179,72 @@ Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
   container stopped; it was not started or changed. `0003` was not applied to
   development, and production was not touched.
 
+### Current HT-DB-P1-06 development rollout checkpoint — 2026-10-20
+
+Status: `COMPLETE / OWNER REVIEW GATE`
+
+- The approved target is the existing Compose-labeled PostgreSQL 16.14
+  development container, database `hustlytasker_db`, loopback-bound at port
+  5432 with named volume `docker_postgres_data`. Production was not contacted.
+- Immediately before apply, migration history and physical schema agreed at 27
+  records with `workspace.0002` applied and `workspace.0003` absent. Inventory
+  was 3 active Users, 2 existing sessions, and zero checked business rows.
+- A fresh ignored custom-format backup was verified by matching host/container
+  SHA-256, readable 188-line TOC, and full archive read. A full restore rehearsal
+  reproduced the pre-apply 27-migration/3-User state in an isolated database,
+  which was then removed.
+- Exact plan review contained only the 11 additive `workspace.0003` operations.
+  Apply completed at 2026-10-20 07:44:40 UTC without `--fake`, reverse,
+  backfill, data deletion, or guessed tenant/month mapping.
+- Development now has 28 migration records. `Profile.status` and
+  `Workspace.status` are non-null varchar, `Workspace.period` is nullable date,
+  and `WorkspaceMember.is_active` is non-null boolean; none retains a permanent
+  database default. All three CHECK constraints are validated. The conditional
+  unique `(profile_id, period)` index and all three lookup indexes are valid and
+  ready.
+- Final inventory remains 3 active Users, 2 sessions, and zero rows across
+  Profile/ProfileMembership/Workspace/WorkspaceMember, Task and related review
+  records, Client/ShareLink, Invoice/Payment, Notification, and AuditLog. There
+  is no invalid lifecycle/period value, duplicate Profile/month, unvalidated
+  constraint, other live PostgreSQL connection, or temporary test/rehearsal
+  database.
+- Direct development request-stack smoke changed no data. Fixture-dependent
+  role, tenant isolation, IDOR, lifecycle, membership, concurrency, and
+  migration cases passed only in isolated PostgreSQL test databases: targeted
+  lifecycle/schema 17/17, Workspace 140/140, auth/API 29/29, and full suite
+  169/169. This evidence does not authorize another environment.
+
+### Current HT-TASK-P2-03 source checkpoint — 2026-10-21
+
+Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
+
+- `tasks.0002_task_workflow_foundation` adds the assignment lifecycle flag,
+  Task status/priority checks, one-active-assignment constraint and lookup
+  indexes, while changing Task creator/assignee/commenter FKs to `PROTECT`.
+- `reviews.0002_review_workflow_foundation` adds nullable legacy-safe
+  Deliverable revisions, revision/status constraints and index, one Review per
+  Deliverable, and protected uploader/reviewer FKs.
+- The migration order is `workspace.0003 -> tasks.0002 -> reviews.0002`.
+  Existing assignments are intentionally inactive after migration and existing
+  Deliverable revisions intentionally remain `NULL`; application-created rows
+  use active assignments and positive revisions.
+- Before any persistent rollout, inventory every status/priority value,
+  duplicate Review per Deliverable, legacy assignment set, and revision state.
+  Invalid enum values or duplicate Reviews will block constraint creation and
+  require an explicit owner-reviewed reconciliation. Do not auto-delete,
+  deduplicate, select a current assignee, or synthesize revisions.
+- The final read-only development post-check reports 3 Users, 2 sessions, zero
+  checked business/workflow rows, `workspace.0001/0002/0003`, `tasks.0001`
+  only, and `reviews.0001` only. Both new migrations remain unapplied. No
+  test/rehearsal database or disposable runner remains.
+- Read-only `migrate --plan` succeeds and lists only additive `tasks.0002`
+  followed by `reviews.0002`. No migration was applied by this task.
+- Isolated PostgreSQL verification passes targeted service/API/migration
+  33/33 in 7.673s, existing Authentication/API/Workspace regressions 169/169
+  in 87.783s, and the final full suite 202/202 in 92.343s. Dependency, Django
+  system and migration-drift checks pass, test databases are destroyed, and
+  independent final code review passes.
+
 ## Approved target — implementation status
 
 | Domain | Approved boundary/behavior still awaiting its own task |
@@ -1124,9 +1253,9 @@ Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
 | Project/Client | Client belongs to Profile; Project belongs to Client/Profile and may span Workspaces. Current models have not been migrated. |
 | Finance | Invoice belongs to Workspace and same-Profile Client; Payment belongs to Invoice. Current finance schema has not been migrated and numbering/billing details remain undecided. |
 | Public access | Client Portal account and secure link are supported targets; ClientPortalLink and GuestReviewLink are separate, hashed, expiring, revocable, capability-scoped principals. Replacements are absent. |
-| Soft delete/retention | Soft delete remains the target default for Profile, Workspace, Client, Project, and Task; hard delete is controlled; Invoice/Payment/AuditLog are protected under the eventual retention policy; User departure must not cascade-delete business data. The bounded Profile/Workspace archive state and Workspace-member soft revoke are now implemented in source. Client/Project/Task lifecycle, legal retention periods, purge, self-leave, and full Profile-membership rejoin policy remain undecided or unimplemented. |
-| Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, read routes, Workspace create/metadata update, Profile/Workspace archive/restore, and Workspace-member list/direct-add/role-update/revoke/reactivate now exist with IDOR/concurrency/audit tests. General Profile CRUD/membership APIs and Client/Finance/Audit/Task/Review scoping remain absent. |
-| Task/Review workflow | Assignment → Deliverable → Review → approval/completion or revision/resubmission is approved at high level; Task completion is allowed only after Deliverable approval. Detailed states, approvers, and payroll trigger remain undecided. |
+| Soft delete/retention | Soft delete remains the target default for Profile, Workspace, Client, Project, and Task; hard delete is controlled; Invoice/Payment/AuditLog are protected under the eventual retention policy; User departure must not cascade-delete business data. Bounded Profile/Workspace archive, Workspace-member soft revoke, protected workflow actor FKs, inspection-only Task Admin, and disabled Workspace Admin delete are implemented. Client/Project/Task soft delete fields, legal retention periods, purge, self-leave, and full Profile-membership rejoin policy remain undecided or unimplemented. |
+| Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, Workspace routes and Task/Deliverable/internal Review scoping now exist with IDOR/concurrency/audit tests. General Profile CRUD/membership APIs and Client/Finance/Audit/external-review scoping remain absent. |
+| Task/Review workflow | The approved internal flow is implemented in source: manager create/assign, assigned Editor execute/submit, distinct manager approve or request changes, and completion only after valid approval. Client/Guest approval, arbitrary cancellation, comments, file storage/media handling, Task soft delete, and Payroll/Payment pricing/trigger remain separate and unimplemented. |
 
 ## Approved ProfileInvitation contract — schema not implemented
 
@@ -1197,5 +1326,10 @@ schema-free HT-WORK-P2-02 slice then passed 111/111 targeted Workspace tests,
 29/29 Authentication/API Foundation regressions, and 140/140 full PostgreSQL
 tests. Its later schema-dependent completion passed 140/140 Workspace and
 169/169 full PostgreSQL tests plus dependency, system, and migration-drift
-checks. Migration `0003` exists in source and was tested only in isolated
-PostgreSQL; development remains at applied `0002` pending Owner approval.
+checks. `HT-DB-P1-06` then applied `0003` to the approved development database
+after backup/restore rehearsal and passed current direct smoke, 17/17 targeted,
+140/140 Workspace, 29/29 auth/API, and 169/169 full PostgreSQL verification.
+HT-TASK-P2-03 subsequently passed 33/33 targeted, 169/169 existing regression,
+and 202/202 full PostgreSQL tests. Its `tasks.0002`/`reviews.0002` migrations
+remain unapplied on development pending separate Owner approval.
+Production and other persistent targets remain unauthorized and untouched.

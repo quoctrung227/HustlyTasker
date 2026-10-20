@@ -29,8 +29,18 @@ class Deliverable(BaseModel):
 
     uploaded_by = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="uploaded_deliverables"
+    )
+
+
+    revision = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Service-created revisions start at 1. Null is reserved for "
+            "legacy rows that have not been mapped."
+        ),
     )
 
 
@@ -39,6 +49,40 @@ class Deliverable(BaseModel):
         choices=Status.choices,
         default=Status.PENDING
     )
+
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    status__in=(
+                        "PENDING",
+                        "SUBMITTED",
+                        "APPROVED",
+                        "REJECTED",
+                    )
+                ),
+                name="deliverable_valid_status",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(revision__isnull=True)
+                    | models.Q(revision__gte=1)
+                ),
+                name="deliverable_revision_positive",
+            ),
+            models.UniqueConstraint(
+                fields=("task", "revision"),
+                condition=models.Q(revision__isnull=False),
+                name="uniq_task_deliv_revision",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("task", "status", "-created_at"),
+                name="deliv_task_status_created_idx",
+            ),
+        ]
 
 
     def __str__(self):
@@ -63,7 +107,7 @@ class Review(BaseModel):
 
     reviewer = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="reviews_given"
     )
 
@@ -79,6 +123,25 @@ class Review(BaseModel):
         blank=True,
         null=True
     )
+
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    status__in=(
+                        "PENDING",
+                        "APPROVED",
+                        "REQUEST_CHANGE",
+                    )
+                ),
+                name="review_valid_status",
+            ),
+            models.UniqueConstraint(
+                fields=("deliverable",),
+                name="uniq_deliverable_review",
+            ),
+        ]
 
 
     def __str__(self):

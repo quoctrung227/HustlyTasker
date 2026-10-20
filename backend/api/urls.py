@@ -19,4 +19,9 @@ urlpatterns = [
         "v1/",
         include("apps.workspace.urls"),
     ),
+
+    path(
+        "v1/",
+        include("apps.tasks.urls"),
+    ),
 ]

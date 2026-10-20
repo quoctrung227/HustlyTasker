@@ -63,9 +63,44 @@ class Task(BaseModel):
 
     created_by = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="created_tasks"
     )
+
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    status__in=(
+                        "PENDING",
+                        "ASSIGNED",
+                        "WORKING",
+                        "REVIEW",
+                        "COMPLETED",
+                        "CANCELLED",
+                    )
+                ),
+                name="task_valid_status",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    priority__in=(
+                        "LOW",
+                        "MEDIUM",
+                        "HIGH",
+                        "URGENT",
+                    )
+                ),
+                name="task_valid_priority",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("workspace", "status", "-created_at"),
+                name="task_ws_status_created_idx",
+            ),
+        ]
 
 
     def __str__(self):
@@ -84,8 +119,14 @@ class TaskAssignment(BaseModel):
 
     user = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="assigned_tasks"
+    )
+
+
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Only the current Task assignment may be active.",
     )
 
 
@@ -99,6 +140,19 @@ class TaskAssignment(BaseModel):
             "task",
             "user"
         )
+        constraints = [
+            models.UniqueConstraint(
+                fields=("task",),
+                condition=models.Q(is_active=True),
+                name="uniq_active_task_assignment",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("task", "is_active", "-assigned_at"),
+                name="task_active_assigned_idx",
+            ),
+        ]
 
 
 
@@ -113,7 +167,7 @@ class TaskComment(BaseModel):
 
     user = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="task_comments"
     )
 

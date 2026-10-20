@@ -3,8 +3,20 @@ from django.contrib import admin
 from .models import Task, TaskAssignment, TaskComment
 
 
+class InspectionOnlyAdminMixin:
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Task)
-class TaskAdmin(admin.ModelAdmin):
+class TaskAdmin(InspectionOnlyAdminMixin, admin.ModelAdmin):
 
     list_display = (
         "title",
@@ -16,17 +28,18 @@ class TaskAdmin(admin.ModelAdmin):
 
 
 @admin.register(TaskAssignment)
-class TaskAssignmentAdmin(admin.ModelAdmin):
+class TaskAssignmentAdmin(InspectionOnlyAdminMixin, admin.ModelAdmin):
 
     list_display = (
         "task",
         "user",
+        "is_active",
         "assigned_at",
     )
 
 
 @admin.register(TaskComment)
-class TaskCommentAdmin(admin.ModelAdmin):
+class TaskCommentAdmin(InspectionOnlyAdminMixin, admin.ModelAdmin):
 
     list_display = (
         "task",

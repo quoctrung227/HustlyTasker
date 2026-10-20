@@ -14,10 +14,13 @@ User
 → Workspace
 → Task
 → Assignment
-→ Review
-→ Client Approval
-→ Completion
-→ Finance
+→ Deliverable
+→ Internal Review
+→ Task Completion
+
+Client/Guest approval and Finance are separate downstream workflows. Internal
+approval does not imply client approval and does not automatically create any
+Payroll, Payment, Invoice, or compensation record.
 
 
 ## Main Goals
@@ -62,7 +65,7 @@ PHASE 2.2 - API Architecture
 
 Current task status:
 
-`HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
+`HT-TASK-P2-03 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
 
 
 Completed:
@@ -127,9 +130,25 @@ Completed in the current phase:
   tenant API/service contract; existing platform/Admin destructive paths remain
   outside this task and require separate control.
   Additive `workspace.0003_workspace_lifecycle_and_period` exists in source and
-  was verified only in isolated PostgreSQL. `pip check`, Django system checks,
-  and `makemigrations --check --dry-run` passed; Workspace tests passed 140/140
-  in 79.278s and the full PostgreSQL suite passed 169/169 in 82.920s.
+  first passed isolated PostgreSQL migration/regression verification.
+- HT-DB-P1-06 controlled development rollout: verified the exact local Compose
+  PostgreSQL 16.14 target and zero-business-row inventory; created and fully
+  restore-rehearsed a fresh Git-ignored backup; applied only `workspace.0003`;
+  and post-checked 28 migrations, columns, validated constraints, valid/ready
+  indexes and unchanged data. Direct development smoke changed no row/session.
+  Current isolated results passed 17/17 lifecycle/schema, 140/140 Workspace,
+  29/29 Authentication/API Foundation, and 169/169 full PostgreSQL tests.
+  Production and every other persistent target were untouched.
+- HT-TASK-P2-03 source implementation: Task create/update/assign/start;
+  revisioned Deliverable submit/history; internal approve/request changes;
+  manager/Editor role split; no self-review; tenant-scoped strict/no-PII API;
+  transactional AuditLog; additive `tasks.0002`/`reviews.0002`; protected actor
+  history and inspection-only Task Admin. Current targeted PostgreSQL
+  service/API/migration verification passes 33/33, existing regressions pass
+  169/169, and final full PostgreSQL passes 202/202. Dependency/system/
+  migration-drift checks, cleanup and independent code review pass. Final
+  read-only development checks keep Tasks/Reviews at 0001; neither workflow
+  migration is applied to development.
 
 
 Approved architecture target, not fully implemented:
@@ -149,8 +168,10 @@ Approved architecture target, not fully implemented:
   finance/audit records are protected, and User departure does not
   cascade-delete business data; retention duration/purge rules remain future
   decisions
-- Task completes only after its submitted Deliverable passes Review approval;
-  exact states, approver authority, and payroll trigger remain future decisions
+- Task completes only after its latest submitted Deliverable passes internal
+  Review approval. The internal states and reviewer authority are now fixed and
+  implemented by HT-TASK-P2-03; Client/Guest approval and Payroll pricing/
+  eligibility/business effects remain future decisions.
 
 
 Not completed:
@@ -158,17 +179,18 @@ Not completed:
 - Account activation/OTP and password recovery
 - Applying the Profile schema to any environment other than the approved
   development database. Each target still requires its own inventory, backup,
-  risk review, and authorization. Development has applied `workspace.0002`.
-- Applying `workspace.0003_workspace_lifecycle_and_period` to development or
-  any other persistent environment. Its implementation and isolated
-  PostgreSQL rehearsal are complete, but development remains on applied
-  `workspace.0002` pending explicit migration approval; production was not
-  touched. The latest successful post-suite inventory on 2026-10-19 found 27
-  migrations, 3 Users, zero checked business rows, and no test database. A
-  read-only check on 2026-10-20 found the existing development PostgreSQL
-  container stopped; it was not started or changed.
-- Cross-domain Client/Finance/Audit selectors and Task/Review enforcement;
-  exact reviewer/workflow states remain a later contract
+  risk review, and authorization. Development has applied `workspace.0002` and
+  `workspace.0003`.
+- Applying `workspace.0003_workspace_lifecycle_and_period` to production or any
+  persistent environment other than the specifically approved development
+  database. Development completed the controlled rollout on 2026-10-20 and now
+  has 28 migrations, 3 active Users, 2 sessions, zero checked business rows,
+  and no leftover test/rehearsal database. Every other target still requires
+  separate inventory, backup, risk review, and authorization.
+- Cross-domain Client/Finance/Audit selectors, external Client/Guest review,
+  Task soft delete/retention, Comments/Marketplace/media upload, and Payroll
+  rules. Internal Task/Review enforcement has completed verification but still
+  awaits a separately approved controlled development migration.
 - Account deactivation service that preserves last-owner invariants across
   Profiles and revokes established sessions
 - Invitation model/API, Project model, Client/Finance tenant migrations,
@@ -202,11 +224,12 @@ The tenancy design and capability/scoping/invitation contract are approved, and
 the schema plus tenant-access/service foundations have completed regression.
 The owner separately authorized and the project completed the minimal
 Profile/Workspace reads, canonical monthly Workspace writes, bounded
-Profile/Workspace archive/restore, and manager-only Workspace membership
-lifecycle listed above. Development rollout of `workspace.0003`, Invitation,
-general Profile CRUD/membership, self-leave/rejoin, full cross-domain RBAC, and
-other business APIs remain behind their own Owner review gates, regardless of
-roadmap task numbering.
+Profile/Workspace archive/restore, manager-only Workspace membership lifecycle,
+and controlled development rollout of `workspace.0003` listed above.
+Invitation, general Profile CRUD/membership, self-leave/rejoin, full
+cross-domain RBAC, Task workflow development rollout, other business APIs, and
+every non-development rollout remain behind their own Owner review gates,
+regardless of roadmap task numbering.
 
 
 ## AI Development Instructions

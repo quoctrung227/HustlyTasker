@@ -1,6 +1,6 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-10-20
+Last updated: 2026-10-21
 
 ## Giai đoạn hiện tại
 
@@ -20,10 +20,16 @@ rehearsal đạt, migration đã áp dụng an toàn trên development, direct s
 và full PostgreSQL suite PASS 101/101. Sau khi Owner review và mở task kế tiếp,
 `HT-WORK-P2-02` đã hoàn tất cả write/membership foundation lẫn phần phụ thuộc
 schema: lifecycle Profile/Workspace, monthly period, và soft revoke/reactivate
-Workspace membership. Additive migration `workspace.0003` đã được rehearsal và
-toàn bộ PostgreSQL suite PASS 169/169, nhưng chưa apply development. Task đang
-ở `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`;
-production không bị tác động và Invitation vẫn ngoài scope.
+Workspace membership. Owner sau đó mở `HT-DB-P1-06`; additive migration
+`workspace.0003` đã được backup/rehearsal rồi áp dụng an toàn lên đúng
+development database. Direct development smoke, targeted suites và full
+PostgreSQL 169/169 đều PASS. `HT-DB-P1-06` đã dừng đúng Owner review gate và
+Owner sau đó mở `HT-TASK-P2-03`. Task/Deliverable/internal Review workflow hiện
+đã implement trong source; targeted PostgreSQL 33/33, regression 169/169 và
+full PostgreSQL 202/202 đều PASS. Trạng thái là `IMPLEMENTATION COMPLETE —
+PENDING DEVELOPMENT MIGRATION APPROVAL`. Additive `tasks.0002`/
+`reviews.0002` chưa apply development; production không bị tác động và
+Invitation vẫn ngoài scope.
 
 ## P0 - An toàn và khả năng kiểm chứng
 
@@ -202,6 +208,31 @@ production không bị tác động và Invitation vẫn ngoài scope.
   Workspace Write/Membership/Invitation; mọi môi trường khác vẫn cần inventory,
   backup và authorization riêng.
 
+### HT-DB-P1-06 - Controlled Workspace 0003 Development Migration & Verification — COMPLETE / OWNER REVIEW GATE
+
+- **Mục tiêu:** áp dụng an toàn migration hiện hữu
+  `workspace.0003_workspace_lifecycle_and_period` lên đúng development database
+  sau backup/rehearsal, rồi xác minh schema, API và regressions.
+- **Authorization:** development database only; không production, reset,
+  delete, fake/reverse migration, mapping giả định, business fixture hoặc module
+  mới.
+- **Đã hoàn thành:** xác minh local Compose PostgreSQL 16.14 target; inventory
+  migration/schema/data; backup custom-format Git-ignored với SHA-256, TOC và
+  full-read; full restore rehearsal; exact migration plan; apply `0003`; và
+  post-check columns/constraints/indexes/data.
+- **Inventory trước/sau:** migration rows tăng 27 → 28; 3 active Users, 2
+  sessions và zero checked business rows không đổi. Không có invalid
+  lifecycle/period, duplicate Profile/month, unvalidated constraint, orphan,
+  test/rehearsal database hoặc guessed tenant/month mapping.
+- **Verification:** dependency/system/migration checks PASS. **DEV SMOKE
+  PASSED** không tạo fixture: health/CSRF đúng và toàn bộ tenant route từ chối
+  anonymous, inventory không đổi. **ISOLATED INTEGRATION TEST PASSED:** targeted
+  lifecycle/schema 17/17, Workspace 140/140, auth/API 29/29 và full PostgreSQL
+  169/169. Test databases và runner tạm đã được hủy.
+- **Review gate:** dừng để Owner review. Không tự mở Task, Invitation,
+  Client/Project/Finance/Review hoặc frontend. Mọi persistent environment khác
+  cần inventory, backup, risk review và authorization riêng.
+
 ## P2 - Business domains tiếp theo
 
 ### HT-DATA-P2-01 - Chốt tenancy và schema gaps — COMPLETE / ACCEPTED
@@ -228,7 +259,7 @@ production không bị tác động và Invitation vẫn ngoài scope.
   qua HT-DB-P1-05 đã hoàn tất. Authorization này không mở Workspace write,
   membership, Invitation hoặc rollout sang môi trường khác.
 
-### HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
+### HT-WORK-P2-02 — COMPLETE — DEVELOPMENT ROLLOUT VERIFIED
 
 - **Mục tiêu:** mở write surface nhỏ nhất cho Workspace và direct membership
   management sau tenancy/access foundation, không kéo theo Invitation hoặc
@@ -262,34 +293,60 @@ production không bị tác động và Invitation vẫn ngoài scope.
 - **Late-revocation hardening:** roster selector gắn authority hiện tại của
   actor vào SQL và chỉ trả assignment có active same-Profile membership; revoke
   role sau permission check nhưng trước lazy evaluation sẽ fail closed.
-- **Kiểm thử:** `pip check`, Django check và `makemigrations --check --dry-run`
-  PASS; Workspace PostgreSQL 140/140 PASS trong 79.278s; full PostgreSQL
-  169/169 PASS trong 82.920s. Rehearsal migration `0002 -> 0003` trên PostgreSQL
-  cô lập bảo toàn Task/Deliverable/Review. `migrate --check` exit `1` đúng dự
-  kiến vì development chưa được phép apply `0003`.
-- **Development evidence:** latest successful post-suite inventory ngày
-  2026-10-19 trên loopback Compose PostgreSQL 16.14 có 27 migration rows,
-  `workspace.0002` applied, 3 User, 0 Profile/ProfileMembership/Workspace/
-  WorkspaceMember/Task/Client/Invoice/Payment/AuditLog và không còn test
-  database. Read-only container-state check ngày 2026-10-20 thấy container hiện
-  dừng và không được khởi động lại; `0003` chưa apply, không có development
-  write và production không được truy cập.
+- **Kiểm thử implementation:** `pip check`, Django check và
+  `makemigrations --check --dry-run` PASS; Workspace PostgreSQL 140/140 và full
+  PostgreSQL 169/169 PASS. Rehearsal migration `0002 -> 0003` trên PostgreSQL cô
+  lập bảo toàn Task/Deliverable/Review.
+- **Development evidence:** `HT-DB-P1-06` ngày 2026-10-20 đã backup/rehearse và
+  apply `workspace.0003` lên local loopback Compose PostgreSQL 16.14. Sau apply
+  có 28 migration rows, 3 active Users, 2 sessions và zero checked business
+  rows; columns/constraints/indexes mới hợp lệ, không guessed mapping hay
+  schema/data anomaly. Current direct smoke và full PostgreSQL 169/169 PASS;
+  production không được truy cập.
 - **Dependencies đã đạt:** `HT-RBAC-DESIGN-P0-01`, `HT-RBAC-P1-03`,
   `HT-API-P1-04`, và controlled development rollout `HT-DB-P1-05`.
-- **Review gate:** dừng tại `PENDING DEVELOPMENT MIGRATION APPROVAL`. Bước kế
-  tiếp duy nhất là Owner review và, nếu phê duyệt riêng, controlled development
-  inventory/backup/plan/apply/smoke cho `workspace.0003`. Không tự apply, không
-  mở feature mới, Invitation, Profile creation, Client/Project/Task/Finance hay
-  frontend.
+- **Review gate:** development rollout đã hoàn tất qua `HT-DB-P1-06`; dừng tại
+  Owner review. Không tự mở feature mới, Invitation, Profile creation,
+  Client/Project/Task/Finance, Review workflow hay frontend.
 
-### HT-TASK-P2-03 - Task lifecycle/assignment/comments
+### HT-TASK-P2-03 - Task Management & Internal Approval Workflow — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
 
-- **Mục tiêu:** hoàn tất nền F04/F11 trước marketplace/review.
-- **Phạm vi:** service transition, task API, assignment/comment validation và tests.
-- **Dependencies:** canonical task states được phê duyệt; Workspace API/RBAC.
-- **Acceptance criteria:** transition chạy transaction; invalid transition bị từ chối; membership được kiểm tra; history/audit không bị mất.
-- **Kiểm thử:** state transition, concurrency, IDOR và regression tests.
-- **Rủi ro:** task completion liên quan review/payroll, không được tự suy diễn business rule.
+- **Mục tiêu:** hiện thực workflow backend từ Task assignment đến Deliverable
+  và internal Review mà không kéo theo Client approval, Payroll/Payment,
+  Marketplace, media pipeline hoặc Comments API.
+- **Phạm vi đã implement trong source:** Task create/read/update/assign/start;
+  Deliverable history/list/submit; approve/request changes; scoped DRF
+  permissions; locked transactional services; audit; constraints/indexes;
+  additive `tasks.0002` và `reviews.0002`; tests.
+- **Workflow:** `PENDING -> ASSIGNED -> WORKING -> REVIEW`, sau đó
+  `COMPLETED` chỉ khi latest submitted Deliverable được internal approve, hoặc
+  trở lại `WORKING` khi request changes để revise/resubmit. Không có arbitrary
+  status API; `CANCELLED` chưa có public transition.
+- **RBAC:** Profile Owner/Admin và Workspace Admin manage/review trong active
+  scope; active Profile `MEMBER` + Workspace `MEMBER` (Editor) chỉ start/submit
+  khi là current active assignee; self-review bị cấm. Mọi effective Workspace
+  reader có thể đọc Task và Deliverable history trong Workspace được cấp.
+- **Security/API boundary:** SessionAuthentication + CSRF + deny-by-default;
+  strict input; no User PII; nested tenant-scoped lookup; generic `404` cho
+  malformed/wrong-parent/cross-tenant; không PUT/DELETE/Task status endpoint.
+- **Schema/backfill:** legacy assignment được đặt inactive và legacy Deliverable
+  revision để `NULL`; không đoán current assignee hay revision. Trước rollout
+  phải inventory invalid enum, duplicate Review/Deliverable, assignment legacy,
+  backup và review exact plan.
+- **Verification:** dependency/system/migration-drift checks PASS; targeted
+  service/API/migration PostgreSQL **33/33 PASS** trong 7.673s; existing
+  Authentication/API/Workspace regressions **169/169 PASS** trong 87.783s; và
+  final full PostgreSQL **202/202 PASS** trong 92.343s. Test databases đều được
+  hủy; independent final code review PASS.
+- **Development migration gate:** `tasks.0002` và `reviews.0002` chưa apply
+  development và không được phép apply trong task implementation này.
+  Read-only `showmigrations` xác nhận Workspace 0001-0003 applied nhưng Tasks/
+  Reviews chỉ có 0001; `migrate --plan` chỉ liệt kê additive `tasks.0002` rồi
+  `reviews.0002`. Dừng ở Owner review gate trước mọi apply.
+- **Remaining product boundaries:** Task soft delete/retention, Client approval,
+  actual file upload/storage, comments, payroll pricing/eligibility/trigger,
+  and external review remain separate tasks. Internal approval không tạo
+  Payroll/Payment hoặc tính tiền.
 
 Các module Review/Guest/Client Portal, CRM/Finance/Payroll, Notification/Automation và frontend chỉ được xếp lịch sau các nền tảng trên theo thứ tự dependency trong `ORIGINAL_REQUIREMENTS.md`.
 

@@ -1,6 +1,156 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-10-20 (HT-WORK-P2-02)
+## Current Snapshot - 2026-10-21 (HT-TASK-P2-03)
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture / Task and internal approval workflow`
+
+### HT-TASK-P2-03 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
+
+The approved backend-only Task/Deliverable/internal Review slice is implemented
+in source. It keeps the existing Task ownership path (`Task -> Workspace ->
+Profile`), SessionAuthentication, tenant contexts, and deny-by-default DRF
+policy.
+
+Implemented at this checkpoint:
+
+- Additive `tasks.0002_task_workflow_foundation` and
+  `reviews.0002_review_workflow_foundation` harden actor deletion with
+  `PROTECT`, add status/priority checks and lookup indexes, retain one current
+  active Task assignment, add positive per-Task Deliverable revisions, and
+  enforce one internal Review per Deliverable. Legacy assignments become
+  inactive, legacy Deliverable revisions remain `NULL`, and no current
+  assignee/revision is guessed.
+- Manager Task create/update/assign, assignee-only start and Deliverable
+  submission, and manager-only internal approve/request-changes are provided
+  through locked transactional services with atomic AuditLog events.
+- The state machine is `PENDING -> ASSIGNED -> WORKING -> REVIEW`, then either
+  `COMPLETED` after approval or `WORKING` after requested changes and a later
+  resubmission. No arbitrary status mutation exists; `CANCELLED` is reserved
+  and has no public transition.
+- Profile Owner/Admin and assigned Workspace Admin manage/review Tasks in an
+  active Workspace. Only an active ordinary Profile Member with effective
+  Workspace `MEMBER` (Editor) capability and the current active assignment may
+  start or submit. Self-review, stale revision review, repeat review, and
+  cross-tenant/wrong-parent access fail closed.
+- Seven nested `/api/v1/` route shapes provide Task list/create,
+  detail/update, assign, start, Deliverable list/submit, approve, and
+  request-changes operations. Inputs are strict, outputs omit User PII, list
+  responses are bounded/paginated, unsafe methods retain session CSRF, and no
+  Task/Deliverable delete or arbitrary status endpoint is exposed.
+- Internal approval is explicitly separate from Client approval. Completion
+  creates no Payroll/Payment row and performs no compensation calculation.
+  Comments API, upload/media pipeline, Marketplace, Client Portal/Guest Review,
+  Finance, Invitation, and frontend remain outside this task.
+- Task, TaskAssignment, and TaskComment Django Admin surfaces are
+  inspection-only. Workspace deletion through Django Admin is disabled because
+  the existing Workspace -> Task FK would otherwise cascade-delete workflow
+  history. Task soft delete and the wider retention/purge implementation are
+  still pending a separate approved task.
+
+Verification actually completed:
+
+- `python -m pip check`: PASS.
+- `python manage.py check`: PASS, zero issues.
+- `python manage.py makemigrations --check --dry-run`: PASS, `No changes
+  detected`.
+- Targeted Task service/API/migration suite: PASS, **33/33** on a
+  Django-created PostgreSQL test database in 7.673s; the database was
+  destroyed.
+- The migration rehearsal preserves legacy Task/Deliverable/Review rows,
+  deliberately leaves legacy assignments inactive and Deliverable revisions
+  null, and verifies the one-active-assignment constraint.
+- Existing Authentication/API/Workspace regression group: PASS, **169/169** in
+  87.783s.
+- Final full PostgreSQL suite: PASS, **202/202** in 92.343s. The run also
+  repeated dependency, Django system, and migration-drift checks; its test
+  database was destroyed.
+- Independent final code review: PASS; no unresolved implementation blocker.
+- Documentation-scoped `git diff --check`: PASS; only existing LF-to-CRLF
+  conversion warnings were emitted.
+
+Development state is intentionally unchanged: `workspace.0003` is applied,
+while `tasks.0002` and `reviews.0002` have **not** been applied. The latest
+read-only post-check found `workspace.0001/0002/0003`, `tasks.0001` only and
+`reviews.0001` only; 3 Users, 2 sessions, and zero Profile,
+ProfileMembership, Workspace, WorkspaceMember, Task, TaskAssignment,
+Deliverable, Review, or AuditLog rows. No test/rehearsal database or
+`htp203` runner remains. No development or production migration is authorized
+by this implementation checkpoint.
+
+### Exact continuation / review gate
+
+Stop at `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`.
+The next allowed action is Owner review and, only under a separate explicit
+authorization, a controlled development inventory/backup/plan/apply/smoke for
+`tasks.0002` then `reviews.0002`. Do not apply either migration or start another
+module from this checkpoint.
+
+---
+
+## Previous Snapshot - 2026-10-20 (HT-DB-P1-06)
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture / controlled Workspace 0003 rollout`
+
+### HT-DB-P1-06 — COMPLETE / OWNER REVIEW GATE
+
+- Verified the existing development target as Compose container
+  `hustlytasker_postgres`, PostgreSQL 16.14, database `hustlytasker_db`,
+  loopback-only port 5432, and named volume `docker_postgres_data`.
+- Immediately before apply, confirmed 27 migrations with `workspace.0002`
+  applied and `workspace.0003` absent from both history and physical schema.
+  Inventory was 3 active Users, 2 Django sessions, and zero checked business
+  rows; no other PostgreSQL connection, unvalidated constraint, test database,
+  or rehearsal database existed.
+- Re-reviewed the tracked additive migration. `pip check`, Django system check,
+  migration-drift check, global plan, and targeted plan pass; the plan contains
+  only `workspace.0003`.
+- Created the mandatory fresh pre-apply custom backup at
+  `.local_backups/HT-DB-P1-06/hustlytasker_dev_pre_workspace_0003_20261020T073750Z.dump`
+  (73,521 bytes; SHA-256
+  `b004c1e102b0fedde5eea4418010d46fec76ea18788e59b937e7ef4cb63f7df4`).
+  TOC listing, complete archive read, and container/host hash comparison pass.
+- Full restore rehearsal passed in isolated database
+  `htdb_p106_restore_20261020073818`; it reproduced the pre-migration state and
+  was removed with cleanup verified.
+
+`workspace.0003` was applied successfully to development at 2026-10-20
+07:44:40 UTC. Development now has 28 migration records. All four new columns,
+validated CHECK constraints, the conditional unique Profile/month index, and
+lookup indexes exist and are valid/ready. Pre/post counts remain 3 active Users,
+2 Django sessions, and zero checked business rows; no invalid lifecycle/period
+value, duplicate period, unvalidated constraint, other session, or leftover
+test/rehearsal database was found.
+
+Post-apply verification is complete:
+
+- `pip check`, Django system check, migration drift check, `migrate --check`,
+  and Workspace `showmigrations` all PASS.
+- **DEV SMOKE PASSED:** health `200`, CSRF bootstrap `200`, login without CSRF
+  `403`, invalid login with valid CSRF `400`, and anonymous denial `403` across
+  all current Profile/Workspace/membership read and mutation routes. No
+  business row or session changed.
+- **ISOLATED INTEGRATION TEST PASSED:** lifecycle/schema/concurrency 17/17 in
+  13.341s; Workspace API/service/migration 140/140 in 76.602s;
+  Authentication/API Foundation 29/29 in 7.327s; full PostgreSQL 169/169 in
+  85.858s. Every temporary test database was destroyed.
+- Final database inventory and integrity checks remain unchanged and clean;
+  the disposable runner was removed. **NOT TESTED ON PERSISTENT DEVELOPMENT:**
+  authenticated role/tenant/IDOR and successful lifecycle/member flows, because
+  development has no business fixture; the isolated suites cover those cases.
+
+No reverse migration, `--fake`, fixture, data deletion, source/API contract
+change, or production action occurred. Stop at the Owner review gate. The next
+roadmap candidate is `HT-TASK-P2-03`, but implementation requires separate
+authorization and approval of Task states, reviewer authority, and payroll
+trigger.
+
+---
+
+## Previous Snapshot - 2026-10-20 (HT-WORK-P2-02)
 
 ### Current Phase
 

@@ -396,6 +396,48 @@ def can_edit_workspace(context):
     return context.workspace_role == WorkspaceMember.Role.ADMIN
 
 
+def can_manage_workspace_tasks(context):
+    """Authorize Task administration inside an active tenant scope.
+
+    Profile Owners/Admins inherit this capability across their Profile. An
+    ordinary Profile Member receives it only from an effective Workspace
+    ``ADMIN`` assignment. Task services must still revalidate this capability
+    under row locks before mutating state.
+    """
+
+    if not _has_active_workspace_state(context):
+        return False
+
+    if context.profile_role in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    ):
+        return True
+
+    return context.workspace_role == WorkspaceMember.Role.ADMIN
+
+
+def can_execute_workspace_tasks(context):
+    """Authorize the role-level Editor capability in an active Workspace.
+
+    This deliberately does not decide whether the actor is assigned to a
+    particular Task. The Task service owns that object-level check and must
+    perform it again under the same transaction as the workflow mutation.
+    """
+
+    return (
+        _has_active_workspace_state(context)
+        and context.profile_role == ProfileMembership.Role.MEMBER
+        and context.workspace_role == WorkspaceMember.Role.MEMBER
+    )
+
+
+def can_review_workspace_deliverables(context):
+    """Authorize internal review in an active Workspace tenant scope."""
+
+    return can_manage_workspace_tasks(context)
+
+
 def can_manage_workspace_members(context):
     """Revalidate and evaluate a resolver-produced Workspace context."""
 

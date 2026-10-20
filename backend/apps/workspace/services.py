@@ -99,7 +99,15 @@ def _write_profile_audit(*, actor, profile, action, before, after):
     )
 
 
-def _lock_workspace_mutation_context(*, actor, profile_id, workspace_id):
+def lock_workspace_mutation_context(*, actor, profile_id, workspace_id):
+    """Lock and revalidate the common tenant boundary for a mutation.
+
+    Domain services outside the Workspace app use this public helper so every
+    mutation follows the same Profile -> Workspace -> actor membership lock
+    order. Callers remain responsible for their domain capability and object
+    locks after this tenant boundary has been established.
+    """
+
     profile_context = resolve_profile_access_context(actor, profile_id)
     workspace_context = resolve_workspace_access_context(
         profile_context,
@@ -157,6 +165,11 @@ def _lock_workspace_mutation_context(*, actor, profile_id, workspace_id):
         raise TenantAccessNotFound()
 
     return workspace_context, workspace, actor_membership
+
+
+# Backward-compatible private alias for existing callers and tests. New domain
+# services should import the public name above rather than copy the lock logic.
+_lock_workspace_mutation_context = lock_workspace_mutation_context
 
 
 @transaction.atomic
@@ -506,7 +519,7 @@ def update_workspace(
     name=_UNSET,
     description=_UNSET,
 ):
-    workspace_context, workspace, _ = _lock_workspace_mutation_context(
+    workspace_context, workspace, _ = lock_workspace_mutation_context(
         actor=actor,
         profile_id=profile_id,
         workspace_id=workspace_id,
@@ -552,7 +565,7 @@ def _set_workspace_status(
     workspace_id,
     next_status,
 ):
-    workspace_context, workspace, _ = _lock_workspace_mutation_context(
+    workspace_context, workspace, _ = lock_workspace_mutation_context(
         actor=actor,
         profile_id=profile_id,
         workspace_id=workspace_id,
@@ -616,7 +629,7 @@ def add_workspace_member(
     role,
 ):
     workspace_context, workspace, actor_membership = (
-        _lock_workspace_mutation_context(
+        lock_workspace_mutation_context(
             actor=actor,
             profile_id=profile_id,
             workspace_id=workspace_id,
@@ -741,7 +754,7 @@ def update_workspace_member(
     role,
 ):
     workspace_context, workspace, actor_membership = (
-        _lock_workspace_mutation_context(
+        lock_workspace_mutation_context(
             actor=actor,
             profile_id=profile_id,
             workspace_id=workspace_id,
@@ -842,7 +855,7 @@ def revoke_workspace_member(
     membership_id,
 ):
     workspace_context, workspace, actor_membership = (
-        _lock_workspace_mutation_context(
+        lock_workspace_mutation_context(
             actor=actor,
             profile_id=profile_id,
             workspace_id=workspace_id,

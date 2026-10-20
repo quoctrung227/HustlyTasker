@@ -228,9 +228,10 @@ Authoritative approved decision:
     submission, Review, then either approval/completion or revision and
     resubmission. A Task reaches completion only after its Deliverable is
     approved. The later delegated decision requires explicit Review capability
-    and forbids self-approval; detailed states, the concrete reviewer role, and
-    payroll trigger remain a separate task and are not part of schema
-    foundation.
+    and forbids self-approval; detailed states and concrete internal reviewer
+    authority were delegated to the later Task workflow task, while Client/
+    Guest review and Payroll effects remain separate. The later accepted
+    HT-TASK-P2-03 result is recorded at the end of this file.
 
 
 Historical implementation boundary at the schema-foundation checkpoint
@@ -571,7 +572,9 @@ Historical owner-review checklist (resolved or narrowed on 2026-10-16):
 10. Approve the mapping/backfill source for every existing Workspace and
     currently unscoped Client/AuditLog row.
 11. Separately approve canonical Task/Review states and the event that may
-    complete a Task or trigger payroll; this is required before those APIs.
+    complete a Task or trigger payroll; this was required before those APIs.
+    HT-TASK-P2-03 later resolved the internal state/completion contract without
+    defining a Payroll trigger.
 
 
 Resolution of that checklist:
@@ -657,8 +660,9 @@ Approved delegated decisions — 2026-10-17:
    Workspace; Editor performs work; Viewer is read-only.
 4. **APPROVED BY OWNER DELEGATION:** Only an actor with Review capability may
    approve a Deliverable, and the submitter may not approve their own
-   Deliverable. The concrete reviewer role and detailed states remain for the
-   dedicated Task/Review task.
+   Deliverable. The concrete role/states were intentionally left to the
+   dedicated Task/Review task and are now resolved by the later
+   HT-TASK-P2-03 decision below.
 5. **APPROVED BY OWNER DELEGATION:** Profile creation creates the initial Owner
    atomically in the same transaction.
 6. **APPROVED BY OWNER DELEGATION:** Leave, deactivate, demote, or remove is
@@ -797,13 +801,15 @@ Resolution of the former owner-review checklist:
   User-deactivation target, invitation role/TTL/resend/rate/retention ceilings,
   cross-tenant non-disclosure, and global Django Admin boundary are accepted by
   owner delegation. They must not be sent back for re-decision.
-- The concrete reviewer role and Task/Review states remain deliberately
-  downstream even though explicit Review permission and no self-approval are
-  fixed.
+- At this historical design checkpoint the concrete reviewer role and
+  Task/Review states remained downstream. HT-TASK-P2-03 later fixed the
+  internal manager/Editor split and state machine; external review and Payroll
+  effects remain downstream.
 - Verified-email/account binding is a production dependency, not an optional
   substitute for token hashing. Invitation is not implemented in this task.
-- Remaining downstream gates cover Task visibility/contributor attribution;
-  lifecycle policy beyond the implemented bounded Profile/Workspace
+- Remaining downstream gates cover Task soft delete/cancellation/comments/
+  Marketplace/media and external Client/Guest review; lifecycle policy beyond
+  the implemented bounded Profile/Workspace
   archive/restore and Workspace-member revoke/reactivate behavior (including
   self-leave, retention/purge, and Profile-membership rejoin/history);
   Invitation onboarding,
@@ -902,7 +908,7 @@ Historical Workspace write/member schema-free checkpoint — 2026-10-19
   self-leave, and Profile-membership rejoin policy remain separate.
 
 
-Schema-dependent lifecycle/period implementation checkpoint — 2026-10-19:
+Historical schema-dependent lifecycle/period source checkpoint — 2026-10-19:
 
 - **APPROVED AND IMPLEMENTED IN SOURCE:** `Profile.status` and
   `Workspace.status` use `ACTIVE`/`ARCHIVED`. Profile archive/restore is
@@ -940,3 +946,124 @@ Schema-dependent lifecycle/period implementation checkpoint — 2026-10-19:
   not touched. The source implementation status is therefore `IMPLEMENTATION
   COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`; this checkpoint is not
   permission to apply `0003` anywhere.
+
+
+Controlled Workspace 0003 development rollout checkpoint — 2026-10-20:
+
+- **OWNER AUTHORIZATION EXECUTED WITHIN BOUNDARY:** the Owner approved a
+  condition-gated application of the existing
+  `workspace.0003_workspace_lifecycle_and_period` migration to the identified
+  development database only. The authorization did not include production,
+  another target, a new migration, fixture creation, or feature implementation.
+- Runtime identity, 27-migration pre-state, 3 active Users/2 sessions/zero
+  business rows, physical schema, additive plan, fresh verified backup and full
+  restore rehearsal all passed before apply. No tenant/month mapping was needed
+  or synthesized.
+- `workspace.0003` was applied successfully. Development now has 28 migrations;
+  the four fields, three validated checks, partial unique Profile/month index
+  and three lookup indexes are present and valid/ready. Inventory stayed
+  unchanged and post-check found no anomaly or temporary database.
+- Direct non-mutating development request-stack smoke and current isolated
+  PostgreSQL regressions passed: 17/17 lifecycle/schema, 140/140 Workspace,
+  29/29 Authentication/API Foundation, and 169/169 full suite.
+- This closes only `HT-DB-P1-06` at its Owner review gate. It changes no
+  tenancy/RBAC decision and authorizes no Invitation, Task/business feature, or
+  rollout to another environment.
+
+
+---
+
+# Decision: Task Management and Internal Approval Workflow
+
+Date:
+
+2026-10-21
+
+
+Status:
+
+`IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
+
+
+Approved scope and business boundary:
+
+1. A Task belongs to exactly one Workspace and derives exactly one Profile
+   through that Workspace. Supported APIs do not move/re-parent a Task.
+2. The internal state flow is `PENDING -> ASSIGNED -> WORKING -> REVIEW`.
+   Internal approval moves the Task to `COMPLETED`; request changes moves it
+   back to `WORKING` for revision/resubmission. A Task cannot complete before
+   its latest submitted Deliverable is approved.
+3. Profile Owner/Admin and an assigned Workspace Admin manage Tasks and perform
+   internal Review in an active same-Profile Workspace. An ordinary active
+   Profile Member with effective Workspace `MEMBER` (Editor) capability may
+   execute only a Task for which they are the current active assignee.
+4. The current active assignee alone starts and submits. An internal reviewer
+   cannot approve or request changes on their own Deliverable. Only the latest
+   submitted revision may be decided, and repeated/stale decisions are
+   rejected.
+5. All callers with effective Workspace read access may read the Task and its
+   Deliverable/internal Review history. Viewer is read-only; an unassigned
+   ordinary Profile Member receives no fallback access.
+6. Internal Review is not Client Portal or Guest Review approval. It does not
+   send work to a client and does not create Invoice, Payment, Payroll, or
+   compensation calculations. Those contracts remain separate.
+7. This slice has no arbitrary status update, public cancellation, hard delete,
+   soft-delete implementation, Comments API, Marketplace/claim, actual file
+   upload/media pipeline, external review, Invitation, Finance, frontend, or
+   Authentication change.
+
+
+Implementation/security consequences:
+
+- SessionAuthentication, global `IsAuthenticated`, session CSRF, existing
+  tenant access contexts and generic IDOR-safe `404` remain unchanged.
+- Manager, execute and review capabilities are action-specific. Inherited
+  manager authority never implies contributor attribution; execution still
+  requires ordinary Profile Member + Workspace Editor + active Task assignment.
+- State transitions, assignment replacement, revision allocation, Review
+  creation, Task/Deliverable synchronization and AuditLog writes are atomic and
+  revalidated under row locks. Audit failure rolls back the mutation.
+- Actor references use `PROTECT`. Task/Assignment/Comment Admin is
+  inspection-only, and Workspace hard delete is disabled in Django Admin to
+  avoid cascade deletion of workflow history. This is bounded protection, not
+  a full Task soft-delete/retention implementation.
+- Public API output uses current ProfileMembership IDs for tenant attribution
+  and omits global User ID/PII. A deactivated/stale membership serializes as
+  null rather than exposing its historical tenant identifier.
+
+
+Schema and migration decision:
+
+- Only new additive migrations are used:
+  `tasks.0002_task_workflow_foundation` and
+  `reviews.0002_review_workflow_foundation`; no applied migration is edited.
+- At most one current active TaskAssignment is enforced. During migration all
+  legacy assignments become inactive so the system does not guess which row is
+  current; new service-created assignments default active.
+- New Deliverables use positive sequential revisions unique per Task. Existing
+  Deliverables retain `revision=NULL`; migration does not invent order.
+- One internal Review per Deliverable and status/priority/revision checks are
+  database-enforced after apply.
+- Before any persistent rollout, inventory invalid status/priority values,
+  duplicate Reviews per Deliverable, legacy assignments and Deliverable
+  revision state. A conflict requires explicit reconciliation/Owner review; no
+  record may be silently deleted, deduplicated, activated or renumbered.
+
+
+Current evidence and rollout boundary:
+
+- Targeted Task service/API/migration verification passes 33/33 in 7.673s;
+  existing Authentication/API/Workspace regression passes 169/169 in 87.783s;
+  and final full PostgreSQL passes 202/202 in 92.343s. Dependency, Django
+  system and migration-drift checks, test-database cleanup, and independent
+  final code review pass.
+- Development has `workspace.0003` but only `tasks.0001` and `reviews.0001`;
+  both new workflow migrations remain unapplied. Neither development nor
+  production migration apply is authorized by this task.
+- Read-only `showmigrations` and final counts reconfirm that state;
+  `migrate --plan` succeeds and lists only additive `tasks.0002` followed by
+  `reviews.0002`. No migration was applied.
+- Stop at `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`.
+  A separate controlled rollout must identify
+  the exact target, inventory, back up, review the plan, apply, smoke, and
+  regress before claiming deployment.

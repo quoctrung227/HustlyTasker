@@ -1,6 +1,300 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-10-20 — HT-WORK-P2-02
+## Current checkpoint — 2026-10-21 — HT-TASK-P2-03
+
+Repository: `D:\da\HustlyTasker`
+
+Branch: `main`
+
+HEAD/local `origin/main`: `9ff7eb0`
+
+Current task: **HT-TASK-P2-03 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL**
+
+This checkpoint replaces the prior HT-DB-P1-06 continuation. Owner explicitly
+opened the backend-only Task Management & Internal Approval Workflow task.
+Implementation, targeted verification, full regression, independent code
+review, and final development post-check are complete. The two additive source
+migrations remain unapplied and require separate Owner approval.
+
+### Recovered baseline and development state
+
+- Read root `AGENTS.md`, the prior handover/current documentation, dirty Git
+  state, Task/Review/Workspace source, migrations, routes, tests, and the
+  approved task request before continuing. Existing uncommitted HT-DB-P1-06
+  documentation changes were preserved.
+- Development is the existing local Compose PostgreSQL 16.14 database from
+  HT-DB-P1-06. Final read-only verification found 3 Users, 2 sessions, and zero Profile,
+  ProfileMembership, Workspace, WorkspaceMember, Task, TaskAssignment,
+  Deliverable, Review, or AuditLog rows.
+- Development has `workspace.0003` applied. It has only `tasks.0001` and
+  `reviews.0001`; the new `tasks.0002` and `reviews.0002` migrations are not
+  applied. `showmigrations` confirms this state; `migrate --plan` succeeds and
+  lists only additive `tasks.0002` followed by `reviews.0002`. Production was
+  not contacted and no migration was applied.
+- This task does not authorize a development or production migration, fixture,
+  data mapping, reset, deletion, commit, push, or history rewrite.
+
+### Implementation completed in source
+
+- `Task.created_by`, `TaskAssignment.user`, `TaskComment.user`,
+  `Deliverable.uploaded_by`, and `Review.reviewer` now use `PROTECT`.
+- `tasks.0002_task_workflow_foundation` adds Task status/priority checks and
+  scoped lookup index, `TaskAssignment.is_active`, at most one active assignment
+  per Task, and its lookup index. Migration sets every legacy assignment
+  inactive before changing the default for new rows to true; it never guesses
+  a current assignee.
+- `reviews.0002_review_workflow_foundation` adds nullable legacy-safe positive
+  Deliverable revisions, unique non-null `(task, revision)`, Deliverable/Review
+  status checks and lookup index, and one Review per Deliverable. Existing
+  Deliverables retain null revision; no ordering is invented.
+- Task create/update/assign/start, Deliverable submit, internal approve, and
+  request-changes run through locked transactional services and atomic
+  AuditLog writes. Workflow is `PENDING -> ASSIGNED -> WORKING -> REVIEW`, then
+  `COMPLETED` after approval or back to `WORKING` after requested changes.
+- Profile Owner/Admin and assigned Workspace Admin manage and internally review
+  Tasks. Only an active ordinary Profile Member with Workspace `MEMBER`
+  (Editor) capability and the Task's current active assignment may start or
+  submit. Self-review, stale revision, repeat decision, invalid transition,
+  cross-tenant and wrong-parent access fail closed.
+- Any effective Workspace reader may read Task/Deliverable history. Serializer
+  output contains current ProfileMembership attribution only, never global User
+  ID/PII; stale/deactivated membership attribution becomes null.
+- Task, TaskAssignment and TaskComment Admin are inspection-only. Workspace
+  delete in Django Admin is disabled because the existing Workspace -> Task FK
+  would otherwise cascade-delete workflow history.
+- Internal approval is not Client/Guest approval and creates no Payroll,
+  Payment, Invoice, or compensation calculation. No comments, Marketplace,
+  media upload/storage, Finance, Invitation, frontend, soft-delete, arbitrary
+  status, cancellation, PUT, or delete API was added.
+
+### Current Task API surface
+
+All paths are under `/api/v1/`, use SessionAuthentication/global
+`IsAuthenticated`, tenant-scoped permissions, CSRF on unsafe methods, strict
+input, non-cacheable responses, and generic IDOR-safe `404`:
+
+```text
+GET/POST  /profiles/{profile_id}/workspaces/{workspace_id}/tasks/
+GET/PATCH /profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/
+POST      /profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/assign/
+POST      /profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/start/
+GET/POST  /profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/deliverables/
+POST      /profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/deliverables/{deliverable_id}/approve/
+POST      /profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/deliverables/{deliverable_id}/request-changes/
+```
+
+No Task/Deliverable `DELETE`, no `PUT`, and no arbitrary status endpoint exists.
+See `documentation/API_DOCUMENTATION.md` for request/response contracts.
+
+### Verification actually run
+
+Completed in a disposable Python 3.12 runner on `docker_default`, with source
+mounted read-only and Django creating/destroying its isolated PostgreSQL test
+database:
+
+- `python -m pip check`: PASS.
+- `python manage.py check`: PASS, zero issues.
+- `python manage.py makemigrations --check --dry-run`: PASS, `No changes
+  detected`.
+- `python manage.py test apps.tasks.test_workflow_services apps.tasks.test_api
+  apps.tasks.test_migrations -v 2`: PASS, **33/33** in 7.673s.
+- Migration coverage preserved legacy Task/Assignment/Deliverable/Review rows,
+  left two legacy assignments inactive, retained null legacy revision, and
+  enforced the new one-active-assignment constraint.
+- Existing Authentication/API/Workspace regression group: PASS, **169/169** in
+  87.783s.
+- Final full PostgreSQL suite: PASS, **202/202** in 92.343s; the test database
+  was destroyed.
+- Independent final code review: PASS.
+- Documentation-scoped `git diff --check`: PASS; only LF-to-CRLF conversion
+  warnings were emitted.
+- Final development post-check: Workspace 0001-0003 applied; Tasks/Reviews only
+  0001; 3 Users, 2 sessions, zero checked business/workflow rows; no
+  test/rehearsal database or `htp203` runner remains.
+
+### Migration rollout hazards and mandatory preflight
+
+Before any future persistent apply, identify the exact authorized target,
+inventory and back it up, rehearse, review dependencies and exact plan, then
+check at minimum:
+
+- Task/Deliverable/Review status and Task priority values that would violate
+  the new CHECK constraints;
+- more than one existing Review for the same Deliverable, which would block the
+  new uniqueness constraint;
+- every legacy Task assignment and Deliverable revision requiring business
+  reconciliation.
+
+The migration deliberately preserves ambiguous history. Do not auto-delete or
+deduplicate Reviews, choose an active assignee, synthesize a revision, re-parent
+a Task, or apply/fake/reverse either migration without separate Owner approval.
+
+### Dirty files to preserve
+
+Current backend/source/test files touched by HT-TASK-P2-03:
+
+- `backend/api/urls.py`
+- `backend/apps/tasks/{models,admin,access,permissions,serializers,services,views,urls}.py`
+- `backend/apps/tasks/{test_workflow_services,test_api,test_migrations}.py`
+- `backend/apps/tasks/migrations/0002_task_workflow_foundation.py`
+- `backend/apps/reviews/models.py`
+- `backend/apps/reviews/migrations/0002_review_workflow_foundation.py`
+- `backend/apps/workspace/{access,services,admin}.py`
+
+Documentation remains dirty because the prior controlled rollout notes and the
+current Task checkpoint are uncommitted. Current affected documents are:
+
+- `documentation/PROGRESS.md`
+- `documentation/PROJECT_ROADMAP.md`
+- `documentation/CHANGELOG.md`
+- `documentation/REQUIREMENT_STATUS.md`
+- `documentation/DATABASE_SCHEMA.md`
+- `documentation/API_DOCUMENTATION.md`
+- `documentation/RBAC_DESIGN.md`
+- `documentation/DECISION_LOG.md`
+- `documentation/PROJECT_CONTEXT.md`
+- `documentation/HANDOVER.md`
+
+No file may be reset, reverted, overwritten wholesale, committed, or pushed.
+
+### Exact safe continuation / review gate
+
+1. Re-read this top checkpoint and inspect current `git status`/diff; do not
+   redo completed implementation/verification unless evidence changed.
+2. Stop for Owner review at `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT
+   MIGRATION APPROVAL`.
+3. Only if separately authorized, open a controlled development migration task
+   that repeats target identity/inventory, backup, preflight, exact plan,
+   apply, integrity and API smoke verification for `tasks.0002` then
+   `reviews.0002`.
+4. Do not apply either migration from this checkpoint; do not
+   start Workspace/Task follow-on, Invitation, Client/Project, Finance,
+   Client/Guest review, Payroll, frontend, or any other module.
+
+No owner-decision blocker is known for the implemented internal slice. The
+only gate is separate Owner authorization for controlled development migration.
+
+---
+
+## Superseded checkpoint — 2026-10-20 — HT-DB-P1-06
+
+Repository: `D:\da\HustlyTasker`
+
+Branch: `main`
+
+HEAD and local `origin/main` before this documentation checkpoint: `9ff7eb0`
+
+Current task: **HT-DB-P1-06 — COMPLETE / OWNER REVIEW GATE**
+
+The Owner authorized a condition-gated application of
+`workspace.0003_workspace_lifecycle_and_period` to the identified development
+database only. The migration was applied successfully at
+2026-10-20 07:44:40 UTC. Production remains out of scope.
+
+### Verified development target and pre-migration state
+
+- Existing Compose-labeled container `hustlytasker_postgres` was already
+  running when this task resumed. It is PostgreSQL 16.14, database
+  `hustlytasker_db`, bound only to `127.0.0.1:5432`, with named volume
+  `docker_postgres_data` mounted at `/var/lib/postgresql/data`. Compose labels
+  point to this repository's `docker/docker-compose.yml`; production was not
+  contacted.
+- Immediately before the approved apply, development had 27 migration records.
+  `workspace.0001` and `workspace.0002` were applied; `workspace.0003` and its
+  physical columns, constraints, and indexes were absent, so migration history
+  and schema agreed.
+- Inventory: 3 active Users; 2 existing Django sessions; zero Profile,
+  ProfileMembership, Workspace, WorkspaceMember, Task, TaskAssignment,
+  TaskComment, Deliverable, Review, Client, ShareLink, Invoice, Payment,
+  Notification, and AuditLog rows. There are no other PostgreSQL connections,
+  unvalidated constraints, or leftover test/rehearsal databases.
+- `pip check`, Django system check, and
+  `makemigrations --check --dry-run` passed in a disposable Python 3.12
+  container with source mounted read-only. Both global and targeted
+  `migrate --plan` list only the reviewed additive `workspace.0003` operations.
+
+### Fresh pre-apply backup
+
+- New ignored custom-format archive:
+  `.local_backups/HT-DB-P1-06/hustlytasker_dev_pre_workspace_0003_20261020T073750Z.dump`
+- Size: 73,521 bytes.
+- SHA-256:
+  `b004c1e102b0fedde5eea4418010d46fec76ea18788e59b937e7ef4cb63f7df4`.
+- `pg_restore --list` returned a readable 188-line TOC; a complete archive read
+  to `/dev/null` passed; container and host hashes match.
+- A full restore rehearsal into isolated database
+  `htdb_p106_restore_20261020073818` reproduced 27 migrations, 3 Users, zero
+  checked business rows, no `0003` columns, and no unvalidated constraint. The
+  rehearsal database was then removed and its absence verified.
+
+### Post-apply database checkpoint
+
+- Development now has 28 migration records; `workspace.0001`, `0002`, and
+  `0003` are applied.
+- `Profile.status` and `Workspace.status` are non-null varchar columns;
+  `Workspace.period` is nullable date for legacy compatibility; and
+  `WorkspaceMember.is_active` is non-null boolean. Django left no permanent
+  database defaults, as expected for these `default=` model fields.
+- All three lifecycle/period CHECK constraints are validated. The conditional
+  unique `(profile_id, period)` index, including archived rows, and all three
+  lookup indexes are valid and ready.
+- Pre/post inventory is unchanged: 3 active Users, 2 Django sessions, and zero
+  rows in every checked business table. There are no invalid lifecycle values,
+  invalid period days, duplicate Profile/period pairs, unvalidated constraints,
+  other PostgreSQL connections, or leftover test/rehearsal databases.
+- No reverse migration, `--fake`, fixture, data deletion, or production action
+  occurred.
+
+### Verification completed after apply
+
+- Dependency and framework checks passed: `pip check`, `manage.py check`,
+  `makemigrations --check --dry-run`, and `migrate --check`. `showmigrations`
+  reports Workspace `0001`, `0002`, and `0003` applied.
+- **DEV SMOKE PASSED:** a direct development request-stack smoke used no
+  business fixture and changed no row or session. Health returned `200`; CSRF
+  bootstrap returned `200`; login without CSRF returned `403`; invalid login
+  with a valid CSRF token returned `400`; anonymous `/api/auth/me/` and
+  `POST /api/auth/logout/` returned `403`; and every implemented
+  Profile/Workspace/membership business method exercised by the smoke returned
+  `403`. Before and after remained 3 active Users, 2 sessions, and zero checked
+  business rows.
+- **ISOLATED INTEGRATION TEST PASSED:** lifecycle/schema/concurrency 17/17,
+  Workspace API/service/migration 140/140, Authentication/API Foundation
+  29/29, and the independently rerun full PostgreSQL suite 169/169. The full
+  suite ran in 85.858s. Each run created and destroyed its own Django test
+  database.
+- Final post-check still reports 28 migrations, unchanged inventory, all four
+  expected columns, three validated CHECK constraints, and four valid/ready
+  indexes. No invalid lifecycle/period row, duplicate Profile/month,
+  unvalidated constraint, other database session, temporary test/rehearsal
+  database, or temporary runner remains.
+- **NOT TESTED ON PERSISTENT DEVELOPMENT:** successful authenticated tenant
+  operations, role/tenant/IDOR behavior, archive/restore, and
+  revoke/reactivate, because development has no business fixtures and no
+  credential was requested or changed. Those cases passed in the isolated
+  PostgreSQL integration suites above.
+
+### Files and safe next step
+
+Only tracked repository documentation files were edited by this operational
+task:
+`documentation/HANDOVER.md`, `PROGRESS.md`, `PROJECT_ROADMAP.md`,
+`REQUIREMENT_STATUS.md`, `CHANGELOG.md`, `DATABASE_SCHEMA.md`,
+`API_DOCUMENTATION.md`, `PROJECT_CONTEXT.md`, `RBAC_DESIGN.md`, and
+`DECISION_LOG.md`. The backup is Git-ignored. Backend source and migration files
+were not edited; no business row, credential, authentication mechanism, API
+contract, or production state changed.
+
+Stop at the Owner review gate. `HT-TASK-P2-03` is only the next roadmap
+candidate and must not start without separate authorization and approval of
+the canonical Task states, reviewer authority, and payroll trigger. Invitation,
+Client, Project, Finance, Review workflow, and frontend also remain out of
+scope. Any rollout outside this development database requires its own
+inventory, backup, risk review, and authorization.
+
+---
+
+## Superseded checkpoint — 2026-10-20 — HT-WORK-P2-02
 
 Repository: `D:\da\HustlyTasker`
 

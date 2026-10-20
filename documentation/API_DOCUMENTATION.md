@@ -1,6 +1,6 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-10-20
+Last updated: 2026-10-21
 
 ## API boundary and public allowlist
 
@@ -259,22 +259,223 @@ tenant detail, cross-tenant and IDOR cases were verified in Django's isolated
 PostgreSQL test database. This is environment-specific rollout evidence and
 does not change the API contract or authorize another environment.
 
-HT-WORK-P2-02 schema-dependent implementation was verified on 2026-10-19. The
-Workspace suite passed 140/140 tests in 79.278s and the full PostgreSQL suite,
-including Authentication/API Foundation regressions, passed 169/169 in
-82.920s. `pip check`, Django system checks, and
-`makemigrations --check --dry-run` also passed. Migration rehearsal applied
-`workspace.0003_workspace_lifecycle_and_period` only to an isolated Django test
-database and preserved legacy Workspace/WorkspaceMember plus related
-Task/Deliverable/Review data without guessing a period.
+HT-WORK-P2-02 schema-dependent implementation was verified on 2026-10-19. Its
+isolated migration rehearsal preserved legacy Workspace/WorkspaceMember plus
+related Task/Deliverable/Review data without guessing a period.
 
-Deployment state is deliberately separate from source state: these contracts
-are **implemented in source and tested in isolated PostgreSQL**, but migration
-`workspace.0003` is **not applied to development** and production was not
-touched. Development remains at 27 migration rows with `workspace.0002`
-applied, 3 Users, and zero business rows. The source API must not be started for
-development business traffic until the Owner separately approves and the
-controlled development migration process applies and verifies `0003`.
+Operational rollout evidence (HT-DB-P1-06, 2026-10-20): after exact development
+target identification, fresh verified backup, full restore rehearsal and plan
+review, `workspace.0003_workspace_lifecycle_and_period` was applied to the
+approved development database. Post-check reports 28 migration rows, valid
+columns/constraints/indexes, 3 active Users, 2 existing sessions, and zero
+checked business rows. Production and every other persistent environment were
+untouched.
+
+**DEV SMOKE PASSED:** direct development request-stack checks used no business
+fixture and changed no row or session. Health returned `200`; CSRF bootstrap
+returned `200`; login without CSRF returned `403`; invalid login with a valid
+CSRF token returned `400`; anonymous `/api/auth/me/` and logout returned `403`;
+and every current Profile/Workspace/membership read or mutation route returned
+`403`, with no `500`.
+
+**ISOLATED INTEGRATION TEST PASSED:** successful SessionAuthentication,
+authenticated role/capability behavior, tenant isolation, wrong-parent/IDOR,
+archive/restore, membership revoke/reactivate, concurrency, and migration
+preservation were exercised on Django-created PostgreSQL test databases rather
+than persistent development data. Current results are lifecycle/schema 17/17,
+Workspace API/service/migration 140/140, Authentication/API Foundation 29/29,
+and full PostgreSQL 169/169. The test databases were destroyed after each run.
+These operational results do not change the API contract or authorize another
+environment.
+
+**NOT TESTED ON PERSISTENT DEVELOPMENT:** successful authenticated session and
+tenant operations, role/IDOR success paths, archive/restore, or member
+revoke/reactivate. Development has no business fixtures and no account
+credential was requested or changed; the isolated results above are the
+evidence for those scenarios.
+
+## Task and internal approval workflow API
+
+Source status: `HT-TASK-P2-03 IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT
+MIGRATION APPROVAL`
+
+Base nested path:
+`/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/`
+
+All routes use the existing Django SessionAuthentication/global
+`IsAuthenticated` policy and require an active, tenant-scoped Workspace
+context. None uses `AllowAny`. Unsafe requests require a valid session CSRF
+token. Responses are non-cacheable, relationship IDs are derived from the
+nested authorized path, and no request body may select or move a Task to a
+different Profile/Workspace.
+
+| Method | Path suffix | Access | Purpose |
+|---|---|---|---|
+| `GET` | `(collection)` | Any caller with effective read access to the Workspace | Paginated Task list. |
+| `POST` | `(collection)` | Profile Owner/Admin or assigned Workspace Admin | Create a `PENDING` Task. |
+| `GET` | `{task_id}/` | Effective Workspace read access | Return one scoped Task. |
+| `PATCH` | `{task_id}/` | Profile Owner/Admin or assigned Workspace Admin | Update Task metadata, never status/tenant. |
+| `POST` | `{task_id}/assign/` | Profile Owner/Admin or assigned Workspace Admin | Assign/reassign one eligible Editor and enter `ASSIGNED`. |
+| `POST` | `{task_id}/start/` | Current active assignee with Editor capability | Move `ASSIGNED -> WORKING`; empty body. |
+| `GET` | `{task_id}/deliverables/` | Effective Workspace read access | List revision history for the scoped Task. |
+| `POST` | `{task_id}/deliverables/` | Current active assignee with Editor capability | Submit a new URL revision and move `WORKING -> REVIEW`. |
+| `POST` | `{task_id}/deliverables/{deliverable_id}/approve/` | Profile Owner/Admin or assigned Workspace Admin, not the submitter | Approve the latest submitted revision and move `REVIEW -> COMPLETED`. |
+| `POST` | `{task_id}/deliverables/{deliverable_id}/request-changes/` | Profile Owner/Admin or assigned Workspace Admin, not the submitter | Reject the latest submitted revision and move `REVIEW -> WORKING`. |
+
+Read access follows the effective Workspace rules: same-Profile Owner/Admin can
+read every Task in that Profile's mapped Workspace; an ordinary Profile Member
+must have an active supported Workspace assignment (`ADMIN`, `MEMBER`, or
+`VIEWER`). A Viewer is read-only. Management/review authority is Profile
+Owner/Admin or assigned Workspace Admin. Execution authority is deliberately
+narrower: an active ordinary Profile `MEMBER` with effective Workspace
+`MEMBER` (Editor) role, who must also be the Task's current active assignee.
+Manager inheritance does not silently make a manager the worker/submitter.
+
+### Task requests and responses
+
+Create accepts only:
+
+```json
+{
+  "title": "Produce October report",
+  "description": "Optional or null",
+  "priority": "MEDIUM",
+  "deadline": null
+}
+```
+
+`title` is required. `description`, `priority`, and `deadline` are optional;
+priority defaults to `MEDIUM`. `PATCH` accepts a subset of those four mutable
+metadata fields; empty or unchanged input is a no-op with no audit event.
+Unknown and server-owned fields—including
+`profile_id`, `workspace_id`, `status`, creator, assignment, revisions,
+reviewer, IDs, and timestamps—are rejected with `400 Bad Request`.
+
+Task responses contain exactly:
+
+- `id`
+- `workspace_id`
+- `title`
+- `description`
+- `status`
+- `priority`
+- `deadline`
+- `active_assignment`
+- `created_at`
+- `updated_at`
+
+`active_assignment` is null or contains `id`, current
+`profile_membership_id`, and `assigned_at`. It never contains global User ID,
+email, username, or other PII. If the assignee no longer has a current active
+same-Profile membership, historical attribution is retained in the database
+but the serialized ProfileMembership identifier becomes null rather than
+exposing a stale tenant identifier.
+
+Assign accepts exactly:
+
+```json
+{
+  "target_profile_membership_id": "00000000-0000-0000-0000-000000000000"
+}
+```
+
+The target must be an active User with an active ordinary `MEMBER`
+ProfileMembership in the URL Profile and effective Workspace `MEMBER` (Editor)
+assignment. It is not a global User identifier. Assignment/reassignment is
+accepted only while the Task is `PENDING`, `ASSIGNED`, or `WORKING`; exactly one
+assignment remains active. Reassigning deactivates the former assignment and
+returns the updated Task. Assignment history remains internal and is not a
+general roster/PII API.
+
+### Deliverable and internal Review contract
+
+Submit accepts exactly:
+
+```json
+{
+  "file_url": "https://files.example.invalid/result-v1"
+}
+```
+
+This foundation stores a URL string; it does not upload, fetch, scan, validate
+media contents, or authorize a storage provider. The service allocates a
+positive sequential revision while locking the Task. A Task may have multiple
+historical Deliverables, but only its latest submitted revision may be decided.
+
+Deliverable responses contain exactly:
+
+- `id`
+- `task_id`
+- `revision`
+- `file_url`
+- `status`
+- `uploaded_by_profile_membership_id`
+- `review`
+- `created_at`
+- `updated_at`
+
+The nested `review`, when present, contains `id`, `status`, `comment`,
+`reviewer_profile_membership_id`, `created_at`, and `updated_at`. Current
+ProfileMembership IDs are used for attribution; global User identity and PII
+are omitted, and stale membership attribution serializes as null.
+
+Approve accepts optional `comment`; request changes requires a non-blank
+`comment`. A reviewer cannot review their own submission. Stale/non-latest,
+already-decided, duplicate, or state-incompatible decisions return a workflow
+conflict and cannot create a second Review. Request changes marks the
+Deliverable `REJECTED` and returns the Task to `WORKING`, allowing the same
+current assignee to submit the next revision. Approval marks the Deliverable
+`APPROVED` and the Task `COMPLETED` atomically.
+
+This decision is **internal review only**. It is not Client Portal/Guest Review
+approval, does not send a Deliverable to a client, and does not create or
+calculate Payroll, Payment, Invoice, or compensation data.
+
+### State, errors, and unavailable methods
+
+Supported public transition path:
+
+```text
+PENDING -> ASSIGNED -> WORKING -> REVIEW
+                                 |-> COMPLETED (internal approval)
+                                 `-> WORKING   (request changes -> resubmit)
+```
+
+There is no arbitrary status field update. `CANCELLED` remains a constrained
+storage value but has no route in this slice. No `PUT` or `DELETE` method is
+available for Task or Deliverable; Comments, claim/Marketplace, Client/Guest
+review, file-upload/media, Finance/Payroll, and soft-delete APIs are absent.
+
+- invalid or unknown input fields: `400`;
+- visible object but missing action capability/self-review: `403`;
+- anonymous SessionAuthentication request: `403`;
+- malformed, unknown, cross-tenant, wrong-parent, or out-of-scope URL resource:
+  generic `404`;
+- invalid/stale/repeated workflow state or assignment/review conflict: `409`;
+- unsupported method: `405` after normal authentication/CSRF/tenant checks.
+
+Task and Deliverable lists use the existing page-number envelope, default 20
+and maximum 100, with stable `created_at`, then `id`, ordering. All mutations
+revalidate tenant capability under row locks and write material AuditLog events
+in the same transaction; audit failure rolls back the mutation. Audit metadata
+does not include file URLs, free-text descriptions, or review comments.
+
+### Migration and rollout boundary
+
+The routes require source migrations `tasks.0002_task_workflow_foundation` and
+`reviews.0002_review_workflow_foundation`. They have passed the current 33/33
+targeted service/API/migration suite in 7.673s, the 169/169 existing
+Authentication/API/Workspace regression in 87.783s, and the final full
+PostgreSQL suite 202/202 in 92.343s. Test databases were destroyed; dependency,
+Django system and migration-drift checks and independent final code review
+passed.
+
+They are **not applied to development or production**. Final read-only
+development `showmigrations` confirms Workspace 0001-0003 applied, with Tasks
+and Reviews still at 0001. `migrate --plan` succeeds and lists only additive
+`tasks.0002` then `reviews.0002`; no migration was applied. Do not direct
+development business traffic to this source contract before a separately
+approved controlled inventory/backup/plan/apply/smoke task.
 
 ## Authentication foundation
 
@@ -349,5 +550,7 @@ returns `403` with DRF `SessionAuthentication`. Throttled requests return `429`.
   of this foundation. The separately documented `/api/v1/` tenant slice now
   includes the Workspace metadata, lifecycle, and membership operations above.
   General Profile create/update, Invitation, downstream business APIs, and
-  frontend integration remain unimplemented; the schema-dependent routes are
-  not deployed to development until `workspace.0003` receives rollout approval.
+  frontend integration remain unimplemented. The schema-dependent routes have
+  completed the approved development-only `workspace.0003` rollout; deployment
+  to production or any other persistent target still requires separate review
+  and authorization.
