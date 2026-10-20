@@ -28,6 +28,7 @@ class ProfileReadSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "name",
+            "status",
             "created_at",
             "updated_at",
         )
@@ -46,14 +47,16 @@ class WorkspaceReadSerializer(serializers.ModelSerializer):
             "profile_id",
             "name",
             "description",
+            "period",
+            "status",
             "created_at",
             "updated_at",
         )
         read_only_fields = fields
 
 
-class WorkspaceWriteSerializer(StrictInputSerializer):
-    """The complete client-writable Workspace metadata contract."""
+class WorkspaceCreateSerializer(StrictInputSerializer):
+    """Create one Workspace for an explicit canonical monthly period."""
 
     name = serializers.CharField(
         max_length=255,
@@ -65,6 +68,42 @@ class WorkspaceWriteSerializer(StrictInputSerializer):
         allow_blank=True,
         allow_null=True,
     )
+    period = serializers.DateField()
+
+    def validate_period(self, value):
+        if value.day != 1:
+            raise serializers.ValidationError(
+                "Workspace period must be the first day of a month."
+            )
+        return value
+
+
+class WorkspaceUpdateSerializer(StrictInputSerializer):
+    """Mutable Workspace metadata; tenant, period, and status are server-owned."""
+
+    name = serializers.CharField(
+        required=False,
+        max_length=255,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+    description = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+
+
+class WorkspaceLifecycleSerializer(StrictInputSerializer):
+    """Lifecycle actions intentionally accept no client-controlled fields."""
+
+    pass
+
+
+class ProfileLifecycleSerializer(StrictInputSerializer):
+    """Profile lifecycle actions intentionally accept no writable fields."""
+
+    pass
 
 
 class WorkspaceMemberReadSerializer(serializers.ModelSerializer):
@@ -78,6 +117,7 @@ class WorkspaceMemberReadSerializer(serializers.ModelSerializer):
             "id",
             "profile_membership_id",
             "role",
+            "is_active",
             "joined_at",
             "updated_at",
         )

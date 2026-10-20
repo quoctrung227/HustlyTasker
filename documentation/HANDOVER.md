@@ -1,6 +1,200 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-10-19 — HT-WORK-P2-02
+## Current checkpoint — 2026-10-20 — HT-WORK-P2-02
+
+Repository: `D:\da\HustlyTasker`
+
+Branch: `main`
+
+HEAD and local `origin/main`: `cb8e338`
+
+Current task: **HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING
+DEVELOPMENT MIGRATION APPROVAL**
+
+Read root `AGENTS.md` before any later action. Preserve every dirty file, the
+development database, and the ignored HT-DB-P1-05 backup. Do not commit, push,
+reset, rewrite migration history, apply `workspace.0003`, create development
+business fixtures, or begin another roadmap feature without separate Owner
+authorization.
+
+### Resume classification
+
+- `DONE before the latest token interruption`: approved schema-dependent code,
+  additive migration `0003`, API/service integration, schema/API/concurrency
+  tests, the full isolated PostgreSQL verification, and read-only development
+  migration/inventory checks.
+- `PARTIAL at interruption`: permanent documentation reconciliation. The API
+  contract had just been updated; the remaining current-state documents and
+  this handover still described the superseded schema approval gate.
+- `DONE after resume`: all required current-state documentation reconciled with
+  source/test/development evidence and the final dirty-tree checks rerun.
+- `BLOCKED`: no source implementation blocker. Applying `workspace.0003` to
+  development is intentionally blocked by the required Owner approval gate.
+
+### Implementation now complete in source
+
+- `Profile.status` supports only `ACTIVE` and `ARCHIVED`, defaults safely to
+  `ACTIVE`, and has a database check plus lookup index. A current Profile Owner
+  may archive/restore; Profile Admin cannot. Archived Profiles remain scoped
+  and readable but block supported child and membership writes. Hard delete is
+  not exposed.
+- `Workspace.period` is a canonical first-of-month date. Supported new writes
+  require it, later changes are rejected, and the database prevents more than
+  one non-null `(profile, period)` even when the existing Workspace is archived.
+  A Profile row lock and database uniqueness protect concurrent creation.
+- `Workspace.status` supports `ACTIVE`/`ARCHIVED`. Profile Owner/Admin may
+  archive/restore; Workspace Admin cannot. Archived Workspaces stay readable to
+  callers with effective access but metadata and membership mutations fail
+  closed until restore. Tenant hard delete is not exposed; existing
+  platform/Admin destructive paths remain outside this task and require
+  separate control.
+- `WorkspaceMember.is_active` provides soft revoke. Revoke immediately removes
+  effective access and roster visibility while retaining the row. Direct-add
+  of the same eligible Profile member reactivates that same unique
+  `(workspace, user)` row; no duplicate history row is created.
+- Service boundaries lock in Profile → Workspace → membership order, recheck
+  active tenant authority and role ceilings, and write lifecycle/revoke/
+  reactivate AuditLog events in the same transaction. Audit failure rolls back
+  the state change. Workspace Admin stays limited to `MEMBER`/`VIEWER`; legacy
+  Workspace `OWNER` remains fail-closed.
+- Read selectors remain tenant-scoped, include archived resources when the
+  caller still has effective read access, and exclude inactive WorkspaceMember
+  assignments immediately. Cross-Profile, wrong-parent, stale-context, and
+  concurrent privilege-escalation paths stay fail-closed.
+- Django Admin exposes lifecycle values for inspection but does not offer an
+  unaudited status or WorkspaceMember activation toggle. A mapped/non-null
+  monthly period is read-only.
+
+### Schema and migration state
+
+- New source migration:
+  `workspace.0003_workspace_lifecycle_and_period`, dependent only on applied
+  `workspace.0002_profile_workspace_foundation`.
+- It additively adds `Profile.status`, `Workspace.period`, `Workspace.status`,
+  and `WorkspaceMember.is_active`, their status/period checks, uniqueness, and
+  lookup indexes. It does not edit `0001`/`0002`, delete a row, invent a tenant,
+  or guess a monthly period.
+- Existing rows gain `ACTIVE` status and active membership defaults. Existing
+  pre-`0003` Workspaces retain `period=NULL` until an explicit verified mapping.
+  `NULL` is a transitional direct-write boundary only: model/service/API paths
+  reject a new Workspace without a period. Once a non-null period is assigned,
+  supported model/API paths do not permit changing it.
+- MigrationExecutor rehearsal from `0002` to `0003` on isolated PostgreSQL
+  preserved Profile, Workspace, WorkspaceMember and the related
+  `Task → Deliverable → Review` chain without synthesizing a period.
+
+### API implemented in source
+
+- Existing Profile/Workspace reads and Workspace create/update remain intact.
+  Create now requires `period`; response objects expose lifecycle fields.
+- New Profile actions:
+  `POST /api/v1/profiles/{profile_id}/archive/` and `/restore/`.
+- New Workspace actions:
+  `POST /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/archive/` and
+  `/restore/`.
+- Nested member detail now accepts `DELETE` for soft revoke (`204`). A later
+  collection `POST` reactivates the retained row (`200`); a new row returns
+  `201`, while an already-active duplicate remains `409`.
+- All unsafe routes retain SessionAuthentication and CSRF enforcement. No new
+  `AllowAny`, authentication mechanism, frontend, or downstream domain was
+  introduced.
+
+### Verification actually run
+
+- `python -m pip check`: PASS, no broken requirements.
+- `python manage.py check`: PASS, zero issues.
+- `python manage.py makemigrations --check --dry-run`: PASS, no changes.
+- New lifecycle/concurrency service module: PASS, 7/7 in 6.872s.
+- Entire Workspace PostgreSQL suite: PASS, 140/140 in 79.278s.
+- Full PostgreSQL suite: PASS, 169/169 in 82.920s, including Authentication,
+  Session/CSRF, deny-by-default, health, tenant/IDOR, lifecycle, concurrency,
+  atomic audit rollback, last-active-Owner, and migration regressions.
+- Django applied `workspace.0003` only inside the disposable `test_postgres`
+  database and destroyed it after each run; the post-check found zero remaining
+  test database.
+- Development `showmigrations` shows `0001`/`0002` applied and `0003` unchecked.
+  `migrate --plan` lists only the reviewed additive `0003` operations.
+  `migrate --check` exits `1` as expected because `0003` is deliberately
+  pending; that expected result is not reported as a failed consistency check.
+- `git diff --check`: PASS after final source/documentation reconciliation;
+  Git may emit only existing LF-to-CRLF conversion warnings.
+
+### Development and production state
+
+- The identified target remains the repository Compose PostgreSQL 16
+  development container. A read-only process check on 2026-10-20 found that
+  existing container stopped cleanly (`Exited (0)`); it was not restarted or
+  altered in this documentation-only resume. Production was not contacted.
+- Development has 27 migration rows: `workspace.0002` is applied and
+  `workspace.0003` is not applied.
+- Latest successful read-only database inventory, taken immediately after the
+  full suite on 2026-10-19: 3 Users and zero Profile, ProfileMembership,
+  Workspace, WorkspaceMember, Task, Client, Invoice, Payment, and AuditLog
+  rows, with no remaining test database. No tenant, period, membership, or
+  business fixture was synthesized.
+- **IMPLEMENTED IN SOURCE:** yes.
+- **TESTED IN ISOLATED POSTGRESQL:** yes.
+- **APPLIED TO DEVELOPMENT:** no.
+- **PRODUCTION TOUCHED:** no.
+
+### Files changed in the current worktree
+
+Backend implementation:
+
+- `backend/apps/workspace/access.py`
+- `backend/apps/workspace/admin.py`
+- `backend/apps/workspace/models.py`
+- `backend/apps/workspace/permissions.py`
+- `backend/apps/workspace/serializers.py`
+- `backend/apps/workspace/services.py`
+- `backend/apps/workspace/urls.py`
+- `backend/apps/workspace/views.py`
+- `backend/apps/workspace/migrations/0003_workspace_lifecycle_and_period.py`
+
+Tests:
+
+- `backend/apps/workspace/test_api.py`
+- `backend/apps/workspace/test_write_api.py`
+- `backend/apps/workspace/tests.py`
+- `backend/apps/workspace/test_schema_lifecycle.py`
+- `backend/apps/workspace/test_lifecycle_services.py`
+
+Current-state documentation:
+
+- `documentation/API_DOCUMENTATION.md`
+- `documentation/CHANGELOG.md`
+- `documentation/DATABASE_SCHEMA.md`
+- `documentation/DECISION_LOG.md`
+- `documentation/HANDOVER.md`
+- `documentation/PROGRESS.md`
+- `documentation/PROJECT_CONTEXT.md`
+- `documentation/PROJECT_ROADMAP.md`
+- `documentation/RBAC_DESIGN.md`
+- `documentation/REQUIREMENT_STATUS.md`
+
+No file was reset, reverted, deleted, committed, or pushed.
+
+### Exact safe continuation / review gate
+
+Stop at the **OWNER REVIEW GATE**. Review the source diff, additive `0003`, API
+contract, isolated migration rehearsal, 140-test Workspace run, and 169-test
+full regression. Do not begin Invitation, Client, Project, Task/Review,
+Finance, or frontend work.
+
+If the Owner approves development rollout, open a separately controlled
+migration task: repeat development identity/inventory, verify the existing
+backup policy (and create a fresh pre-apply backup if required), review
+`migrate --plan`, apply exactly `workspace.0003` to development, then verify
+constraints, inventory, API smoke, and the full regression suite. Do not apply
+it from this checkpoint.
+
+---
+
+## Superseded checkpoint — 2026-10-19 — HT-WORK-P2-02 schema approval gate
+
+Historical only: the schema-free slice and schema approval gate below were
+superseded after the Owner approved and Codex implemented the schema-dependent
+requirements. Do not follow its continuation instruction as current work.
 
 Repository: `D:\da\HustlyTasker`
 

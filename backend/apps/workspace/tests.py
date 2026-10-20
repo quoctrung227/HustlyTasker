@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import FrozenInstanceError, replace
+from datetime import date
 from threading import Barrier, Event
 from unittest.mock import patch
 from uuid import uuid4
@@ -250,19 +251,31 @@ class TenantAccessContextTests(WorkspaceTestDataMixin, TestCase):
             role=ProfileMembership.Role.MEMBER,
         )
 
-        self.admin_workspace = self._create_workspace("Workspace Admin")
-        self.editor_workspace = self._create_workspace("Workspace Editor")
-        self.viewer_workspace = self._create_workspace("Workspace Viewer")
+        self.admin_workspace = self._create_workspace(
+            "Workspace Admin",
+            date(2026, 1, 1),
+        )
+        self.editor_workspace = self._create_workspace(
+            "Workspace Editor",
+            date(2026, 2, 1),
+        )
+        self.viewer_workspace = self._create_workspace(
+            "Workspace Viewer",
+            date(2026, 3, 1),
+        )
         self.legacy_owner_workspace = self._create_workspace(
-            "Legacy Workspace Owner"
+            "Legacy Workspace Owner",
+            date(2026, 4, 1),
         )
         self.unassigned_workspace = self._create_workspace(
-            "Unassigned Workspace"
+            "Unassigned Workspace",
+            date(2026, 5, 1),
         )
         self.other_workspace = Workspace.objects.create(
             name="Other Profile Workspace",
             profile=self.other_profile,
             owner=self.other_owner,
+            period=date(2026, 1, 1),
         )
         self.unmapped_workspace = Workspace(
             name="Unmapped Legacy Workspace",
@@ -282,11 +295,12 @@ class TenantAccessContextTests(WorkspaceTestDataMixin, TestCase):
                 role=role,
             )
 
-    def _create_workspace(self, name):
+    def _create_workspace(self, name, period):
         return Workspace.objects.create(
             name=name,
             profile=self.profile,
             owner=self.owner,
+            period=period,
         )
 
     def test_profile_visibility_uses_current_active_account_and_memberships(self):
@@ -810,6 +824,7 @@ class ProfileMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
             name="Manager Transition Workspace",
             profile=self.profile,
             owner=second_owner,
+            period=date(2026, 10, 1),
         )
 
         with self.assertRaises(ValidationError):
@@ -852,6 +867,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="October 2026",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
         workspace.full_clean()
         workspace.save()
@@ -862,6 +878,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             Workspace.objects.create(
                 name="Missing Profile",
                 owner=self.owner,
+                period=date(2026, 11, 1),
             )
 
         with self.assertRaises(ValidationError):
@@ -869,6 +886,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
                 name="Invalid Manager",
                 profile=self.profile,
                 owner=self.member,
+                period=date(2026, 12, 1),
             ).full_clean()
 
     def test_workspace_cannot_be_moved_to_another_profile(self):
@@ -876,6 +894,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="October 2026",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
         other_profile = create_profile_with_owner(
             name="Other Company",
@@ -920,6 +939,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="October 2026",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
 
         valid_membership = WorkspaceMember(
@@ -954,6 +974,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="October 2026",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
         profile_membership = ProfileMembership.objects.get(
             profile=self.profile,
@@ -974,6 +995,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="October 2026",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
 
         membership = add_workspace_member(
@@ -1004,6 +1026,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="November 2026",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 11, 1),
         )
 
         membership = add_workspace_member(
@@ -1021,6 +1044,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="October 2026",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
 
         with self.assertRaises(TenantAccessNotFound):
@@ -1048,6 +1072,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="Cross Profile Workspace",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
         other_owner = self.create_user("cross-profile-owner")
         other_profile = create_profile_with_owner(
@@ -1078,6 +1103,7 @@ class WorkspaceTenantValidationTests(WorkspaceTestDataMixin, TestCase):
             name="Protected Workspace",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
 
         with self.assertRaises(ProtectedError):
@@ -1120,6 +1146,7 @@ class WorkspaceMutationServiceTests(WorkspaceTestDataMixin, TestCase):
             description="Original description",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
         for user, role in (
             (self.workspace_admin, WorkspaceMember.Role.ADMIN),
@@ -1133,15 +1160,16 @@ class WorkspaceMutationServiceTests(WorkspaceTestDataMixin, TestCase):
             )
 
     def test_profile_owner_and_admin_create_workspace_with_server_owned_scope(self):
-        for label, actor in (
-            ("owner", self.owner),
-            ("profile-admin", self.profile_admin),
+        for label, actor, period in (
+            ("owner", self.owner, date(2026, 11, 1)),
+            ("profile-admin", self.profile_admin, date(2026, 12, 1)),
         ):
             with self.subTest(actor=label):
                 workspace = create_workspace(
                     actor=actor,
                     profile_id=self.profile.id,
                     name=f"  {label} Workspace  ",
+                    period=period,
                     description=f"Created by {label}",
                 )
 
@@ -1167,6 +1195,7 @@ class WorkspaceMutationServiceTests(WorkspaceTestDataMixin, TestCase):
                         actor=actor,
                         profile_id=self.profile.id,
                         name="Denied Workspace",
+                        period=date(2026, 11, 1),
                     )
 
         self.assertFalse(
@@ -1281,6 +1310,7 @@ class WorkspaceMutationServiceTests(WorkspaceTestDataMixin, TestCase):
                     actor=self.owner,
                     profile_id=self.profile.id,
                     name="Must roll back",
+                    period=date(2026, 11, 1),
                 )
 
         self.assertEqual(Workspace.objects.count(), before_count)
@@ -1329,11 +1359,13 @@ class WorkspaceMembershipServiceTests(WorkspaceTestDataMixin, TestCase):
             name="Membership Service Workspace",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 10, 1),
         )
         self.other_workspace = Workspace.objects.create(
             name="Other Membership Service Workspace",
             profile=self.profile,
             owner=self.owner,
+            period=date(2026, 11, 1),
         )
         for user, role in (
             (self.workspace_admin, WorkspaceMember.Role.ADMIN),
@@ -1805,6 +1837,7 @@ class WorkspaceMembershipConcurrencyTests(
             name="Concurrent Membership Workspace",
             profile=profile,
             owner=owner,
+            period=date(2026, 10, 1),
         )
         barrier = Barrier(2)
 
@@ -1945,6 +1978,7 @@ class ProfileOwnerConcurrencyTests(
                         name="Concurrent Workspace",
                         profile=thread_profile,
                         owner=thread_owner,
+                        period=date(2026, 10, 1),
                     )
                 except ValidationError:
                     return "blocked"

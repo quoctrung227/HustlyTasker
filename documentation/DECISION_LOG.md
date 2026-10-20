@@ -233,21 +233,24 @@ Authoritative approved decision:
     foundation.
 
 
-Implementation boundary at this checkpoint:
+Historical implementation boundary at the schema-foundation checkpoint
+(superseded by the later checkpoints in this file):
 
-- **IMPLEMENTED NOW IN SOURCE:** `Profile`, `ProfileMembership`, Profile roles,
+- **IMPLEMENTED IN SOURCE AT THAT CHECKPOINT:** `Profile`,
+  `ProfileMembership`, Profile roles,
   at most one active User/Profile membership while retaining inactive history,
   role check/indexes, a transitional nullable `Workspace.profile`, protected
   Workspace owner deletion, Profile creation with an initial Owner,
   transactional/locked last-owner changes, one-way Workspace tenant mapping,
   and audited direct-add of an existing active Profile member to a Workspace.
-- **MIGRATION STATE:** additive
+- **MIGRATION STATE AT THAT CHECKPOINT:** additive
   `workspace/0002_profile_workspace_foundation.py` exists and has run only on
   disposable PostgreSQL test databases. It has not been applied to the
   development database. The read-only development inventory found 0 business
   rows and 3 User rows; this does not authorize assuming another environment
   is empty.
-- **APPROVED TARGET — NOT IMPLEMENTED:** invitation records/APIs, Project,
+- **APPROVED TARGET — NOT IMPLEMENTED AT THAT CHECKPOINT:** invitation
+  records/APIs, Project,
   Client/Profile migration, Workspace-scoped Invoice, link replacements,
   soft-delete fields/services, tenant-aware RBAC/querysets, and detailed
   Task/Review or billing workflows.
@@ -401,7 +404,7 @@ permission contract):
 | Requirement actor | Capabilities explicitly confirmed by `ORIGINAL_REQUIREMENTS.md` | Accepted principal/scope | Remaining implementation detail |
 |---|---|---|---|
 | Owner | Manage Workspaces, members, Tasks, and finance. | Internal Profile OWNER; multiple equal Owners are accepted and last-owner protection is required. | Exact hard-delete authority and retention duration. |
-| Admin | Administer Workspace content and invite ordinary members. | Profile ADMIN administers every same-Profile Workspace, is never equivalent to global Django staff, cannot manage Owners, and receives no implicit sensitive Finance capability. | Exact lifecycle/settings actions outside the scoped foundation. |
+| Admin | Administer Workspace content and invite ordinary members. | Profile ADMIN administers every same-Profile Workspace, is never equivalent to global Django staff, cannot manage Owners, and receives no implicit sensitive Finance capability. | Workspace archive/restore is now implemented; exact Profile settings and other lifecycle actions remain outside this scope. |
 | Member / Editor | Receive and execute Tasks, upload deliverables, and update status; Editor can claim available Tasks. | Ordinary Profile MEMBER plus explicit `WorkspaceMember.MEMBER`, interpreted as Editor. | Allowed Task transitions and review/claim concurrency rules. |
 | Viewer | Read within an explicitly assigned Workspace. | `WorkspaceMember.VIEWER` is read-only and receives no mutation capability. | Exact visible fields and download/export rules remain denied until their endpoint contracts are reviewed. |
 | Guest Reviewer | Review a product through a public link without an account. | External, capability-scoped `ReviewShareLink` principal; not a membership role. | Exact visible fields, allowed decision/comment actions, expiry, revoke, and identity/audit requirements. |
@@ -416,11 +419,12 @@ Accepted membership boundary and proposed future invitation lifecycle:
 
 - **[CURRENT IMPLEMENTATION OF APPROVED FOUNDATION]** A new Profile starts with
   its creator as owner in one transaction.
-- **[CURRENT]** The implemented partial unique constraint permits inactive membership history
-  but allows at most one active row for each `(profile, user)` pair. Role/active
-  changes through the foundation service are audited. The existing schema also
-  keeps one `(workspace, user)` row; its complete lifecycle remains for the
-  Workspace task.
+- **[CURRENT]** The implemented partial unique constraint permits inactive
+  Profile-membership history but allows at most one active row for each
+  `(profile, user)` pair. Role/active changes through the foundation service
+  are audited. Workspace membership retains one `(workspace, user)` row and
+  now uses `is_active` for locked, audited soft revoke/reactivation; self-leave
+  and Profile invitation/rejoin policy remain downstream.
 - **[APPROVED TARGET — NOT IMPLEMENTED]** Profile Invitations are email-bound,
   use a one-time expiring credential, enforce a role ceiling, and cannot grant
   `OWNER`. Owner may invite `ADMIN` or `MEMBER`; Admin may invite only `MEMBER`.
@@ -586,7 +590,8 @@ Resolution of that checklist:
   global Django Admin boundary. Those items are no longer pending.
 - Details intentionally still downstream are: exact Task visibility and
   contributor attribution; concrete Review role/states and payroll trigger;
-  Profile/Workspace lifecycle beyond foundation invariants; verified-email and
+  general Profile CRUD/settings, self-leave and Profile invitation/rejoin
+  policy beyond the implemented bounded lifecycle; verified-email and
   unregistered-recipient onboarding; remaining Invitation delivery/history/
   purge mechanics; invoice numbering/detailed billing; Client Portal and Guest
   Review exact actions/default expiry; and broader retention/legal-hold policy.
@@ -674,9 +679,9 @@ Approved delegated decisions — 2026-10-17:
 12. **APPROVED BY OWNER DELEGATION:** Terminal Invitation metadata is retained
     for at least 12 months. No automated purge is implemented or authorized by
     `HT-RBAC-P1-03`.
-13. **APPROVED BY OWNER DELEGATION:** A future API must not disclose
-    cross-tenant object existence. Django Admin is a platform-operations
-    surface, not tenant RBAC.
+13. **APPROVED BY OWNER DELEGATION:** Every current and future tenant API must
+    not disclose cross-tenant object existence. Django Admin is a
+    platform-operations surface, not tenant RBAC.
 14. **APPROVED BY OWNER DELEGATION:** Until tenant-scoped Admin exists,
     tenant-wide Django Admin business-model access is restricted to platform
     superusers.
@@ -738,7 +743,7 @@ Implementation outcome — 2026-10-18:
 - Final PostgreSQL verification passed 51/51 targeted Workspace tests and
   80/80 full tests, plus dependency, compile, system and migration-drift checks.
 - No model, migration, API route, authentication mechanism or development data
-  changed; `workspace.0002` remains unapplied to development.
+  changed; at that checkpoint, `workspace.0002` was unapplied to development.
 
 
 Approved foundation contract and deferred follow-ons:
@@ -798,7 +803,10 @@ Resolution of the former owner-review checklist:
 - Verified-email/account binding is a production dependency, not an optional
   substitute for token hashing. Invitation is not implemented in this task.
 - Remaining downstream gates cover Task visibility/contributor attribution;
-  Profile/Workspace lifecycle and rejoin/history details; Invitation onboarding,
+  lifecycle policy beyond the implemented bounded Profile/Workspace
+  archive/restore and Workspace-member revoke/reactivate behavior (including
+  self-leave, retention/purge, and Profile-membership rejoin/history);
+  Invitation onboarding,
   delivery, inviter revalidation, exact state/history and purge mechanics;
   exact API envelopes/platform-operator API bypass; Invoice numbering/billing;
   Client Portal/Guest Review capabilities/default expiry; and broader
@@ -823,8 +831,9 @@ Consequences:
   separately approved target inventory/backup and `workspace.0002` apply before
   any development Workspace API exercise → minimal Profile/Workspace reads →
   separately authorized schema-free Workspace write/member-manager slice →
-  Owner-approved lifecycle schema/policy or Invitation migration/service/API →
-  later Task and tenant-domain work.
+  Owner-approved lifecycle/period schema and implementation → separately
+  approved development application of `workspace.0003` → Invitation or later
+  Task and tenant-domain work under their own gates.
 - Any existing row that cannot be mapped from verified evidence remains an
   operational blocker for its constraint/backfill phase. It is not permission
   to synthesize a tenant mapping.
@@ -854,14 +863,15 @@ Operational rollout checkpoint — 2026-10-19:
   separately below.
 
 
-Workspace write/member implementation checkpoint — 2026-10-19:
+Historical Workspace write/member schema-free checkpoint — 2026-10-19
+(superseded for current source behavior):
 
 - After accepting HT-DB-P1-05, the Owner explicitly authorized
   `HT-WORK-P2-02` for the schema-free Workspace write and membership-management
   subset. This is implementation authorization under the existing delegated
   RBAC decisions, not approval of a new lifecycle, retention, period, rejoin,
   or deletion policy.
-- Current endpoints now include `POST` Workspace collection, `PATCH` Workspace
+- At that checkpoint, endpoints included `POST` Workspace collection, `PATCH` Workspace
   detail, `GET`/`POST` Workspace members, and `PATCH` Workspace-member detail.
   Strict serializers allow only `name`/`description`,
   `target_profile_membership_id`/`role`, or `role` as applicable; Profile,
@@ -884,10 +894,49 @@ Workspace write/member implementation checkpoint — 2026-10-19:
   plus Django system and migration consistency checks. No model, migration,
   authentication, or development-data change occurred; development remains at
   applied `workspace.0002` with 3 Users and zero business rows.
-- No lifecycle decision was inferred. `Profile` lacks an active lifecycle,
-  `Workspace` lacks archive state and a canonical month/period, and
-  `WorkspaceMember` lacks active/history state. Workspace archive/restore and
-  Workspace-member DELETE/revoke/deactivate remain unavailable (`405`) until
-  the Owner approves the additive schema and policies for lifecycle effects,
-  restore/rejoin, role ceilings, and the monthly period contract. No
-  `workspace.0003` exists.
+- At that historical checkpoint, no lifecycle decision had yet been inferred:
+  `Profile` lacked an active lifecycle, `Workspace` lacked archive state and a
+  canonical month/period, `WorkspaceMember` lacked active/history state, and no
+  `workspace.0003` existed. The Owner subsequently approved the bounded
+  schema-dependent behavior recorded below; broader retention, purge,
+  self-leave, and Profile-membership rejoin policy remain separate.
+
+
+Schema-dependent lifecycle/period implementation checkpoint — 2026-10-19:
+
+- **APPROVED AND IMPLEMENTED IN SOURCE:** `Profile.status` and
+  `Workspace.status` use `ACTIVE`/`ARCHIVED`. Profile archive/restore is
+  Owner-only; Profile Admin cannot perform it. Profile Owner/Admin may
+  archive/restore a same-Profile Workspace; Workspace Admin cannot. Archived
+  rows remain tenant-scoped/readable, while an archived Profile blocks normal
+  child writes and an archived Workspace blocks normal metadata/membership
+  mutations. Hard delete is not exposed by the tenant API/service contract;
+  existing platform/Admin destructive paths remain outside this task and
+  require separate control.
+- **APPROVED AND IMPLEMENTED IN SOURCE:** every supported new Workspace has an
+  immutable canonical monthly `period` represented by the first day. A Profile
+  may have at most one Workspace for a non-null period, including archived
+  rows. Null exists only to preserve unresolved legacy rows; no backfill month
+  is guessed, and direct ORM/bulk/raw paths that bypass supported validation
+  remain outside the mutation contract.
+- **APPROVED AND IMPLEMENTED IN SOURCE:** `WorkspaceMember.is_active` retains
+  one `(workspace, user)` history row. DELETE soft-revokes effective access;
+  later direct-add reactivates that same row with the requested permitted role.
+  Actor ceilings, Profile-first locking, concurrent-conflict behavior, and
+  material lifecycle/membership AuditLog events are enforced transactionally.
+- Additive `workspace.0003_workspace_lifecycle_and_period` creates only the
+  approved fields, checks, conditional Profile/period uniqueness, and indexes.
+  An isolated PostgreSQL `0002 → 0003` migration test preserved legacy
+  Workspace/WorkspaceMember and Task → Deliverable → Review relationships
+  without assigning a period.
+- Verification passed `pip check`, Django system check,
+  `makemigrations --check --dry-run`, 140/140 Workspace tests in 79.278s, and
+  169/169 full PostgreSQL tests in 82.920s.
+- **ROLLOUT BOUNDARY:** the latest successful post-suite development inventory
+  on 2026-10-19 showed 27 applied migrations with `workspace.0002` applied and
+  `workspace.0003` absent, 3 Users and zero checked business rows/test
+  databases. A read-only check on 2026-10-20 found the existing development
+  PostgreSQL container stopped; it was not started or changed. Production was
+  not touched. The source implementation status is therefore `IMPLEMENTATION
+  COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`; this checkpoint is not
+  permission to apply `0003` anywhere.

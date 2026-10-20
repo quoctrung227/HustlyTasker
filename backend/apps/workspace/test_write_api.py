@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import uuid4
 from unittest.mock import patch
 
@@ -27,6 +28,8 @@ class WorkspaceWriteApiTests(APITestCase):
         "profile_id",
         "name",
         "description",
+        "period",
+        "status",
         "created_at",
         "updated_at",
     }
@@ -34,6 +37,7 @@ class WorkspaceWriteApiTests(APITestCase):
         "id",
         "profile_membership_id",
         "role",
+        "is_active",
         "joined_at",
         "updated_at",
     }
@@ -100,12 +104,14 @@ class WorkspaceWriteApiTests(APITestCase):
             owner=cls.owner,
             name="Primary Workspace",
             description="Original description",
+            period=date(2026, 10, 1),
         )
         cls.sibling_workspace = Workspace.objects.create(
             profile=cls.profile,
             owner=cls.owner,
             name="Sibling Workspace",
             description="Sibling description",
+            period=date(2026, 11, 1),
         )
         cls.workspace_admin_assignment = WorkspaceMember.objects.create(
             workspace=cls.workspace,
@@ -147,6 +153,7 @@ class WorkspaceWriteApiTests(APITestCase):
             owner=cls.other_owner,
             name="Other Workspace",
             description="Other tenant data",
+            period=date(2026, 10, 1),
         )
         cls.other_assignment = WorkspaceMember.objects.create(
             workspace=cls.other_workspace,
@@ -187,9 +194,36 @@ class WorkspaceWriteApiTests(APITestCase):
             kwargs={"profile_id": profile_id or self.profile.id},
         )
 
+    def profile_detail_url(self, profile_id=None):
+        return reverse(
+            "workspace:profile-detail",
+            kwargs={"profile_id": profile_id or self.profile.id},
+        )
+
     def workspace_detail_url(self, workspace_id=None, profile_id=None):
         return reverse(
             "workspace:workspace-detail",
+            kwargs={
+                "profile_id": profile_id or self.profile.id,
+                "workspace_id": workspace_id or self.workspace.id,
+            },
+        )
+
+    def profile_lifecycle_url(self, action, profile_id=None):
+        return reverse(
+            f"workspace:profile-{action}",
+            kwargs={"profile_id": profile_id or self.profile.id},
+        )
+
+    def workspace_lifecycle_url(
+        self,
+        action,
+        *,
+        profile_id=None,
+        workspace_id=None,
+    ):
+        return reverse(
+            f"workspace:workspace-{action}",
             kwargs={
                 "profile_id": profile_id or self.profile.id,
                 "workspace_id": workspace_id or self.workspace.id,
@@ -243,17 +277,21 @@ class WorkspaceWriteApiTests(APITestCase):
 
     def test_profile_owner_and_admin_can_create_workspace(self):
         cases = (
-            (self.owner, "Owner-created Workspace"),
-            (self.profile_admin, "Admin-created Workspace"),
+            (self.owner, "Owner-created Workspace", "2026-12-01"),
+            (self.profile_admin, "Admin-created Workspace", "2027-01-01"),
         )
 
-        for actor, name in cases:
+        for actor, name, period in cases:
             with self.subTest(actor=actor.username):
                 client = APIClient()
                 client.force_login(actor)
                 response = client.post(
                     self.workspace_list_url(),
-                    {"name": name, "description": "Created through API"},
+                    {
+                        "name": name,
+                        "description": "Created through API",
+                        "period": period,
+                    },
                     format="json",
                 )
 
@@ -265,6 +303,7 @@ class WorkspaceWriteApiTests(APITestCase):
                 self.assertEqual(workspace.profile, self.profile)
                 self.assertEqual(workspace.owner, actor)
                 self.assertEqual(workspace.name, name)
+                self.assertEqual(workspace.period.isoformat(), period)
 
     def test_profile_member_cannot_create_workspace(self):
         self.client.force_login(self.workspace_admin)
@@ -272,7 +311,7 @@ class WorkspaceWriteApiTests(APITestCase):
 
         response = self.client.post(
             self.workspace_list_url(),
-            {"name": "Forbidden Workspace"},
+            {"name": "Forbidden Workspace", "period": "2026-12-01"},
             format="json",
         )
 
@@ -287,8 +326,10 @@ class WorkspaceWriteApiTests(APITestCase):
             self.workspace_list_url(),
             {
                 "name": "Mass-assignment attempt",
+                "period": "2026-12-01",
                 "profile_id": str(self.other_profile.id),
                 "owner_id": str(self.outsider.id),
+                "status": Workspace.Status.ARCHIVED,
                 "unexpected": "value",
             },
             format="json",
@@ -297,7 +338,7 @@ class WorkspaceWriteApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertSetEqual(
             set(response.data),
-            {"profile_id", "owner_id", "unexpected"},
+            {"profile_id", "owner_id", "status", "unexpected"},
         )
         self.assertEqual(Workspace.objects.count(), before_count)
 
@@ -305,7 +346,10 @@ class WorkspaceWriteApiTests(APITestCase):
         self.client.force_login(self.owner)
         before_count = Workspace.objects.count()
 
-        for payload in ({}, {"name": "   "}):
+        for payload in (
+            {"period": "2026-12-01"},
+            {"name": "   ", "period": "2026-12-01"},
+        ):
             with self.subTest(payload=payload):
                 response = self.client.post(
                     self.workspace_list_url(),
@@ -319,6 +363,50 @@ class WorkspaceWriteApiTests(APITestCase):
                 self.assertEqual(set(response.data), {"name"})
 
         self.assertEqual(Workspace.objects.count(), before_count)
+
+    def test_workspace_create_requires_a_canonical_month_period(self):
+        self.client.force_login(self.owner)
+        before_count = Workspace.objects.count()
+
+        for payload in (
+            {"name": "Missing period"},
+            {"name": "Non-canonical period", "period": "2026-12-02"},
+        ):
+            with self.subTest(payload=payload):
+                response = self.client.post(
+                    self.workspace_list_url(),
+                    payload,
+                    format="json",
+                )
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_400_BAD_REQUEST,
+                )
+                self.assertEqual(set(response.data), {"period"})
+
+        self.assertEqual(Workspace.objects.count(), before_count)
+
+    def test_workspace_period_conflict_is_stable_when_existing_is_archived(self):
+        Workspace.objects.filter(id=self.workspace.id).update(
+            status=Workspace.Status.ARCHIVED
+        )
+        self.client.force_login(self.owner)
+
+        response = self.client.post(
+            self.workspace_list_url(),
+            {"name": "Duplicate October", "period": "2026-10-01"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(set(response.data), {"period"})
+        self.assertEqual(
+            Workspace.objects.filter(
+                profile=self.profile,
+                period=date(2026, 10, 1),
+            ).count(),
+            1,
+        )
 
     def test_workspace_patch_allows_profile_managers_and_workspace_admin(self):
         cases = (
@@ -371,6 +459,8 @@ class WorkspaceWriteApiTests(APITestCase):
             {
                 "profile_id": str(self.other_profile.id),
                 "owner": str(self.outsider.id),
+                "period": "2027-02-01",
+                "status": Workspace.Status.ARCHIVED,
                 "not_a_field": True,
             },
             format="json",
@@ -379,11 +469,229 @@ class WorkspaceWriteApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertSetEqual(
             set(response.data),
-            {"profile_id", "owner", "not_a_field"},
+            {"profile_id", "owner", "period", "status", "not_a_field"},
         )
         self.workspace.refresh_from_db()
         self.assertEqual(self.workspace.profile, self.profile)
         self.assertEqual(self.workspace.owner, self.owner)
+
+    def test_profile_owner_archives_and_restores_but_admin_cannot(self):
+        self.client.force_login(self.owner)
+        archive_response = self.client.post(
+            self.profile_lifecycle_url("archive"),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(archive_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            archive_response.data["status"],
+            self.profile.Status.ARCHIVED,
+        )
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.status, self.profile.Status.ARCHIVED)
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action="profile.archived",
+                entity_id=self.profile.id,
+            ).count(),
+            1,
+        )
+
+        admin_client = APIClient()
+        admin_client.force_login(self.profile_admin)
+        denied_restore = admin_client.post(
+            self.profile_lifecycle_url("restore"),
+            {},
+            format="json",
+        )
+        self.assertEqual(
+            denied_restore.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        restore_response = self.client.post(
+            self.profile_lifecycle_url("restore"),
+            {},
+            format="json",
+        )
+        self.assertEqual(restore_response.status_code, status.HTTP_200_OK)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.status, self.profile.Status.ACTIVE)
+
+    def test_archived_profile_remains_readable_and_blocks_child_writes(self):
+        self.client.force_login(self.owner)
+        self.client.post(
+            self.profile_lifecycle_url("archive"),
+            {},
+            format="json",
+        )
+
+        responses = (
+            self.client.get(self.profile_detail_url()),
+            self.client.get(self.workspace_detail_url()),
+        )
+        for response in responses:
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        blocked = (
+            self.client.post(
+                self.workspace_list_url(),
+                {"name": "Blocked", "period": "2026-12-01"},
+                format="json",
+            ),
+            self.client.patch(
+                self.workspace_detail_url(),
+                {"name": "Blocked"},
+                format="json",
+            ),
+            self.client.post(
+                self.workspace_member_list_url(),
+                {
+                    "target_profile_membership_id": str(
+                        self.target_profile_membership.id
+                    ),
+                    "role": WorkspaceMember.Role.MEMBER,
+                },
+                format="json",
+            ),
+        )
+        for response in blocked:
+            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_profile_lifecycle_is_idempotent_without_duplicate_audit(self):
+        self.client.force_login(self.owner)
+
+        first = self.client.post(
+            self.profile_lifecycle_url("archive"), {}, format="json"
+        )
+        second = self.client.post(
+            self.profile_lifecycle_url("archive"), {}, format="json"
+        )
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action="profile.archived",
+                entity_id=self.profile.id,
+            ).count(),
+            1,
+        )
+
+    def test_profile_managers_archive_and_restore_workspace(self):
+        for actor in (self.owner, self.profile_admin):
+            with self.subTest(actor=actor.username):
+                client = APIClient()
+                client.force_login(actor)
+                archived = client.post(
+                    self.workspace_lifecycle_url("archive"),
+                    {},
+                    format="json",
+                )
+                self.assertEqual(archived.status_code, status.HTTP_200_OK)
+                self.assertEqual(
+                    archived.data["status"],
+                    Workspace.Status.ARCHIVED,
+                )
+
+                restored = client.post(
+                    self.workspace_lifecycle_url("restore"),
+                    {},
+                    format="json",
+                )
+                self.assertEqual(restored.status_code, status.HTTP_200_OK)
+                self.assertEqual(
+                    restored.data["status"],
+                    Workspace.Status.ACTIVE,
+                )
+
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action="workspace.archived",
+                entity_id=self.workspace.id,
+            ).count(),
+            2,
+        )
+        self.assertEqual(
+            AuditLog.objects.filter(
+                action="workspace.restored",
+                entity_id=self.workspace.id,
+            ).count(),
+            2,
+        )
+
+    def test_workspace_admin_cannot_archive_or_restore_workspace(self):
+        self.client.force_login(self.workspace_admin)
+
+        for action in ("archive", "restore"):
+            with self.subTest(action=action):
+                response = self.client.post(
+                    self.workspace_lifecycle_url(action),
+                    {},
+                    format="json",
+                )
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_403_FORBIDDEN,
+                )
+
+    def test_archived_workspace_is_readable_but_rejects_all_mutations(self):
+        self.client.force_login(self.owner)
+        self.client.post(
+            self.workspace_lifecycle_url("archive"), {}, format="json"
+        )
+
+        self.assertEqual(
+            self.client.get(self.workspace_detail_url()).status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            self.client.get(self.workspace_member_list_url()).status_code,
+            status.HTTP_200_OK,
+        )
+
+        blocked = (
+            self.client.patch(
+                self.workspace_detail_url(),
+                {"description": "Blocked"},
+                format="json",
+            ),
+            self.client.post(
+                self.workspace_member_list_url(),
+                {
+                    "target_profile_membership_id": str(
+                        self.target_profile_membership.id
+                    ),
+                    "role": WorkspaceMember.Role.MEMBER,
+                },
+                format="json",
+            ),
+            self.client.patch(
+                self.workspace_member_detail_url(),
+                {"role": WorkspaceMember.Role.MEMBER},
+                format="json",
+            ),
+            self.client.delete(self.workspace_member_detail_url()),
+        )
+        for response in blocked:
+            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_workspace_lifecycle_wrong_parent_is_generic_not_found(self):
+        self.client.force_login(self.owner)
+
+        response = self.client.post(
+            self.workspace_lifecycle_url(
+                "archive",
+                profile_id=self.other_profile.id,
+                workspace_id=self.workspace.id,
+            ),
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data, {"detail": "Not found."})
 
     def test_workspace_member_list_is_scoped_and_minimal(self):
         expected_assignments = {
@@ -637,6 +945,88 @@ class WorkspaceWriteApiTests(APITestCase):
             before_audits,
         )
 
+    def test_membership_revoke_retains_row_and_reactivation_reuses_it(self):
+        self.client.force_login(self.owner)
+        original_id = self.existing_assignment.id
+
+        revoked = self.client.delete(self.workspace_member_detail_url())
+
+        self.assertEqual(revoked.status_code, status.HTTP_204_NO_CONTENT)
+        self.existing_assignment.refresh_from_db()
+        self.assertFalse(self.existing_assignment.is_active)
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="workspace.membership.revoked",
+                entity_id=original_id,
+            ).exists()
+        )
+
+        former_member_client = APIClient()
+        former_member_client.force_login(self.existing_member)
+        self.assertEqual(
+            former_member_client.get(self.workspace_detail_url()).status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+        reactivated = self.client.post(
+            self.workspace_member_list_url(),
+            {
+                "target_profile_membership_id": str(
+                    self.existing_profile_membership.id
+                ),
+                "role": WorkspaceMember.Role.MEMBER,
+            },
+            format="json",
+        )
+
+        self.assert_workspace_member_response(
+            reactivated,
+            status_code=status.HTTP_200_OK,
+        )
+        self.assertEqual(reactivated.data["id"], str(original_id))
+        self.assertTrue(reactivated.data["is_active"])
+        self.existing_assignment.refresh_from_db()
+        self.assertTrue(self.existing_assignment.is_active)
+        self.assertEqual(
+            self.existing_assignment.role,
+            WorkspaceMember.Role.MEMBER,
+        )
+        self.assertEqual(
+            WorkspaceMember.objects.filter(
+                workspace=self.workspace,
+                user=self.existing_member,
+            ).count(),
+            1,
+        )
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="workspace.membership.reactivated",
+                entity_id=original_id,
+            ).exists()
+        )
+
+    def test_workspace_admin_cannot_revoke_an_admin_assignment(self):
+        self.client.force_login(self.workspace_admin)
+
+        response = self.client.delete(
+            self.workspace_member_detail_url(
+                self.workspace_admin_assignment.id
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.workspace_admin_assignment.refresh_from_db()
+        self.assertTrue(self.workspace_admin_assignment.is_active)
+
+    def test_workspace_admin_can_revoke_editor_or_viewer(self):
+        self.client.force_login(self.workspace_admin)
+
+        response = self.client.delete(self.workspace_member_detail_url())
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.existing_assignment.refresh_from_db()
+        self.assertFalse(self.existing_assignment.is_active)
+
     def test_invalid_body_membership_references_share_generic_400(self):
         self.client.force_login(self.owner)
         before_count = WorkspaceMember.objects.count()
@@ -837,7 +1227,10 @@ class WorkspaceWriteApiTests(APITestCase):
             (
                 "post",
                 self.workspace_list_url(),
-                {"name": "Anonymous Workspace"},
+                {
+                    "name": "Anonymous Workspace",
+                    "period": "2026-12-01",
+                },
             ),
             (
                 "patch",
@@ -860,6 +1253,10 @@ class WorkspaceWriteApiTests(APITestCase):
                 self.workspace_member_detail_url(),
                 {"role": WorkspaceMember.Role.MEMBER},
             ),
+            ("post", self.profile_lifecycle_url("archive"), {}),
+            ("post", self.workspace_lifecycle_url("archive"), {}),
+            ("post", self.workspace_lifecycle_url("restore"), {}),
+            ("delete", self.workspace_member_detail_url(), {}),
         )
 
         for method, url, payload in requests:
@@ -879,7 +1276,7 @@ class WorkspaceWriteApiTests(APITestCase):
             (
                 "post",
                 self.workspace_list_url(),
-                {"name": "CSRF Workspace"},
+                {"name": "CSRF Workspace", "period": "2026-12-01"},
             ),
             (
                 "patch",
@@ -901,6 +1298,10 @@ class WorkspaceWriteApiTests(APITestCase):
                 self.workspace_member_detail_url(),
                 {"role": WorkspaceMember.Role.MEMBER},
             ),
+            ("post", self.profile_lifecycle_url("archive"), {}),
+            ("post", self.workspace_lifecycle_url("archive"), {}),
+            ("post", self.workspace_lifecycle_url("restore"), {}),
+            ("delete", self.workspace_member_detail_url(), {}),
         )
 
         for method, url, payload in requests:
@@ -920,7 +1321,10 @@ class WorkspaceWriteApiTests(APITestCase):
 
         response = client.post(
             self.workspace_list_url(),
-            {"name": "CSRF-authorized Workspace"},
+            {
+                "name": "CSRF-authorized Workspace",
+                "period": "2026-12-01",
+            },
             format="json",
             HTTP_X_CSRFTOKEN=csrf_response.data["csrf_token"],
         )
@@ -931,23 +1335,18 @@ class WorkspaceWriteApiTests(APITestCase):
             status_code=status.HTTP_201_CREATED,
         )
 
-    def test_archive_and_membership_delete_remain_disabled(self):
+    def test_profile_and_workspace_hard_delete_remain_disabled(self):
         self.client.force_login(self.owner)
+        profile_count = self.profile.__class__.objects.count()
         workspace_count = Workspace.objects.count()
-        member_count = WorkspaceMember.objects.count()
 
+        profile_response = self.client.delete(self.profile_detail_url())
         workspace_response = self.client.delete(self.workspace_detail_url())
-        membership_response = self.client.delete(
-            self.workspace_member_detail_url()
-        )
 
-        self.assertEqual(
-            workspace_response.status_code,
-            status.HTTP_405_METHOD_NOT_ALLOWED,
-        )
-        self.assertEqual(
-            membership_response.status_code,
-            status.HTTP_405_METHOD_NOT_ALLOWED,
-        )
+        for response in (profile_response, workspace_response):
+            self.assertEqual(
+                response.status_code,
+                status.HTTP_405_METHOD_NOT_ALLOWED,
+            )
+        self.assertEqual(self.profile.__class__.objects.count(), profile_count)
         self.assertEqual(Workspace.objects.count(), workspace_count)
-        self.assertEqual(WorkspaceMember.objects.count(), member_count)

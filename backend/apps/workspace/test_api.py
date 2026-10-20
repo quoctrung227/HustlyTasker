@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import uuid4
 from unittest.mock import patch
 
@@ -20,6 +21,7 @@ class ProfileWorkspaceReadApiTests(APITestCase):
     profile_fields = {
         "id",
         "name",
+        "status",
         "created_at",
         "updated_at",
     }
@@ -28,12 +30,15 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         "profile_id",
         "name",
         "description",
+        "period",
+        "status",
         "created_at",
         "updated_at",
     }
 
     @classmethod
     def setUpTestData(cls):
+        cls._workspace_sequence = 0
         cls.owner = cls._create_user("owner")
         cls.admin = cls._create_user("admin")
         cls.member = cls._create_user("member")
@@ -151,11 +156,18 @@ class ProfileWorkspaceReadApiTests(APITestCase):
 
     @classmethod
     def _create_workspace(cls, name, *, profile, owner):
+        cls._workspace_sequence += 1
+        month_index = cls._workspace_sequence - 1
         return Workspace.objects.create(
             name=name,
             description=f"Description for {name}",
             profile=profile,
             owner=owner,
+            period=date(
+                2026 + month_index // 12,
+                month_index % 12 + 1,
+                1,
+            ),
         )
 
     def setUp(self):
@@ -460,11 +472,11 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         self.assertNotIn("owner", response.data)
         self.assertNotIn("members", response.data)
 
-    def test_workspace_membership_deletion_revokes_read_immediately(self):
+    def test_inactive_workspace_membership_revokes_read_immediately(self):
         self.client.force_login(self.member)
         WorkspaceMember.objects.filter(
             id=self.viewer_workspace_membership.id
-        ).delete()
+        ).update(is_active=False)
 
         list_response = self.client.get(
             self.workspace_list_url(self.profile.id),
@@ -485,6 +497,12 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         self.assertEqual(
             detail_response.status_code,
             status.HTTP_404_NOT_FOUND,
+        )
+        self.assertTrue(
+            WorkspaceMember.objects.filter(
+                id=self.viewer_workspace_membership.id,
+                is_active=False,
+            ).exists()
         )
 
     def test_inactive_user_cannot_use_an_established_session(self):

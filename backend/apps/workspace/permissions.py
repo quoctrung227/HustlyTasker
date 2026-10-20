@@ -6,7 +6,10 @@ from .access import (
     TenantAccessNotFound,
     can_create_workspace,
     can_edit_workspace,
+    can_manage_profile_lifecycle,
+    can_manage_workspace_lifecycle,
     can_manage_workspace_members,
+    can_mutate_workspace_members,
     can_read_workspace,
     resolve_profile_access_context,
     resolve_workspace_access_context,
@@ -79,6 +82,16 @@ class CanCreateWorkspace(HasProfileAccess):
         return can_create_workspace(view.profile_access_context)
 
 
+class CanManageProfileLifecycle(HasProfileAccess):
+    """Allow Profile archive/restore only to a current Profile Owner."""
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+
+        return can_manage_profile_lifecycle(view.profile_access_context)
+
+
 class CanEditWorkspaceMetadata(HasWorkspaceReadAccess):
     """Resolve an assigned Workspace, then enforce its metadata capability."""
 
@@ -96,4 +109,21 @@ class CanManageWorkspaceMembers(HasWorkspaceReadAccess):
         if not super().has_permission(request, view):
             return False
 
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            return can_mutate_workspace_members(
+                view.workspace_access_context
+            )
+
         return can_manage_workspace_members(view.workspace_access_context)
+
+
+class CanManageWorkspaceLifecycle(HasWorkspaceReadAccess):
+    """Restrict archive/restore to same-Profile Owner/Admin actors."""
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+
+        return can_manage_workspace_lifecycle(
+            view.workspace_access_context
+        )

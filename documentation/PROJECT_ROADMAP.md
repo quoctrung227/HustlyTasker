@@ -1,6 +1,6 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 ## Giai đoạn hiện tại
 
@@ -18,12 +18,12 @@ hoàn thành. Owner sau đó phê duyệt có điều kiện task vận hành
 và smoke API. Task đã `COMPLETE / OWNER REVIEW GATE`: backup và restore
 rehearsal đạt, migration đã áp dụng an toàn trên development, direct smoke đạt,
 và full PostgreSQL suite PASS 101/101. Sau khi Owner review và mở task kế tiếp,
-`HT-WORK-P2-02` đang triển khai phần schema-free của Workspace write/membership:
-create Workspace, update metadata, list/direct-add/update role. Phần này đã qua
-full PostgreSQL suite 140/140. Archive/restore, month/period, Profile lifecycle
-và membership revoke/deactivate chưa thể triển khai đúng policy trên schema
-hiện tại, nên task vẫn ở `IN PROGRESS — SCHEMA APPROVAL GATE`; Invitation vẫn
-ngoài scope.
+`HT-WORK-P2-02` đã hoàn tất cả write/membership foundation lẫn phần phụ thuộc
+schema: lifecycle Profile/Workspace, monthly period, và soft revoke/reactivate
+Workspace membership. Additive migration `workspace.0003` đã được rehearsal và
+toàn bộ PostgreSQL suite PASS 169/169, nhưng chưa apply development. Task đang
+ở `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`;
+production không bị tác động và Invitation vẫn ngoài scope.
 
 ## P0 - An toàn và khả năng kiểm chứng
 
@@ -228,45 +228,59 @@ ngoài scope.
   qua HT-DB-P1-05 đã hoàn tất. Authorization này không mở Workspace write,
   membership, Invitation hoặc rollout sang môi trường khác.
 
-### HT-WORK-P2-02 - Workspace Write API & Membership Management — IN PROGRESS / SCHEMA APPROVAL GATE
+### HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
 
 - **Mục tiêu:** mở write surface nhỏ nhất cho Workspace và direct membership
   management sau tenancy/access foundation, không kéo theo Invitation hoặc
   business domain khác.
-- **Đã implement trong source:** `POST` nested Workspace collection; `PATCH`
-  Workspace detail cho `name`/`description`; `GET`/`POST` nested member
-  collection; `PATCH` nested member detail. Strict input không cho mass
-  assignment/re-parent; response member không có User PII.
+- **Đã implement trong source:** `POST` nested Workspace collection với
+  canonical first-of-month `period`; `PATCH` Workspace detail cho
+  `name`/`description`; Profile và Workspace archive/restore; `GET`/`POST`
+  nested member collection; `PATCH` role; và `DELETE` member detail dưới dạng
+  soft revoke. Strict input không cho mass assignment/re-parent; response
+  member không có User PII.
 - **Quyền:** Profile Owner/Admin tạo và sửa Workspace, quản lý membership cùng
   Profile; Workspace Admin chỉ sửa metadata Workspace được phân công và quản lý
   Editor/Viewer. Editor/Viewer bị deny; legacy Workspace `OWNER` fail closed.
+- **Lifecycle/access:** Profile Owner archive/restore Profile; Profile
+  Owner/Admin archive/restore Workspace. Archived tenant/workspace records vẫn
+  đọc được trong tenant scope nhưng ordinary metadata, child và membership
+  writes bị chặn. Không expose hard delete cho Profile/Workspace.
+- **Membership history:** revoke đặt `WorkspaceMember.is_active=False`, mất
+  effective access ngay và giữ row lịch sử; eligible re-add tái kích hoạt đúng
+  row đó. Profile Owner/Admin và Workspace Admin tiếp tục bị giới hạn bởi role
+  ceilings đã duyệt.
 - **Service boundary:** resolve tenant trước target, revalidate dưới lock,
-  transaction + AuditLog atomic; duplicate direct-add map `409`, invalid input
-  `400`, thiếu action capability `403`, unknown/wrong-parent/cross-tenant `404`.
-- **Schema:** không sửa model, không tạo migration, development vẫn ở
-  `workspace.0002`; không có `0003`.
-- **Chưa implement:** Workspace archive/restore và WorkspaceMember revoke/
-  deactivate; `DELETE` vẫn `405`. Workspace chưa có lifecycle/month field và
-  WorkspaceMember chưa có active/history field; Profile cũng chưa có active/
-  lifecycle field. Cần Owner duyệt representation, uniqueness, visibility/
-  child-write, restore/rejoin/history và actor policy trước additive migration.
+  transaction + AuditLog atomic; duplicate active member hoặc monthly period
+  map `409`, invalid input `400`, thiếu action capability `403`, unknown/
+  wrong-parent/cross-tenant `404`.
+- **Schema source:** additive
+  `workspace.0003_workspace_lifecycle_and_period` thêm lifecycle status,
+  monthly period constraints/indexes và member active state. Uniqueness
+  `(profile, period)` áp dụng cả Workspace archived; legacy `NULL` period được
+  giữ để rollout an toàn, còn supported create bắt buộc first-of-month.
 - **Late-revocation hardening:** roster selector gắn authority hiện tại của
   actor vào SQL và chỉ trả assignment có active same-Profile membership; revoke
   role sau permission check nhưng trước lazy evaluation sẽ fail closed.
-- **Kiểm thử:** `pip check`, Django check, migration drift/check đều PASS;
-  Workspace service/read/write/API 111/111 PASS trong 62.011s; Authentication/
-  API regressions 29/29 PASS trong 7.295s; full PostgreSQL 140/140 PASS trong
-  69.873s; isolated test database đã được hủy.
-- **Development evidence:** read-only inventory trên loopback Compose
-  PostgreSQL 16.14 có 27 migration rows, `workspace.0002` applied, 3 User và 0
-  Profile/ProfileMembership/Workspace/WorkspaceMember/Task/AuditLog; không có
-  `0003` hoặc write dữ liệu/schema trong task này.
+- **Kiểm thử:** `pip check`, Django check và `makemigrations --check --dry-run`
+  PASS; Workspace PostgreSQL 140/140 PASS trong 79.278s; full PostgreSQL
+  169/169 PASS trong 82.920s. Rehearsal migration `0002 -> 0003` trên PostgreSQL
+  cô lập bảo toàn Task/Deliverable/Review. `migrate --check` exit `1` đúng dự
+  kiến vì development chưa được phép apply `0003`.
+- **Development evidence:** latest successful post-suite inventory ngày
+  2026-10-19 trên loopback Compose PostgreSQL 16.14 có 27 migration rows,
+  `workspace.0002` applied, 3 User, 0 Profile/ProfileMembership/Workspace/
+  WorkspaceMember/Task/Client/Invoice/Payment/AuditLog và không còn test
+  database. Read-only container-state check ngày 2026-10-20 thấy container hiện
+  dừng và không được khởi động lại; `0003` chưa apply, không có development
+  write và production không được truy cập.
 - **Dependencies đã đạt:** `HT-RBAC-DESIGN-P0-01`, `HT-RBAC-P1-03`,
   `HT-API-P1-04`, và controlled development rollout `HT-DB-P1-05`.
-- **Review gate:** dừng để Owner quyết định Profile lifecycle, Workspace month/
-  period và archive/restore, cùng WorkspaceMember deactivate/history/rejoin
-  trước thiết kế additive migration. Không tự tạo/apply migration, không mở task
-  mới, Invitation, Profile write API, Client/Project/Task/Finance hoặc frontend.
+- **Review gate:** dừng tại `PENDING DEVELOPMENT MIGRATION APPROVAL`. Bước kế
+  tiếp duy nhất là Owner review và, nếu phê duyệt riêng, controlled development
+  inventory/backup/plan/apply/smoke cho `workspace.0003`. Không tự apply, không
+  mở feature mới, Invitation, Profile creation, Client/Project/Task/Finance hay
+  frontend.
 
 ### HT-TASK-P2-03 - Task lifecycle/assignment/comments
 

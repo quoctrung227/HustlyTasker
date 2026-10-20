@@ -9,14 +9,19 @@ class WorkspaceAdmin(admin.ModelAdmin):
     list_display = (
         "name",
         "profile",
+        "period",
+        "status",
         "owner",
         "created_at",
     )
 
     def get_readonly_fields(self, request, obj=None):
+        readonly_fields = ["status"]
         if obj is not None and obj.profile_id is not None:
-            return ("profile",)
-        return ()
+            readonly_fields.append("profile")
+        if obj is not None and obj.period is not None:
+            readonly_fields.append("period")
+        return tuple(readonly_fields)
 
 
 @admin.register(WorkspaceMember)
@@ -26,12 +31,14 @@ class WorkspaceMemberAdmin(admin.ModelAdmin):
         "workspace",
         "user",
         "role",
+        "is_active",
     )
 
     readonly_fields = (
         "workspace",
         "user",
         "role",
+        "is_active",
         "joined_at",
         "created_at",
         "updated_at",

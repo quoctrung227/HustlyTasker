@@ -7,9 +7,34 @@ from apps.accounts.models import User
 
 class Profile(BaseModel):
 
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE"
+        ARCHIVED = "ARCHIVED"
+
     name = models.CharField(
         max_length=255
     )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=("ACTIVE", "ARCHIVED")),
+                name="profile_valid_status",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("status",),
+                name="profile_status_idx",
+            ),
+        ]
 
 
     def __str__(self):
@@ -103,6 +128,10 @@ class ProfileMembership(BaseModel):
 
 class Workspace(BaseModel):
 
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE"
+        ARCHIVED = "ARCHIVED"
+
     name = models.CharField(
         max_length=255
     )
@@ -131,20 +160,86 @@ class Workspace(BaseModel):
         related_name="owned_workspaces"
     )
 
+    period = models.DateField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Canonical monthly period represented by its first day. "
+            "Null is reserved for legacy rows awaiting an explicit mapping."
+        ),
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=("ACTIVE", "ARCHIVED")),
+                name="workspace_valid_status",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(period__isnull=True)
+                    | models.Q(period__day=1)
+                ),
+                name="workspace_period_first_day",
+            ),
+            models.UniqueConstraint(
+                fields=("profile", "period"),
+                condition=(
+                    models.Q(profile__isnull=False)
+                    & models.Q(period__isnull=False)
+                ),
+                name="uniq_profile_workspace_period",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("profile", "status", "period"),
+                name="ws_prof_status_period_idx",
+            ),
+        ]
+
 
     def clean(self):
         super().clean()
 
+        if self.period is not None and self.period.day != 1:
+            raise ValidationError({
+                "period": "Workspace period must be the first day of a month."
+            })
+
         persisted_profile_id = None
+        persisted_period = None
         persisted = False
         if self.pk:
-            persisted_profile_id = Workspace.objects.filter(
-                id=self.pk
-            ).values_list(
+            persisted_values = Workspace.objects.filter(id=self.pk).values(
                 "profile_id",
-                flat=True,
+                "period",
             ).first()
-            persisted = Workspace.objects.filter(id=self.pk).exists()
+            if persisted_values is not None:
+                persisted = True
+                persisted_profile_id = persisted_values["profile_id"]
+                persisted_period = persisted_values["period"]
+
+        if not persisted and self.period is None:
+            raise ValidationError({
+                "period": "A new workspace must have a monthly period."
+            })
+
+        if (
+            persisted
+            and persisted_period is not None
+            and self.period != persisted_period
+        ):
+            raise ValidationError({
+                "period": "A workspace monthly period cannot be changed."
+            })
 
         if self.profile_id is None:
             if persisted and persisted_profile_id is None:
@@ -256,6 +351,10 @@ class WorkspaceMember(BaseModel):
         default=Role.MEMBER
     )
 
+    is_active = models.BooleanField(
+        default=True
+    )
+
 
     joined_at = models.DateTimeField(
         auto_now_add=True
@@ -267,6 +366,12 @@ class WorkspaceMember(BaseModel):
             "workspace",
             "user"
         )
+        indexes = [
+            models.Index(
+                fields=("workspace", "is_active", "role"),
+                name="wsmem_ws_active_role_idx",
+            ),
+        ]
 
 
     def clean(self):
@@ -300,7 +405,7 @@ class WorkspaceMember(BaseModel):
                 )
             })
 
-        if not ProfileMembership.objects.filter(
+        if self.is_active and not ProfileMembership.objects.filter(
             profile_id=profile_id,
             user_id=self.user_id,
             user__is_active=True,

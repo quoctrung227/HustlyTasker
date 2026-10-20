@@ -18,23 +18,34 @@ from .access import (
 from .permissions import (
     CanCreateWorkspace,
     CanEditWorkspaceMetadata,
+    CanManageProfileLifecycle,
+    CanManageWorkspaceLifecycle,
     CanManageWorkspaceMembers,
     HasActiveTenantIdentity,
     HasProfileAccess,
     HasWorkspaceReadAccess,
 )
 from .serializers import (
+    ProfileLifecycleSerializer,
     ProfileReadSerializer,
+    WorkspaceCreateSerializer,
+    WorkspaceLifecycleSerializer,
     WorkspaceMemberCreateSerializer,
     WorkspaceMemberReadSerializer,
     WorkspaceMemberUpdateSerializer,
     WorkspaceReadSerializer,
-    WorkspaceWriteSerializer,
+    WorkspaceUpdateSerializer,
 )
 from .services import (
     WorkspaceMembershipConflict,
+    WorkspacePeriodConflict,
     add_workspace_member,
+    archive_profile,
+    archive_workspace,
     create_workspace,
+    restore_profile,
+    restore_workspace,
+    revoke_workspace_member,
     update_workspace,
     update_workspace_member,
 )
@@ -57,7 +68,10 @@ class TenantApiViewMixin:
     pagination_class = StandardResultsSetPagination
 
     def handle_exception(self, exc):
-        if isinstance(exc, WorkspaceMembershipConflict):
+        if isinstance(
+            exc,
+            (WorkspaceMembershipConflict, WorkspacePeriodConflict),
+        ):
             exc = Conflict(detail=_django_validation_detail(exc))
         elif isinstance(exc, TenantAccessNotFound):
             exc = NotFound()
@@ -121,6 +135,31 @@ class ProfileDetailView(
 
 
 @method_decorator(never_cache, name="dispatch")
+class ProfileLifecycleView(TenantApiViewMixin, generics.GenericAPIView):
+    serializer_class = ProfileLifecycleSerializer
+    permission_classes = (CanManageProfileLifecycle,)
+    http_method_names = ("post", "options")
+    lifecycle_service = None
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = self.lifecycle_service(
+            actor=request.user,
+            profile_id=self.profile_access_context.profile_id,
+        )
+        return Response(ProfileReadSerializer(profile).data)
+
+
+class ProfileArchiveView(ProfileLifecycleView):
+    lifecycle_service = staticmethod(archive_profile)
+
+
+class ProfileRestoreView(ProfileLifecycleView):
+    lifecycle_service = staticmethod(restore_profile)
+
+
+@method_decorator(never_cache, name="dispatch")
 class WorkspaceListView(TenantApiViewMixin, generics.ListAPIView):
     serializer_class = WorkspaceReadSerializer
     permission_classes = (HasProfileAccess,)
@@ -141,7 +180,7 @@ class WorkspaceListView(TenantApiViewMixin, generics.ListAPIView):
         )
 
     def post(self, request, *args, **kwargs):
-        serializer = WorkspaceWriteSerializer(data=request.data)
+        serializer = WorkspaceCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         workspace = create_workspace(
@@ -178,7 +217,7 @@ class WorkspaceDetailView(
         return workspaces_visible_to(self.profile_access_context)
 
     def patch(self, request, *args, **kwargs):
-        serializer = WorkspaceWriteSerializer(
+        serializer = WorkspaceUpdateSerializer(
             data=request.data,
             partial=True,
         )
@@ -192,6 +231,33 @@ class WorkspaceDetailView(
         )
         response_serializer = WorkspaceReadSerializer(workspace)
         return Response(response_serializer.data)
+
+
+@method_decorator(never_cache, name="dispatch")
+class WorkspaceLifecycleView(TenantApiViewMixin, generics.GenericAPIView):
+    serializer_class = WorkspaceLifecycleSerializer
+    permission_classes = (CanManageWorkspaceLifecycle,)
+    http_method_names = ("post", "options")
+    lifecycle_service = None
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        workspace = self.lifecycle_service(
+            actor=request.user,
+            profile_id=self.workspace_access_context.profile_id,
+            workspace_id=self.workspace_access_context.workspace_id,
+        )
+        return Response(WorkspaceReadSerializer(workspace).data)
+
+
+class WorkspaceArchiveView(WorkspaceLifecycleView):
+    lifecycle_service = staticmethod(archive_workspace)
+
+
+class WorkspaceRestoreView(WorkspaceLifecycleView):
+    lifecycle_service = staticmethod(restore_workspace)
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -221,7 +287,11 @@ class WorkspaceMemberListView(TenantApiViewMixin, generics.ListAPIView):
         response_serializer = WorkspaceMemberReadSerializer(membership)
         return Response(
             response_serializer.data,
-            status=status.HTTP_201_CREATED,
+            status=(
+                status.HTTP_200_OK
+                if membership.was_reactivated
+                else status.HTTP_201_CREATED
+            ),
         )
 
 
@@ -229,7 +299,7 @@ class WorkspaceMemberListView(TenantApiViewMixin, generics.ListAPIView):
 class WorkspaceMemberDetailView(TenantApiViewMixin, generics.GenericAPIView):
     serializer_class = WorkspaceMemberReadSerializer
     permission_classes = (CanManageWorkspaceMembers,)
-    http_method_names = ("patch", "options")
+    http_method_names = ("patch", "delete", "options")
     lookup_field = "id"
     lookup_url_kwarg = "membership_id"
 
@@ -266,3 +336,13 @@ class WorkspaceMemberDetailView(TenantApiViewMixin, generics.GenericAPIView):
         membership.profile_membership_id = profile_membership_id
         response_serializer = WorkspaceMemberReadSerializer(membership)
         return Response(response_serializer.data)
+
+    def delete(self, request, *args, **kwargs):
+        membership = self._get_membership()
+        revoke_workspace_member(
+            actor=request.user,
+            profile_id=self.workspace_access_context.profile_id,
+            workspace_id=self.workspace_access_context.workspace_id,
+            membership_id=membership.id,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)

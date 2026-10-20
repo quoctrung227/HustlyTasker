@@ -6,7 +6,9 @@ from apps.audit.models import AuditLog
 from .access import (
     TenantAccessNotFound,
     can_edit_workspace,
-    can_manage_workspace_members,
+    can_manage_profile_lifecycle,
+    can_manage_workspace_lifecycle,
+    can_mutate_workspace_members,
     resolve_profile_access_context,
     resolve_workspace_access_context,
 )
@@ -27,6 +29,13 @@ class WorkspaceMembershipConflict(ValidationError):
 
     def __init__(self):
         super().__init__({"target_profile_membership_id": self.default_message})
+
+
+class WorkspacePeriodConflict(ValidationError):
+    default_message = "A Workspace already exists for this monthly period."
+
+    def __init__(self):
+        super().__init__({"period": self.default_message})
 
 
 class InvalidWorkspaceMembershipReference(ValidationError):
@@ -76,6 +85,20 @@ def _write_workspace_audit(*, actor, workspace, action, before, after):
     )
 
 
+def _write_profile_audit(*, actor, profile, action, before, after):
+    AuditLog.objects.create(
+        user=actor,
+        action=action,
+        entity_name="Profile",
+        entity_id=profile.id,
+        metadata={
+            "profile_id": str(profile.id),
+            "before": before,
+            "after": after,
+        },
+    )
+
+
 def _lock_workspace_mutation_context(*, actor, profile_id, workspace_id):
     profile_context = resolve_profile_access_context(actor, profile_id)
     workspace_context = resolve_workspace_access_context(
@@ -83,9 +106,14 @@ def _lock_workspace_mutation_context(*, actor, profile_id, workspace_id):
         workspace_id,
     )
 
-    Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(
         id=profile_context.profile_id
     ).get()
+
+    if profile.status != Profile.Status.ACTIVE:
+        raise PermissionDenied(
+            "Workspace changes are not allowed while the Profile is archived."
+        )
 
     workspace = Workspace.objects.select_for_update().filter(
         id=workspace_context.workspace_id,
@@ -109,6 +137,7 @@ def _lock_workspace_mutation_context(*, actor, profile_id, workspace_id):
         locked_workspace_role = WorkspaceMember.objects.select_for_update().filter(
             workspace_id=workspace.id,
             user_id=actor_membership.user_id,
+            is_active=True,
             role__in=(
                 WorkspaceMember.Role.ADMIN,
                 WorkspaceMember.Role.MEMBER,
@@ -166,6 +195,71 @@ def create_profile_with_owner(*, name, owner):
 
 
 @transaction.atomic
+def _set_profile_status(*, actor, profile_id, next_status):
+    profile_context = resolve_profile_access_context(actor, profile_id)
+    profile = Profile.objects.select_for_update().filter(
+        id=profile_context.profile_id,
+    ).first()
+    if profile is None:
+        raise TenantAccessNotFound()
+
+    actor_membership = ProfileMembership.objects.select_for_update().filter(
+        id=profile_context.membership_id,
+        profile_id=profile_context.profile_id,
+        user_id=profile_context.user_id,
+        user__is_active=True,
+        is_active=True,
+        role=ProfileMembership.Role.OWNER,
+    ).first()
+    if actor_membership is None:
+        raise PermissionDenied("Profile lifecycle management is not allowed.")
+
+    locked_context = resolve_profile_access_context(actor, profile.id)
+    if not can_manage_profile_lifecycle(locked_context):
+        raise PermissionDenied("Profile lifecycle management is not allowed.")
+
+    if next_status not in Profile.Status.values:
+        raise ValidationError({"status": "Unsupported Profile status."})
+
+    if profile.status == next_status:
+        return profile
+
+    previous_status = profile.status
+    profile.status = next_status
+    profile.full_clean()
+    profile.save(update_fields=("status", "updated_at"))
+    action = (
+        "profile.archived"
+        if next_status == Profile.Status.ARCHIVED
+        else "profile.restored"
+    )
+    _write_profile_audit(
+        actor=actor,
+        profile=profile,
+        action=action,
+        before={"status": previous_status},
+        after={"status": profile.status},
+    )
+    return profile
+
+
+def archive_profile(*, actor, profile_id):
+    return _set_profile_status(
+        actor=actor,
+        profile_id=profile_id,
+        next_status=Profile.Status.ARCHIVED,
+    )
+
+
+def restore_profile(*, actor, profile_id):
+    return _set_profile_status(
+        actor=actor,
+        profile_id=profile_id,
+        next_status=Profile.Status.ACTIVE,
+    )
+
+
+@transaction.atomic
 def update_profile_membership(
     *,
     actor,
@@ -176,9 +270,14 @@ def update_profile_membership(
 ):
     profile_context = resolve_profile_access_context(actor, profile_id)
 
-    Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(
         id=profile_context.profile_id
     ).get()
+
+    if profile.status != Profile.Status.ACTIVE:
+        raise PermissionDenied(
+            "Profile membership changes are not allowed while archived."
+        )
 
     actor_membership = ProfileMembership.objects.select_for_update().filter(
         id=profile_context.membership_id,
@@ -321,7 +420,7 @@ def update_profile_membership(
 
 
 @transaction.atomic
-def create_workspace(*, actor, profile_id, name, description=None):
+def create_workspace(*, actor, profile_id, name, period, description=None):
     profile_context = resolve_profile_access_context(actor, profile_id)
 
     profile = Profile.objects.select_for_update().filter(
@@ -329,6 +428,11 @@ def create_workspace(*, actor, profile_id, name, description=None):
     ).first()
     if profile is None:
         raise TenantAccessNotFound()
+
+    if profile.status != Profile.Status.ACTIVE:
+        raise PermissionDenied(
+            "Workspace creation is not allowed while the Profile is archived."
+        )
 
     actor_membership = ProfileMembership.objects.select_for_update().filter(
         id=profile_context.membership_id,
@@ -349,13 +453,33 @@ def create_workspace(*, actor, profile_id, name, description=None):
     ):
         raise PermissionDenied("Workspace creation is not allowed.")
 
+    if period is None:
+        raise ValidationError({"period": "A monthly period is required."})
+
+    if Workspace.objects.filter(
+        profile_id=profile.id,
+        period=period,
+    ).exists():
+        raise WorkspacePeriodConflict()
+
     workspace = Workspace(
         profile=profile,
         owner=actor,
         name=(name or "").strip(),
         description=description,
+        period=period,
+        status=Workspace.Status.ACTIVE,
     )
-    workspace.save()
+    try:
+        with transaction.atomic():
+            workspace.save()
+    except IntegrityError:
+        if Workspace.objects.filter(
+            profile_id=profile.id,
+            period=period,
+        ).exists():
+            raise WorkspacePeriodConflict() from None
+        raise
 
     _write_workspace_audit(
         actor=actor,
@@ -365,6 +489,8 @@ def create_workspace(*, actor, profile_id, name, description=None):
         after={
             "name": workspace.name,
             "description": workspace.description,
+            "period": workspace.period.isoformat(),
+            "status": workspace.status,
         },
     )
 
@@ -419,6 +545,68 @@ def update_workspace(
 
 
 @transaction.atomic
+def _set_workspace_status(
+    *,
+    actor,
+    profile_id,
+    workspace_id,
+    next_status,
+):
+    workspace_context, workspace, _ = _lock_workspace_mutation_context(
+        actor=actor,
+        profile_id=profile_id,
+        workspace_id=workspace_id,
+    )
+
+    if not can_manage_workspace_lifecycle(workspace_context):
+        raise PermissionDenied(
+            "Workspace lifecycle management is not allowed."
+        )
+
+    if next_status not in Workspace.Status.values:
+        raise ValidationError({"status": "Unsupported Workspace status."})
+
+    if workspace.status == next_status:
+        return workspace
+
+    previous_status = workspace.status
+    workspace.status = next_status
+    workspace.save(update_fields=("status", "updated_at"))
+
+    action = (
+        "workspace.archived"
+        if next_status == Workspace.Status.ARCHIVED
+        else "workspace.restored"
+    )
+    _write_workspace_audit(
+        actor=actor,
+        workspace=workspace,
+        action=action,
+        before={"status": previous_status},
+        after={"status": workspace.status},
+    )
+    return workspace
+
+
+def archive_workspace(*, actor, profile_id, workspace_id):
+    return _set_workspace_status(
+        actor=actor,
+        profile_id=profile_id,
+        workspace_id=workspace_id,
+        next_status=Workspace.Status.ARCHIVED,
+    )
+
+
+def restore_workspace(*, actor, profile_id, workspace_id):
+    return _set_workspace_status(
+        actor=actor,
+        profile_id=profile_id,
+        workspace_id=workspace_id,
+        next_status=Workspace.Status.ACTIVE,
+    )
+
+
+@transaction.atomic
 def add_workspace_member(
     *,
     actor,
@@ -435,7 +623,7 @@ def add_workspace_member(
         )
     )
 
-    if not can_manage_workspace_members(workspace_context):
+    if not can_mutate_workspace_members(workspace_context):
         raise PermissionDenied("Workspace membership management is not allowed.")
 
     if role not in WorkspaceMember.Role.values:
@@ -475,17 +663,45 @@ def add_workspace_member(
     if target_membership is None:
         raise InvalidWorkspaceMembershipReference()
 
-    existing_membership = WorkspaceMember.objects.select_for_update().filter(
-        workspace_id=workspace.id,
-        user_id=target_membership.user_id,
-    ).first()
+    existing_membership = (
+        WorkspaceMember.objects.select_for_update().select_related(
+            "workspace"
+        ).filter(
+            workspace_id=workspace.id,
+            user_id=target_membership.user_id,
+        ).first()
+    )
     if existing_membership is not None:
-        raise WorkspaceMembershipConflict()
+        if existing_membership.is_active:
+            raise WorkspaceMembershipConflict()
+
+        before = {
+            "role": existing_membership.role,
+            "is_active": False,
+        }
+        existing_membership.role = role
+        existing_membership.is_active = True
+        existing_membership.save(
+            update_fields=("role", "is_active", "updated_at")
+        )
+        _write_membership_audit(
+            actor=actor,
+            membership=existing_membership,
+            action="workspace.membership.reactivated",
+            before=before,
+            after={
+                "role": existing_membership.role,
+                "is_active": True,
+            },
+        )
+        existing_membership.was_reactivated = True
+        return existing_membership
 
     membership = WorkspaceMember(
         workspace=workspace,
         user_id=target_membership.user_id,
         role=role,
+        is_active=True,
     )
     try:
         # The nested savepoint lets the outer transaction safely translate a
@@ -505,9 +721,13 @@ def add_workspace_member(
         membership=membership,
         action="workspace.membership.created",
         before=None,
-        after={"role": membership.role},
+        after={
+            "role": membership.role,
+            "is_active": True,
+        },
     )
 
+    membership.was_reactivated = False
     return membership
 
 
@@ -528,7 +748,7 @@ def update_workspace_member(
         )
     )
 
-    if not can_manage_workspace_members(workspace_context):
+    if not can_mutate_workspace_members(workspace_context):
         raise PermissionDenied("Workspace membership management is not allowed.")
 
     if role not in WorkspaceMember.Role.values:
@@ -538,6 +758,7 @@ def update_workspace_member(
         target_user_id = WorkspaceMember.objects.filter(
             id=membership_id,
             workspace_id=workspace.id,
+            is_active=True,
         ).values_list("user_id", flat=True).first()
     except (TypeError, ValueError, ValidationError):
         raise TenantAccessNotFound() from None
@@ -562,6 +783,7 @@ def update_workspace_member(
         id=membership_id,
         workspace_id=workspace.id,
         user_id=target_profile_membership.user_id,
+        is_active=True,
     ).first()
     if membership is None:
         raise TenantAccessNotFound()
@@ -590,7 +812,10 @@ def update_workspace_member(
     if membership.role == role:
         return membership
 
-    before = {"role": membership.role}
+    before = {
+        "role": membership.role,
+        "is_active": True,
+    }
     membership.role = role
     membership.save(update_fields=("role", "updated_at"))
 
@@ -599,7 +824,94 @@ def update_workspace_member(
         membership=membership,
         action="workspace.membership.updated",
         before=before,
-        after={"role": membership.role},
+        after={
+            "role": membership.role,
+            "is_active": True,
+        },
     )
 
+    return membership
+
+
+@transaction.atomic
+def revoke_workspace_member(
+    *,
+    actor,
+    profile_id,
+    workspace_id,
+    membership_id,
+):
+    workspace_context, workspace, actor_membership = (
+        _lock_workspace_mutation_context(
+            actor=actor,
+            profile_id=profile_id,
+            workspace_id=workspace_id,
+        )
+    )
+
+    if not can_mutate_workspace_members(workspace_context):
+        raise PermissionDenied("Workspace membership management is not allowed.")
+
+    try:
+        membership = WorkspaceMember.objects.select_for_update().select_related(
+            "workspace"
+        ).filter(
+            id=membership_id,
+            workspace_id=workspace.id,
+            is_active=True,
+        ).first()
+    except (TypeError, ValueError, ValidationError):
+        raise TenantAccessNotFound() from None
+
+    if membership is None:
+        raise TenantAccessNotFound()
+
+    target_profile_membership = (
+        ProfileMembership.objects.select_for_update().filter(
+            profile_id=workspace.profile_id,
+            user_id=membership.user_id,
+            user__is_active=True,
+            is_active=True,
+        ).first()
+    )
+    if target_profile_membership is None:
+        raise InvalidWorkspaceMembershipReference(field="membership_id")
+
+    if actor_membership.role in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    ):
+        manageable_roles = (
+            WorkspaceMember.Role.ADMIN,
+            WorkspaceMember.Role.MEMBER,
+            WorkspaceMember.Role.VIEWER,
+        )
+    else:
+        manageable_roles = (
+            WorkspaceMember.Role.MEMBER,
+            WorkspaceMember.Role.VIEWER,
+        )
+
+    if membership.role not in manageable_roles:
+        raise PermissionDenied(
+            "The Workspace membership role exceeds the actor's management "
+            "ceiling."
+        )
+
+    before = {
+        "role": membership.role,
+        "is_active": True,
+    }
+    membership.is_active = False
+    membership.save(update_fields=("is_active", "updated_at"))
+    _write_membership_audit(
+        actor=actor,
+        membership=membership,
+        action="workspace.membership.revoked",
+        before=before,
+        after={
+            "role": membership.role,
+            "is_active": False,
+        },
+    )
     return membership

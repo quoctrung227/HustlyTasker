@@ -1,6 +1,6 @@
 # HUSTLYTASKER REQUIREMENT STATUS
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 ## Quy ước đánh giá
 
@@ -26,11 +26,12 @@ phép triển khai `HT-API-P1-04`. Bốn Profile/Workspace read route, DRF tenan
 permissions, scoped querysets và pagination đã hoàn thành. Owner đã mở
 `HT-DB-P1-05` để rollout có kiểm soát migration hiện hữu trên development;
 task đó đã hoàn thành với full PostgreSQL suite 101/101. Owner sau đó mở
-`HT-WORK-P2-02`. Phần schema-free hiện có Workspace create/update và nested
-membership list/direct-add/role-update và đã qua full PostgreSQL suite 140/140.
-Profile lifecycle, Workspace month/archive/restore và member revoke/deactivate
-đang dừng tại `SCHEMA APPROVAL GATE`; không có migration mới và development vẫn
-ở `workspace.0002`. Invitation, activation/recovery, các business API còn lại,
+`HT-WORK-P2-02`. Trạng thái hiện tại là **HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL**.
+Workspace write/membership, Profile/Workspace lifecycle, monthly period và
+membership soft revoke/reactivate đã triển khai trong source;
+full PostgreSQL suite PASS 169/169. Additive `workspace.0003` đã qua rehearsal
+trên PostgreSQL cô lập nhưng chưa apply development, nên development vẫn ở
+`workspace.0002`. Invitation, activation/recovery, các business API còn lại,
 frontend và deployment vẫn chưa hoàn thành.
 
 ## Nền tảng kỹ thuật
@@ -39,14 +40,14 @@ frontend và deployment vẫn chưa hoàn thành.
 |---|---|---|---|---|
 | Dependency manifest | COMPLETE | Manifest UTF-8/pinned; Django 6.1.2 và DRF 3.18.3; current container runtime pass `pip check` | Owner host shell báo venv hoạt động, nhưng Codex managed context exit 103 và không thấy base interpreter path; cached Python 3.12 container là fallback đã kiểm chứng | `backend/requirements.txt`; xác minh HT-DB-P1-05 ngày 2026-10-19 |
 | Django configuration | PARTIAL | Secret/debug/hosts/DB/CSRF/security/mailer lấy từ environment; development/production fail-fast; production-like deploy check sạch | Chưa có giá trị production thật, trusted-proxy/static/deploy contract; secret cũ cần rotate nếu từng dùng ngoài local | `backend/config/settings.py`; `.env.example`; kiểm chứng Docker 2026-10-13 |
-| Database migrations | PARTIAL | 8 initial app migrations và additive `workspace/0002_profile_workspace_foundation.py` đã áp dụng trên development sau inventory, backup, restore rehearsal và plan review; migration/test consistency PASS | Các tenant-domain migration khác chưa tạo; mọi target khác vẫn cần controlled rollout riêng | migration source; HT-DB-P1-05 completion evidence 2026-10-19 |
-| Business schema | PARTIAL | 16 concrete models gồm `Profile`/`ProfileMembership`; Workspace có transitional Profile FK; foundation constraints/services đã thêm | Workspace Profile FK vẫn nullable; chưa migrate Client/Project/Finance/Audit, Invitation, links hay soft delete | `backend/apps/workspace/models.py`; `services.py`; `documentation/DATABASE_SCHEMA.md` |
+| Database migrations | PARTIAL | 8 initial app migrations và additive `workspace/0002_profile_workspace_foundation.py` đã áp dụng trên development; source `workspace.0003_workspace_lifecycle_and_period` là additive và đã rehearsal trên PostgreSQL cô lập, gồm bảo toàn Task/Deliverable/Review | `0003` chưa apply development và chưa được phép apply production; latest successful development inventory là 2026-10-19, container được thấy đang dừng ngày 2026-10-20 và không được khởi động; mọi rollout cần inventory/backup/plan/smoke riêng | migration source; HT-DB-P1-05 evidence 2026-10-19; HT-WORK-P2-02 evidence 2026-10-20 |
+| Business schema | PARTIAL | 16 concrete models gồm `Profile`/`ProfileMembership`; source thêm Profile/Workspace lifecycle status, canonical Workspace monthly period constraints/indexes và WorkspaceMember active-history state | Development chưa có `0003`; Workspace Profile/legacy period vẫn nullable cho controlled rollout; chưa migrate Client/Project/Finance/Audit, Invitation, links hay retention/purge | `backend/apps/workspace/models.py`; `services.py`; `documentation/DATABASE_SCHEMA.md` |
 | Tenancy/ownership design | COMPLETE / ACCEPTED | Owner đã phê duyệt 11 nhóm quyết định: Profile tenant root, monthly Workspace, multi-Profile/multi-Owner, ownership và isolation target | Các chi tiết billing, public-link capabilities, retention duration, domain-specific/DRF action enforcement và detailed workflow được defer sang task tương ứng | `documentation/DECISION_LOG.md`; owner approval 2026-10-16 |
 | RBAC/access/invitation design | COMPLETE / ACCEPTED | 14 quyết định được chốt qua ủy quyền: capability matrix, compatibility roles, least-privilege ceilings, IDOR/error/operator policy và Invitation contract | Invitation implementation, reviewer role/states và downstream domain details vẫn ở task riêng | `documentation/RBAC_DESIGN.md`; `DECISION_LOG.md`; owner delegation 2026-10-17 |
-| Django Admin | PARTIAL | User, Workspace, WorkspaceMember, Task, TaskAssignment, TaskComment; Workspace Profile is read-only after mapping; WorkspaceMember is read-only; User auto-managed timestamps are readonly | Profile/ProfileMembership and 8 earlier domain models are not registered (10/16 total); current foundation adds no tenant-scoped admin authorization | `backend/apps/*/admin.py`; source review 2026-10-16 |
-| DRF/API foundation | PARTIAL | HT-API-P0-03 giữ SessionAuthentication/global `IsAuthenticated`, explicit public allowlist và health policy; Profile/Workspace read API đã kiểm chứng; HT-WORK-P2-02 thêm limited Workspace create/update và member list/add/role-update với strict inputs, no-PII output và 400/403/404/409 mapping; schema-free slice đã qua full regression | Archive/restore, member revoke/deactivate, Profile write, Invitation và downstream routes chưa có; `DELETE` vẫn 405 | `backend/api/`; `backend/apps/workspace/{views,urls,serializers,permissions,test_api,test_write_api}.py`; `API_DOCUMENTATION.md`; full PostgreSQL 140/140 ngày 2026-10-19 |
-| Authentication/RBAC | PARTIAL | Session auth giữ nguyên; verified Profile/Workspace contexts, scoped selectors, capability checks và locked tenant-scoped services; write API áp role ceilings; roster selector actor-bound trong SQL và fail closed khi authority bị revoke trước lazy evaluation | Activation/OTP/reset/logout-all, account/session lifecycle, Profile/Workspace/member lifecycle và domain-wide RBAC còn thiếu | `backend/apps/accounts/`; `backend/apps/workspace/access.py`; `permissions.py`; `views.py`; `services.py`; `RBAC_DESIGN.md` |
-| Automated tests | PARTIAL | HT-WORK gate: Workspace service/read/write/API 111/111 PASS (62.011s), Authentication/API Foundation 29/29 PASS (7.295s), full PostgreSQL 140/140 PASS (69.873s); `pip check`, system check và migration consistency PASS; isolated test DB destroyed | Chưa có CI hoặc one-command clean-checkout harness; blocked lifecycle schema chưa có tests/implementation | test sources; `PROGRESS.md`; evidence ngày 2026-10-19 |
+| Django Admin | PARTIAL | User, Workspace, WorkspaceMember, Task, TaskAssignment, TaskComment; mapped Profile and non-null period are read-only on existing Workspace rows; lifecycle status and WorkspaceMember fields are read-only; User auto-managed timestamps are readonly | Profile/ProfileMembership and 8 earlier domain models are not registered (10/16 total); current foundation adds no tenant-scoped admin authorization | `backend/apps/*/admin.py`; source review updated 2026-10-20 |
+| DRF/API foundation | PARTIAL | HT-API-P0-03 giữ SessionAuthentication/global `IsAuthenticated`, explicit public allowlist và health policy; HT-WORK-P2-02 thêm Workspace create/update, Profile/Workspace archive/restore, member list/add/role-update/soft-revoke/reactivate, strict inputs, no-PII output và 400/403/404/409 mapping | Profile creation, Invitation và downstream routes chưa có; Profile/Workspace hard delete không được expose | `backend/api/`; `backend/apps/workspace/{views,urls,serializers,permissions,test_api,test_write_api}.py`; `API_DOCUMENTATION.md`; full PostgreSQL 169/169 chạy 2026-10-19 |
+| Authentication/RBAC | PARTIAL | Session auth giữ nguyên; verified tenant contexts, scoped selectors, role ceilings và locked services; archived Profile/Workspace chặn normal/member writes nhưng vẫn tenant-safe readable; soft-revoked Workspace member mất quyền ngay | Activation/OTP/reset/logout-all, account/session lifecycle, Invitation và domain-wide RBAC còn thiếu | `backend/apps/accounts/`; `backend/apps/workspace/access.py`; `permissions.py`; `views.py`; `services.py`; `RBAC_DESIGN.md` |
+| Automated tests | PARTIAL | HT-WORK gate: Workspace PostgreSQL 140/140 PASS (79.278s), full PostgreSQL 169/169 PASS (82.920s); `pip check`, system check và migration drift check PASS; migration rehearsal bảo toàn Task/Deliverable/Review | Chưa có CI hoặc one-command clean-checkout harness; `0003` controlled development rollout/smoke chưa được phê duyệt | test sources; `PROGRESS.md`; test evidence 2026-10-19, docs checkpoint 2026-10-20 |
 | Frontend | NOT STARTED | Chỉ có định hướng React/Next.js | Không có source hoặc package manifest; chưa chốt React SPA hay Next.js | `documentation/TECH_STACK_DECISION.md` |
 | Docker/deployment/CI | PARTIAL | PostgreSQL Compose dùng environment bắt buộc, loopback bind mặc định và giữ named volume; setup local đã được tài liệu hóa | Chưa có backend image, active deploy config hoặc CI workflow | `docker/docker-compose.yml`; `README.md` |
 
@@ -55,7 +56,7 @@ frontend và deployment vẫn chưa hoàn thành.
 | ID | Module | Trạng thái | Đã triển khai | Còn thiếu / vấn đề |
 |---|---|---|---|---|
 | F01 | Authentication | PARTIAL | Custom `User`; session register/login/logout/me; CSRF; password validation/hash; inactive block; scoped throttle; 19 tests | Activation/OTP, password reset, logout-all và production shared-cache/proxy enforcement |
-| F02 | Profile & Workspace | PARTIAL | Foundation + `workspace.0002` trên development; verified access/scoping; read routes; Workspace create/update và member list/direct-add/role-update với role ceilings, transactions, actor-bound roster và audit; schema-free slice đã qua full PostgreSQL 140/140 | Cần duyệt Profile lifecycle, Workspace month/archive/restore và member deactivate/history/rejoin; chưa Profile write, Invitation hay domain-wide RBAC; rollout môi trường khác chưa được phê duyệt |
+| F02 | Profile & Workspace | PARTIAL | Foundation + `workspace.0002` trên development; source thêm monthly Workspace, Profile/Workspace archive/restore, Workspace create/update và member list/direct-add/role-update/soft-revoke/reactivate với locking/audit; full PostgreSQL 169/169 | `workspace.0003` chưa apply development; chưa Profile creation, Invitation hay domain-wide RBAC; rollout mọi môi trường cần phê duyệt riêng |
 | F03 | Membership Invitation | PARTIAL | Direct-add requires active same-Profile membership; invitation identity, role ceiling, TTL 7 days, rate limits and minimum 12-month terminal metadata retention are approved | Chưa có verified-email onboarding dependency, model, migration, delivery, service hoặc API implementation |
 | F04 | Task Lifecycle | PARTIAL | Task, assignment, status/priority, admin CRUD | Transition service, invariants, API, RBAC và tests |
 | F05 | Marketplace | NOT STARTED | Chưa có implementation | Publish/claim rules, concurrency guard, API và tests |
@@ -76,12 +77,10 @@ frontend và deployment vẫn chưa hoàn thành.
 Không còn câu hỏi nào của review gate `HT-RBAC-DESIGN-P0-01`; 14 quyết định đã
 được chốt qua Owner delegation và không được yêu cầu quyết định lại.
 
-Các task sau vẫn phải chốt contract riêng trước implementation: lifecycle
-state/month contract của Workspace; archive visibility/child-write/restore và
-actor ceiling; WorkspaceMember deactivate/history/rejoin semantics; lựa chọn
+Các task sau vẫn phải chốt contract riêng trước implementation: lựa chọn
 reviewer cụ thể và trạng thái Task/Review/payroll trigger; account verification
-và full deactivation/session-revocation flow; rejoin/history semantics;
-Invitation delivery/onboarding implementation; Invoice numbering/billing;
+và full deactivation/session-revocation flow; Invitation delivery/onboarding
+implementation; Invoice numbering/billing;
 Client Portal/Guest Review exact capabilities/default expiry; retention legal
 hold/purge; và project-wide response/error convention ngoài các mapping hiện
 có. Policy migration vẫn là kiểm kê từng môi trường, không tự gán tenant
@@ -89,9 +88,9 @@ cho dữ liệu không xác định.
 
 `HT-API-P1-04` đã hoàn thành scope read-only. `HT-DB-P1-05` đã hoàn tất
 development-only rollout với backup/restore rehearsal, apply, direct smoke và
-full regressions đạt. `HT-WORK-P2-02` hiện `IN PROGRESS — SCHEMA APPROVAL
-GATE`: phần schema-free đã qua full PostgreSQL 140/140; Owner phải duyệt Profile
-lifecycle, Workspace month/archive/restore và WorkspaceMember deactivate/
-history/rejoin trước mọi migration/DELETE/archive/revoke. Không mở Invitation
-hoặc chuyển task. Xem `documentation/HANDOVER.md`, `RBAC_DESIGN.md` và
-`DECISION_LOG.md`.
+full regressions đạt. Trạng thái hiện tại là **HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL**.
+Source và isolated PostgreSQL verification đã hoàn tất, còn development ở
+`workspace.0002` và production không bị tác động.
+Bước tiếp theo duy nhất là Owner review và quyết định controlled development
+rollout của `workspace.0003`; không mở Invitation hoặc feature task khác. Xem
+`documentation/HANDOVER.md`, `RBAC_DESIGN.md` và `DECISION_LOG.md`.

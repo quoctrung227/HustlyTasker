@@ -2,18 +2,29 @@
 
 Lịch sử thay đổi của dự án HustlyTasker.
 
-## Unreleased - 2026-10-19
+## Unreleased - 2026-10-20
 
-### Workspace Write API & Membership Management (HT-WORK-P2-02)
+### HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
 
+- Bổ sung additive source migration
+  `workspace.0003_workspace_lifecycle_and_period`: Profile/Workspace lifecycle
+  status, canonical Workspace monthly period, constraints/indexes và
+  `WorkspaceMember.is_active`. Unique `(profile, period)` bao gồm cả Workspace
+  archived; legacy `NULL` period được giữ cho controlled rollout, còn supported
+  create bắt buộc ngày đầu tháng.
 - Bổ sung `POST` cho Workspace collection và `PATCH` cho Workspace detail dưới
-  nested Profile; chỉ nhận `name`/`description`, mọi field server-owned hoặc
-  field lạ bị từ chối. Profile được lấy từ URL/context, không cho re-parent
-  Workspace hoặc giả mạo owner.
+  nested Profile. Create bắt buộc `period`; non-first-day trả `400`, monthly
+  duplicate kể cả archived trả `409`; server-owned/unknown fields bị từ chối,
+  không cho re-parent Workspace hoặc giả mạo owner.
+- Bổ sung Profile archive/restore cho Profile Owner và Workspace
+  archive/restore cho Profile Owner/Admin. Archived record vẫn đọc được trong
+  tenant scope, nhưng normal metadata/child/membership mutation bị chặn cho tới
+  khi restore. Profile/Workspace hard delete không được expose.
 - Bổ sung Workspace-member manager roster `GET`, direct-add `POST` bằng
-  `target_profile_membership_id`, và role-update `PATCH`. Response chỉ gồm ID
-  assignment, ProfileMembership ID, role và timestamps; không trả User ID,
-  email, username hoặc PII.
+  `target_profile_membership_id`, role-update `PATCH`, và soft revoke `DELETE`.
+  Revoke giữ row lịch sử, mất effective access ngay; eligible re-add tái kích
+  hoạt cùng row. Response chỉ gồm assignment/ProfileMembership metadata, role,
+  active state và timestamps; không trả User ID, email, username hoặc PII.
 - Áp dụng role ceilings đã duyệt: Profile Owner/Admin tạo/cập nhật Workspace và
   quản lý `ADMIN/MEMBER/VIEWER`; Workspace Admin chỉ sửa metadata Workspace của
   mình và quản lý `MEMBER/VIEWER`. Editor, Viewer, Profile Member chưa được gán,
@@ -24,17 +35,21 @@ Lịch sử thay đổi của dự án HustlyTasker.
   Lookup nested sai tenant/wrong parent không làm lộ tồn tại; API chuẩn hóa
   validation/permission/not-found/conflict thành `400`/`403`/`404`/`409`.
 - Các write service dùng transaction, Profile-first row locks, revalidation và
-  AuditLog nguyên tử cho `workspace.created`, `workspace.updated`,
-  `workspace.membership.created`, `workspace.membership.updated`; rollback cả
-  mutation khi audit thất bại và xử lý duplicate/concurrency ổn định.
+  AuditLog nguyên tử cho create/update/lifecycle và membership create/update/
+  revoke/reactivate; rollback cả mutation khi audit thất bại và xử lý
+  duplicate/concurrency ổn định.
 - Giữ SessionAuthentication, CSRF cho unsafe methods, DRF deny-by-default và
-  không thêm `AllowAny`. Verification cuối: Workspace 111/111,
-  Authentication/API Foundation 29/29, full PostgreSQL 140/140; Django system
-  check và migration consistency đều PASS.
-- Đây là schema-free slice: không đổi model, không tạo `workspace.0003`, không
-  đổi development data; `workspace.0002` vẫn là migration mới nhất đã apply.
-  Archive/restore Workspace và DELETE/revoke/deactivate WorkspaceMember vẫn
-  trả `405` vì chưa có lifecycle/history schema và policy được Owner duyệt.
+  không thêm `AllowAny`. Verification cuối: `pip check`, Django system check và
+  `makemigrations --check --dry-run` PASS; Workspace PostgreSQL 140/140 trong
+  79.278s và full PostgreSQL 169/169 trong 82.920s PASS. Migration rehearsal
+  `0002 -> 0003` bảo toàn Task/Deliverable/Review.
+- Latest successful development inventory ngày 2026-10-19 có 27 migration
+  rows, `workspace.0002` applied, `workspace.0003` unapplied, 3 User, zero
+  business rows và không còn test database. Read-only check ngày 2026-10-20
+  thấy PostgreSQL container đang dừng và không khởi động lại. `migrate --check`
+  exit `1` đúng dự kiến do pending migration. Không apply migration/write
+  development và không truy cập production; bước tiếp theo chỉ là Owner review
+  và quyết định controlled development migration.
 
 ### Controlled development migration completed (HT-DB-P1-05)
 

@@ -137,6 +137,7 @@ def _is_current_workspace_context(context):
         return WorkspaceMember.objects.filter(
             workspace_id=context.workspace_id,
             user_id=profile_context.user_id,
+            is_active=True,
             role=context.workspace_role,
             workspace__profile_id=profile_context.profile_id,
             workspace__profile__memberships__id=(
@@ -245,6 +246,7 @@ def _workspaces_visible_to_valid_context(context):
 
     return queryset.filter(
         members__user_id=context.user_id,
+        members__is_active=True,
         members__role__in=(
             WorkspaceMember.Role.ADMIN,
             WorkspaceMember.Role.MEMBER,
@@ -280,6 +282,7 @@ def resolve_workspace_access_context(profile_context, workspace_id):
         workspace_role = WorkspaceMember.objects.filter(
             workspace_id=workspace.id,
             user_id=current_profile_context.user_id,
+            is_active=True,
             workspace__profile_id=current_profile_context.profile_id,
             workspace__profile__memberships__id=(
                 current_profile_context.membership_id
@@ -337,10 +340,41 @@ def can_create_workspace(context):
     except TenantAccessNotFound:
         return False
 
-    return current_context.profile_role in (
-        ProfileMembership.Role.OWNER,
-        ProfileMembership.Role.ADMIN,
+    return (
+        current_context.profile_role in (
+            ProfileMembership.Role.OWNER,
+            ProfileMembership.Role.ADMIN,
+        )
+        and Profile.objects.filter(
+            id=current_context.profile_id,
+            status=Profile.Status.ACTIVE,
+        ).exists()
     )
+
+
+def can_manage_profile_lifecycle(context):
+    """Only a current Profile Owner may archive or restore the Profile."""
+
+    try:
+        current_context = _refresh_profile_access_context(context)
+    except TenantAccessNotFound:
+        return False
+
+    return current_context.profile_role == ProfileMembership.Role.OWNER
+
+
+def _has_active_workspace_state(context):
+    """Keep lifecycle state checks tied to the verified tenant context."""
+
+    if not _is_current_workspace_context(context):
+        return False
+
+    return Workspace.objects.filter(
+        id=context.workspace_id,
+        profile_id=context.profile_id,
+        profile__status=Profile.Status.ACTIVE,
+        status=Workspace.Status.ACTIVE,
+    ).exists()
 
 
 def can_edit_workspace(context):
@@ -350,7 +384,7 @@ def can_edit_workspace(context):
     domain slice, but they do not administer Workspace metadata.
     """
 
-    if not _is_current_workspace_context(context):
+    if not _has_active_workspace_state(context):
         return False
 
     if context.profile_role in (
@@ -377,6 +411,33 @@ def can_manage_workspace_members(context):
     return context.workspace_role == WorkspaceMember.Role.ADMIN
 
 
+def can_mutate_workspace_members(context):
+    """Authorize roster mutations only while both tenant scopes are active."""
+
+    return (
+        can_manage_workspace_members(context)
+        and _has_active_workspace_state(context)
+    )
+
+
+def can_manage_workspace_lifecycle(context):
+    """Only Profile managers may archive/restore an active Profile's Workspace."""
+
+    if not _is_current_workspace_context(context):
+        return False
+
+    return (
+        context.profile_role in (
+            ProfileMembership.Role.OWNER,
+            ProfileMembership.Role.ADMIN,
+        )
+        and Profile.objects.filter(
+            id=context.profile_id,
+            status=Profile.Status.ACTIVE,
+        ).exists()
+    )
+
+
 def workspace_members_visible_to_managers(context):
     """Return effective assignments while keeping actor authority in SQL."""
 
@@ -396,6 +457,7 @@ def workspace_members_visible_to_managers(context):
     if profile_context.profile_role == ProfileMembership.Role.MEMBER:
         actor_workspace_scope = Q(
             workspace__members__user_id=profile_context.user_id,
+            workspace__members__is_active=True,
             workspace__members__role=WorkspaceMember.Role.ADMIN,
         )
 
@@ -411,6 +473,7 @@ def workspace_members_visible_to_managers(context):
         actor_workspace_scope,
         workspace_id=context.workspace_id,
         workspace__profile_id=context.profile_id,
+        is_active=True,
         role__in=(
             WorkspaceMember.Role.ADMIN,
             WorkspaceMember.Role.MEMBER,

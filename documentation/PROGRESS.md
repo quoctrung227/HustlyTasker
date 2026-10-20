@@ -1,89 +1,71 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-10-19 (HT-WORK-P2-02)
+## Current Snapshot - 2026-10-20 (HT-WORK-P2-02)
 
 ### Current Phase
 
 `PHASE 2.2 - API Architecture / Workspace write foundation`
 
-### HT-WORK-P2-02 - IN PROGRESS / SCHEMA APPROVAL GATE
+### HT-WORK-P2-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
 
-Owner authorization opened a limited Workspace Write API and Membership
-Management slice after `HT-DB-P1-05`. The schema-free implementation currently
-contains:
+The Owner-approved schema-dependent remainder is implemented in source and
+verified on isolated PostgreSQL without applying the new migration to the
+development or production database:
 
-- `POST /api/v1/profiles/{profile_id}/workspaces/` for Profile Owner/Admin;
-  server-owned Profile/owner fields cannot be mass-assigned or re-parented.
-- `PATCH /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/` for Profile
-  Owner/Admin or that Workspace's Admin; only `name` and `description` are
-  writable. Editor/Viewer and unassigned Profile Member are denied.
-- `GET`/`POST` on the nested Workspace member collection and `PATCH` on one
-  nested member for Profile Owner/Admin or that Workspace's Admin. The direct
-  add target is an active same-Profile `ProfileMembership`, not a global User.
-- Role ceilings remain least-privilege: Profile Owner/Admin may manage
-  `ADMIN`/`MEMBER`/`VIEWER`; Workspace Admin may manage only `MEMBER`/`VIEWER`;
-  legacy Workspace `OWNER` cannot be assigned or changed through the API.
-- Strict serializers reject unknown/server-owned fields. Responses omit User
-  ID, email, username, and other PII. Tenant/wrong-parent identifiers remain
-  non-enumerating; intended mappings are validation `400`, capability `403`,
-  scoped not-found `404`, and duplicate membership `409`.
-- Workspace create/update and membership add/role-update reuse scoped access
-  contexts and locked atomic services. Their AuditLog writes are in the same
-  transaction as the state change.
-
-The implementation deliberately does not expose Workspace archive/restore or
-Workspace membership revoke/deactivate. Authorized `DELETE` requests remain
-`405 Method Not Allowed`. Current `Workspace` has no lifecycle state or monthly
-period field, while `WorkspaceMember` has no active/history field. Selecting a
-state model, visibility/child-write effects, restore/rejoin semantics, and
-actor ceiling would be a schema/business-policy decision; it was not invented
-in this slice.
-
-No model changed, no migration was created, and no development database write
-was performed. The latest development schema remains the previously applied
-`workspace.0002_profile_workspace_foundation`; there is no `workspace.0003`.
+- Additive migration `workspace.0003_workspace_lifecycle_and_period` adds
+  `Profile.status`, canonical `Workspace.period`, `Workspace.status`, and
+  `WorkspaceMember.is_active`, together with status/period checks and lookup
+  indexes. The `(profile, period)` uniqueness rule includes archived
+  Workspaces. Existing legacy `NULL` periods are preserved for a controlled
+  rollout; supported Workspace creation requires a first-of-month period.
+- Profile Owner-only archive/restore and Profile Owner/Admin Workspace
+  archive/restore endpoints are implemented. Archived Profile/Workspace data
+  remains tenant-safe and readable, while ordinary metadata, child, and
+  membership writes fail closed until restoration.
+- Workspace create requires `period`; a non-first-day value is invalid and a
+  duplicate monthly period, including an archived Workspace, maps to `409`.
+  Period and lifecycle fields are server-controlled after creation.
+- Workspace-member `DELETE` is a soft revoke that retains the assignment row
+  and immediately removes effective access. A later eligible `POST` reactivates
+  that same row instead of creating duplicate active/history rows. Role ceilings,
+  same-Profile eligibility, row locking, and atomic AuditLog behavior remain in
+  force.
+- Profile and Workspace hard delete are not exposed. This task does not add
+  Invitation, Profile creation, another business domain, or frontend work.
 
 ### Verification status
 
-Final verification for the schema-free slice is complete:
+Final verification for the complete source implementation is current:
 
 - `python -m pip check`: PASS.
 - `python manage.py check`: PASS.
 - `python manage.py makemigrations --check --dry-run`: PASS; no changes.
-- `python manage.py migrate --check`: PASS.
-- Workspace service/read/write/API tests: PASS, 111/111 in 62.011s.
-- Authentication/API Foundation regressions: PASS, 29/29 in 7.295s.
-- Full PostgreSQL suite: PASS, 140/140 in 69.873s; the isolated test database
-  was destroyed.
-- `git diff --check`: PASS; only existing LF-to-CRLF conversion warnings were
-  reported.
+- Workspace PostgreSQL suite: PASS, 140/140 in 79.278s.
+- Full PostgreSQL suite: PASS, 169/169 in 82.920s.
+- The isolated `0002 -> 0003` migration rehearsal passed, preserving Task,
+  Deliverable, and Review rows while applying lifecycle defaults without
+  synthetic tenant mapping.
+- `python manage.py migrate --check` exits `1` as expected because `0003` is
+  intentionally pending on development. The reviewed migration plan is
+  additive; this expected result is not a consistency failure.
 
-Coverage includes role and tenant boundaries, strict inputs, duplicate
-handling, CSRF/anonymous/method behavior, transaction and AuditLog rollback,
-existing last-active Profile Owner invariants, and lazy roster evaluation after
-a manager's authority is revoked. The roster selector now binds actor
-authority into SQL and requires every listed target to retain an active
-same-Profile membership, so late revocation fails closed.
-
-The development database was inspected read-only after verification: it is the
-existing loopback Compose PostgreSQL 16.14 target with 27 migration rows,
-`workspace.0002` applied, 3 Users, and zero Profile, ProfileMembership,
-Workspace, WorkspaceMember, Task, Client, Invoice, Payment, or AuditLog rows.
-There is no `0003`, no remaining `test_%` database, and no development
-business/schema write from this task.
+The latest successful post-suite development inventory on 2026-10-19 recorded
+the existing loopback Compose PostgreSQL 16.14 target with 27 migration rows,
+`workspace.0002` applied, 3 Users, zero Profile, ProfileMembership, Workspace,
+WorkspaceMember, Task, Client, Invoice, Payment, or AuditLog rows, and no
+`test_%` database. A read-only container-state check on 2026-10-20 found that
+existing PostgreSQL container stopped; it was not started, so no newer database
+inventory is claimed. `workspace.0003` remains unapplied, no development
+business/schema write occurred, and production was not contacted.
 
 ### Exact continuation / review gate
 
-1. Stop at `SCHEMA APPROVAL GATE`; do not open another task.
-2. Owner must approve Profile lifecycle/active semantics, Workspace month/
-   period representation, archive/restore state and effects, and
-   WorkspaceMember deactivate/history/rejoin semantics.
-3. Only after that decision may a separate additive migration/backfill plan be
-   prepared and reviewed. Do not create/apply `workspace.0003`, or expose
-   archive, restore, revoke, deactivate, or `DELETE` from this checkpoint.
-
-Invitation, Profile write API, downstream business domains, and frontend stay
-out of scope.
+Stop at `PENDING DEVELOPMENT MIGRATION APPROVAL`. The exact next action is
+Owner review of the source/migration/test evidence and, only if separately
+approved, a controlled development rollout of
+`workspace.0003_workspace_lifecycle_and_period` with fresh inventory, backup,
+plan review, apply, and smoke verification. Do not apply `0003`, open another
+feature task, or change production from this checkpoint.
 
 ---
 
