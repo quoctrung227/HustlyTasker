@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ht_test_runner
+      POSTGRES_DB: hustlytasker_test_control
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ht_test_runner -d hustlytasker_test_control"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    labels: &test-labels
+      org.hustlytasker.test-run: "${HT_TEST_RESOURCE_ID:?Use scripts/test-backend.ps1}"
+      org.hustlytasker.test-repository: "${HT_TEST_REPOSITORY:?Use scripts/test-backend.ps1}"
+
+  backend-tests:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.test
+    image: hustlytasker-backend-tests:local
+    working_dir: /workspace/backend
+    environment:
+      HT_TEST_MODE: docker
+      HT_TEST_DB_HOST: postgres
+      HT_TEST_DB_PORT: "5432"
+    volumes:
+      - type: bind
+        source: ..
+        target: /workspace
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels: *test-labels
+    command: ["python", "/workspace/scripts/test_backend.py"]
+
+networks:
+  default:
+    internal: true
+    labels: *test-labels

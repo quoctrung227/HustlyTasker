@@ -7,6 +7,7 @@ from .access import (
     can_create_workspace,
     can_edit_workspace,
     can_manage_profile_lifecycle,
+    can_manage_profile_invitations,
     can_manage_workspace_lifecycle,
     can_manage_workspace_members,
     can_mutate_workspace_members,
@@ -90,6 +91,16 @@ class CanManageProfileLifecycle(HasProfileAccess):
             return False
 
         return can_manage_profile_lifecycle(view.profile_access_context)
+
+
+class CanManageProfileInvitations(HasProfileAccess):
+    """Allow Profile invitation metadata and mutations to tenant managers."""
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+
+        return can_manage_profile_invitations(view.profile_access_context)
 
 
 class CanEditWorkspaceMetadata(HasWorkspaceReadAccess):

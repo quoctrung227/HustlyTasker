@@ -2,16 +2,34 @@
 
 # HustlyTasker Database Design
 
-Version: 0.5
+Version: 0.9
 
 Status:
 
 Profile/Workspace lifecycle and monthly-period foundation implemented and
 verified; `workspace.0003` is applied to the approved development PostgreSQL
 database. Task/Deliverable/internal Review workflow hardening is implemented
-in source through additive `tasks.0002` and `reviews.0002`, verified by the
-final 202-test PostgreSQL gate, and not yet applied to development. Remaining
-tenant domains are approved targets not yet implemented.
+through additive `tasks.0002` and `reviews.0002`, verified by the current
+202-test PostgreSQL gate, and applied to the approved development database by
+`HT-DB-P1-07`. The additive Profile Invitation aggregate is implemented and
+`workspace.0004_profileinvitation` was applied to the approved development
+database by the completed `HT-DB-P1-08` controlled rollout. HT-AUTH-P1-02
+verification/recovery implementation is complete. Owner then authorized
+HT-DB-P1-09, which applied exact `accounts.0002` to development after fresh
+inventory, verified backup, isolated restore/rehearsal, and safety checks.
+Development now has 32 migration records, 15 User columns, an empty 17-column
+account-security-token table, nullable verification state, unchanged 3 Users/
+2 Sessions, zero verified Users, and zero checked business/AuditLog rows.
+All token/User constraints/indexes are validated and all 39 FKs have no
+orphans. Current read-only CSRF smoke, dependency/system/migration checks,
+security 44/44, Authentication/API 29/29, Invitation 40/40, Workspace/RBAC
+140/140, Task/Review 33/33, and full PostgreSQL 286/286 (197.049s) PASS.
+Final exact legacy-row comparison, checks, and disposable-resource cleanup
+pass; host backup/test logs remain retained and ignored. HT-DB-P1-09 is
+COMPLETE / OWNER REVIEW GATE. Earlier test
+counts and inventories below are historical where explicitly dated.
+Production and other persistent targets remain unauthorized. Remaining tenant
+domains are approved targets not yet implemented.
 
 Initial schema implementation phase (historical):
 
@@ -310,7 +328,7 @@ Task N --- N User
 
 through TaskAssignment
 
-Current source constraints/indexes (`tasks.0002`, pending development apply):
+Current development constraints/indexes (`tasks.0002`, applied by HT-DB-P1-07):
 
 - `task_valid_status` limits stored status to the six values above.
 - `task_valid_priority` limits priority to the four values above.
@@ -357,7 +375,7 @@ Relationships:
 
 Task N --- N User
 
-Current source behavior (`tasks.0002`, pending development apply):
+Current development behavior (`tasks.0002`, applied by HT-DB-P1-07):
 
 - At most one assignment per `(task, user)` remains from the initial schema.
 - Partial unique constraint `uniq_active_task_assignment` permits at most one
@@ -463,7 +481,7 @@ Relationships:
 
 Task 1 --- N Deliverable
 
-Current source constraints/indexes (`reviews.0002`, pending development apply):
+Current development constraints/indexes (`reviews.0002`, applied by HT-DB-P1-07):
 
 - `deliverable_valid_status` restricts status to the values above.
 - `deliverable_revision_positive` permits `NULL` legacy revisions or values
@@ -516,7 +534,7 @@ Relationships:
 
 Deliverable 1 --- 0..1 Review
 
-Current source constraints (`reviews.0002`, pending development apply):
+Current development constraints (`reviews.0002`, applied by HT-DB-P1-07):
 
 - `review_valid_status` restricts status to the values above.
 - `uniq_deliverable_review` enforces one internal Review record per
@@ -939,7 +957,7 @@ PostgreSQL
 
 ---
 
-# 13. Current Ownership Audit — verified 2026-10-21
+# 13. Current Ownership Audit — updated 2026-10-24
 
 This section describes the active Django source. The original sections above
 document the initial schema; their “future” indexes or relationships must not
@@ -947,8 +965,10 @@ be treated as implemented unless they also exist in models/migrations.
 
 | Entity | Current ownership path | Verified gap |
 |---|---|---|
-| User | Global identity | Profile access now uses separate ProfileMembership; User remains unchanged. |
-| Profile/ProfileMembership | Tenant root + User membership | Profile now has an `ACTIVE`/`ARCHIVED` lifecycle in source; Invitation and general Profile CRUD remain absent. |
+| User | Global identity | Nullable `email_verified_at` and `verified_email_normalized` now exist in approved development through accounts.0002, paired by a check/unique identity constraint; all 3 legacy Users remain unchanged and unverified. |
+| AccountSecurityToken | Global User FK plus purpose, normalized-email snapshot, and reset-only password-state fingerprint | Digest-only credential aggregate with expiry, delivery, terminal/replacement metadata and password-state binding is applied development through HT-DB-P1-09; table remains empty with validated constraints/indexes. |
+| Profile/ProfileMembership | Tenant root + User membership | Profile has an `ACTIVE`/`ARCHIVED` lifecycle. General Profile CRUD remains absent; invitation-driven membership onboarding is now implemented in source as described below. |
+| ProfileInvitation | `profile` tenant FK plus normalized recipient-email snapshot | Additive migration `workspace.0004_profileinvitation` creates the record, constraints, indexes, protected actors, delivery state, and resend lineage. It is applied on the approved development target; no other persistent target is authorized. |
 | Workspace | `profile → Profile` plus transitional `owner → User` | Profile FK remains nullable for safe transition; supported new writes require a canonical non-null monthly period, while schema nullability preserves unresolved legacy rows. Lifecycle state is implemented in source, and owner remains a transitional second ownership representation. |
 | WorkspaceMember | `workspace + user` | One historical row per pair is retained; `is_active` distinguishes effective assignment from soft revocation, and validated activation requires active membership in the Workspace Profile. |
 | Task | `workspace → Workspace → Profile` | Supported create/update/assignment transitions enforce an active tenant and manager capability; the creator is retained with `PROTECT`. Direct ORM/bulk writes remain outside that guarantee. |
@@ -969,18 +989,24 @@ without a schema change. `HT-WORK-P2-02` now includes the original Workspace
 create/metadata-update and member-manager slice plus the approved
 schema-dependent monthly-period, archive/restore, soft-revoke, and reactivation
 behavior. `HT-TASK-P2-03` now adds the scoped Task/Deliverable/internal Review
-service/API boundary and additive schema hardening described below. Cross-domain
-Client/Project constraints, external review, Task soft delete, and the broader
-retention/purge policy are not implemented.
+service/API boundary and additive schema hardening described below.
+`HT-INV-P2-04` now adds the Profile Invitation source model, migration,
+transactional onboarding services, and API boundary. Cross-domain
+Client/Project constraints, external review, Task soft delete, automated
+Invitation retention/purge, and the broader retention/purge policy are not
+implemented.
 
-Five non-Workspace domain apps remain at their existing `0001_initial.py`
-migrations. Tasks and Reviews now also have additive source migrations
-`0002_task_workflow_foundation` and `0002_review_workflow_foundation`, while
-development remains at their `0001` state. The additive
+Five non-Workspace domain apps retain their existing `0001_initial.py`
+migrations. Tasks and Reviews also have the additive and development-applied
+`0002_task_workflow_foundation` and `0002_review_workflow_foundation`. The additive
 `workspace/0002_profile_workspace_foundation.py` exists unchanged in source,
 has run on disposable PostgreSQL test databases, and was applied to the
 approved development database on 2026-10-19 after inventory, backup, restore
-rehearsal, and plan review. This does not imply rollout to another environment.
+rehearsal, and plan review. Workspace `0003` is also applied on development.
+`HT-DB-P1-08` restore-rehearsed and applied
+`workspace.0004_profileinvitation` to that same approved development target on
+2026-10-23; its empty table and catalog objects passed post-check. This does
+not imply rollout authorization to another environment.
 
 
 ---
@@ -992,8 +1018,8 @@ Architecture status: `ACCEPTED — 2026-10-16`
 Foundation `workspace.0002` status:
 `COMPLETE IN SOURCE; APPLIED TO DEVELOPMENT ON 2026-10-19`
 
-RBAC/Invitation design status:
-`COMPLETE / ACCEPTED BY OWNER DELEGATION; INVITATION SCHEMA NOT IMPLEMENTED`
+RBAC/Invitation implementation status:
+`HT-INV-P2-04 IMPLEMENTATION COMPLETE`
 
 Tenant access/service status:
 `HT-RBAC-P1-03 COMPLETE; NO MODEL OR MIGRATION CHANGE`
@@ -1002,7 +1028,10 @@ Workspace API status:
 `HT-WORK-P2-02 COMPLETE; DEVELOPMENT ROLLOUT VERIFIED BY HT-DB-P1-06`
 
 Task workflow status:
-`HT-TASK-P2-03 IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
+`HT-TASK-P2-03 COMPLETE; DEVELOPMENT ROLLOUT VERIFIED BY HT-DB-P1-07`
+
+Invitation migration status:
+`workspace.0004 DEVELOPMENT ROLLOUT VERIFIED BY HT-DB-P1-08`
 
 The authoritative decisions and remaining detailed questions are in
 `documentation/DECISION_LOG.md`. This section distinguishes current schema
@@ -1037,6 +1066,8 @@ from the same Profile; Payment belongs to Invoice.
 | `Profile` | UUID/timestamps inherited from `BaseModel`; required `name`; `status` constrained to `ACTIVE`/`ARCHIVED`, default `ACTIVE`, with a status index. Represents the company/team tenant root. |
 | `ProfileMembership` | Protected Profile and User FKs; `OWNER`, `ADMIN`, `MEMBER`; `is_active`; `joined_at`; inactive history is permitted but only one active row may exist per `(profile, user)`. |
 | Membership constraints | Partial unique `uniq_active_profile_user`, role check `profmem_valid_role`; indexes `profmem_user_active_idx` and `profmem_prof_active_role_idx`. |
+| `ProfileInvitation` | Protected Profile and inviter-membership FKs; normalized recipient-email snapshot; optional protected recipient User; requested `ADMIN`/`MEMBER` role; unique SHA-256 token digest; five-state lifecycle; seven-day expiry; queued/sent/failed delivery metadata; protected terminal actors/timestamps; and protected one-to-one replacement lineage. Only the digest is persisted. |
+| Invitation constraints/indexes | Role/status/delivery checks, terminal actor/timestamp consistency, acceptance/decline only after sent delivery, expiry after creation, delivery timestamp consistency, and partial pending uniqueness per `(profile, normalized email)` and `(profile, bound User)`. Four explicit indexes cover Profile/status/creation, recipient/status, inviter/creation, and expiry/status. |
 | `Workspace.profile` | Transitional nullable protected FK. New saves require Profile; a mapped Workspace cannot be re-parented through model/admin writes; an explicit null-to-Profile mapping validates the owner and every existing Workspace member. Mapped saves lock Profile then Workspace; existing legacy null saves lock their Workspace row before validation, preventing concurrent mapping/re-parent and stale null write-back races. Null remains allowed at database level so unknown legacy rows are preserved without guessed backfill. |
 | `Workspace.period` | Nullable date for migration compatibility; supported creation requires the first day of a month. A DB check permits only null or day 1, and a conditional unique constraint allows at most one non-null `(profile, period)` across active and archived rows. A non-null period is immutable through supported model/service/API paths. Null is reserved for unresolved legacy rows and is never guessed. |
 | `Workspace.status` | Constrained `ACTIVE`/`ARCHIVED`, default `ACTIVE`; indexed together with Profile and period. Archived rows remain scoped/readable and continue to reserve their monthly period. |
@@ -1069,6 +1100,7 @@ database-wide guarantee of the aggregate last-owner invariant.
 - Additive migrations:
   `workspace/0002_profile_workspace_foundation.py` and, in current source,
   `workspace/0003_workspace_lifecycle_and_period.py`,
+  `workspace/0004_profileinvitation.py`,
   `tasks/0002_task_workflow_foundation.py`, and
   `reviews/0002_review_workflow_foundation.py`.
 - No applied `0001_initial.py` was edited.
@@ -1088,13 +1120,62 @@ database-wide guarantee of the aggregate last-owner invariant.
   2026-10-20. Production and every other persistent target remain untouched and
   require their own explicit authorization and safety gates.
 - `tasks.0002` depends on `workspace.0003`; `reviews.0002` depends on
-  `tasks.0002`. Both workflow migrations have run only on Django-created
-  isolated PostgreSQL test databases. They are not applied to development or
-  production, and this implementation task grants no permission to apply them.
+  `tasks.0002`. After isolated rehearsal, both workflow migrations were
+  explicitly applied in dependency order to the approved development database
+  by `HT-DB-P1-07`. Production and all other persistent targets remain
+  unauthorized and require independent safety gates.
 - Current migration rehearsal preserves existing Task/Assignment/Deliverable/
   Review relations, sets every legacy assignment inactive, and leaves each
   legacy Deliverable revision null. It never selects a current assignee or
   invents a revision.
+- `workspace.0004_profileinvitation` is additive: it creates only the new
+  invitation table, foreign keys, checks, partial unique constraints, and
+  indexes. It does not alter or backfill Profile, ProfileMembership, Workspace,
+  WorkspaceMember, User, Task, Review, or other business rows.
+- Owner separately authorized `HT-DB-P1-08` for development only. A fresh
+  78,758-byte custom-format backup (matching SHA-256, readable 198-line TOC,
+  full archive read) was restored and migrated successfully in an isolated
+  rehearsal database before any persistent write; the rehearsal database was
+  then removed with absence verified.
+- Only `workspace.0004_profileinvitation` was applied to development at
+  2026-10-23 05:09:39.628419 UTC. Development now has 31 migration records and
+  an empty 22-column `workspace_profileinvitation` table. Seven named CHECKs
+  and seven foreign keys are validated; two partial unique constraints and all
+  16 table indexes are valid/ready; no unintended permanent database default
+  was found.
+- Pre/post inventory remains 3 Users, 2 sessions, and zero checked business
+  rows. No synthetic tenant mapping, business fixture, deletion, or production
+  access occurred. Every other persistent environment requires independent
+  inventory, backup, rehearsal, review, and authorization.
+- Authoritative Invitation model/service/API/migration tests pass 39/39;
+  Auth/API passes 29/29; Workspace/RBAC/Task/Review passes 173/173; full
+  PostgreSQL passes 241/241 at the implementation gate. Post-apply development
+  system, migration-drift and `migrate --check` checks plus fixture-free smoke
+  pass. Current P1-08 reruns also pass Invitation 39/39 in 62.528s, Auth/API
+  29/29 in 7.475s, Workspace/RBAC/Task/Review 173/173 in 97.378s, and full
+  PostgreSQL 241/241 in 167.960s; each test database was destroyed.
+
+### HT-DB-P1-08 development rollout checkpoint — 2026-10-23
+
+Status: `COMPLETE / OWNER REVIEW GATE`
+
+- Target: repository-owned loopback PostgreSQL 16.14 database
+  `hustlytasker_db`; no production target was contacted.
+- Baseline: 30 migrations, 3 Users, 2 sessions, zero checked business rows,
+  `workspace.0004` unapplied and Invitation table absent.
+- Backup/restore rehearsal and exact apply passed as described above.
+- Post-state: 31 migrations, an empty 22-column Invitation table, validated
+  constraints/FKs, valid/ready indexes, and unchanged inventory.
+- Authenticated Invitation success/mutation flows were **NOT TESTED ON
+  PERSISTENT DEVELOPMENT** because it has no business fixture or usable
+  authenticated session. Isolated Invitation, Auth/API, related regression and
+  full-suite reruns pass at 39/39, 29/29, 173/173 and 241/241 respectively.
+  **REAL EMAIL DELIVERY NOT VERIFIED**; process-local cache-throttle
+  limitations remain.
+- No test/rehearsal database or disposable runner remains. The container-side
+  temporary archive was removed after exact verification; the Git-ignored host
+  backup remains retained with unchanged size/hash. The development PostgreSQL
+  service was already running at task start and remains intentionally running.
 
 ### HT-DB-P1-05 development rollout checkpoint — 2026-10-19
 
@@ -1179,7 +1260,7 @@ Status at that checkpoint: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGR
   container stopped; it was not started or changed. `0003` was not applied to
   development, and production was not touched.
 
-### Current HT-DB-P1-06 development rollout checkpoint — 2026-10-20
+### Historical HT-DB-P1-06 development rollout checkpoint — 2026-10-20
 
 Status: `COMPLETE / OWNER REVIEW GATE`
 
@@ -1214,7 +1295,7 @@ Status: `COMPLETE / OWNER REVIEW GATE`
   lifecycle/schema 17/17, Workspace 140/140, auth/API 29/29, and full suite
   169/169. This evidence does not authorize another environment.
 
-### Current HT-TASK-P2-03 source checkpoint — 2026-10-21
+### Historical HT-TASK-P2-03 source checkpoint — 2026-10-21
 
 Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
 
@@ -1245,11 +1326,124 @@ Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
   system and migration-drift checks pass, test databases are destroyed, and
   independent final code review passes.
 
+### Historical HT-DB-P1-07 development rollout checkpoint — 2026-10-21
+
+Status: `COMPLETE / OWNER REVIEW GATE`
+
+- Pre-apply development had 28 migration records, 3 active Users, 2 sessions,
+  and zero checked tenant/workflow rows. Migration history and physical schema
+  agreed; invalid enum, duplicate assignment/Review, orphan, cross-tenant, and
+  unvalidated-constraint preflight counts were all zero.
+- The fresh Git-ignored custom archive under
+  `.local_backups/HT-DB-P1-07/` is 75,502 bytes with SHA-256
+  `4d89fe198da9a245c6ae39c466a11944a80914735c876dbeb18f546d55391f22`.
+  Host/container hashes, its 192-line TOC, full archive read, and an isolated
+  restore/apply rehearsal all passed.
+- `tasks.0002` was applied explicitly at 2026-10-20 23:35:36 UTC, followed by
+  `reviews.0002` at 23:36:12 UTC after the intermediate gate passed.
+  Development now has 30 migration records. `TaskAssignment.is_active` is
+  non-null boolean and `Deliverable.revision` is nullable integer; neither has
+  a permanent database default.
+- All five named workflow CHECK constraints and `uniq_deliverable_review` are
+  validated. The three lookup indexes and three unique indexes are valid and
+  ready. Actor foreign keys are validated PostgreSQL `NO ACTION` constraints;
+  the `PROTECT` behavior is enforced by Django's ORM.
+- Post-apply counts remain 3 active Users, 2 sessions, and zero checked
+  business/workflow rows. Integrity, duplicate, orphan and schema-drift checks
+  pass; no test/rehearsal database or disposable runner remains.
+- Current isolated verification passes Task 33/33 in 7.998s, Auth/API 29/29 in
+  7.183s, Workspace 140/140 in 77.774s, and full PostgreSQL 202/202 in 93.368s.
+  Fixture-free development smoke passes without changing rows or sessions.
+
+## Implemented account-security schema — development migration applied
+
+`accounts.0002_accountsecuritytoken_user_email_verification` is an additive
+HT-AUTH-P1-02 migration. HT-DB-P1-09 applied it to approved development at
+`2026-10-24 06:30:28.634074 UTC` after verified backup and isolated restore/
+apply rehearsal. It is not authorized for production or other persistent targets.
+It contains no `RunPython`, guessed identity mapping, or verification backfill:
+all existing Users remain unverified until they prove control of their current
+email.
+
+User additions:
+
+| Field/constraint | Current source contract |
+|---|---|
+| `email_verified_at` | Nullable timestamp set only after successful current-email verification. |
+| `verified_email_normalized` | Nullable normalized snapshot paired with the timestamp; `is_email_verified` is true only while it equals the normalized current `email`. |
+| `acct_verified_email_pair` | Both verification fields must be null or both non-null. |
+| `uniq_verified_email_identity` | At most one non-null verified normalized email identity. |
+
+`AccountSecurityToken` additions:
+
+| Field/group | Current source contract |
+|---|---|
+| Ownership/purpose | Each record belongs to one User through the current `CASCADE` FK; purpose is `EMAIL_VERIFICATION` or `PASSWORD_RESET`. |
+| Credential | Only a unique 64-character SHA-256 digest is stored; raw credentials exist transiently for configured email delivery and never appear in the API/AuditLog. |
+| Email binding | `email_normalized` snapshots the current uniquely resolved account email; changed or ambiguous identity fails closed. |
+| Password-state binding | `password_fingerprint` is null for verification and stores a SHA-256 fingerprint of the encoded Django password state for reset. `acctok_fingerprint_by_purpose` enforces that split; no raw password is stored. |
+| Lifecycle | `PENDING`, `CONSUMED`, `REVOKED`, or `EXPIRED`, with exactly matching terminal timestamp; consumption requires delivery state `SENT`. |
+| Delivery | `QUEUED`, `SENT`, or `FAILED`, with consistency checks for attempt/delivery timestamps. |
+| Expiry | Verification expires after 24 hours; password reset expires after one hour. `expires_at` must be later than `created_at`. |
+| Rotation | Nullable protected one-to-one `replaces` lineage; a replacement must keep the same User/purpose and cannot reference itself. |
+| Uniqueness/indexes | At most one pending token per `(user, purpose)`; indexes cover user/purpose/status/creation, email/purpose/status, and expiry/status. |
+
+Service-level invariants complement the database constraints: request/confirm
+lock the User and token, resend revokes the prior pending token, replay fails,
+and expiration is materialized. A material normalized-email change clears the
+User verification fields and revokes pending email-verification and password-
+reset tokens, including an `A -> B -> A` sequence. A password change through
+`User.save()` revokes pending reset credentials. Direct queryset password
+updates bypass that hook but cannot reuse an old reset credential because
+confirmation compares its fingerprint against the current encoded password
+state using a constant-time comparison. Reset confirmation atomically consumes
+the credential before `set_password()`/save; any failure rolls back the whole
+transition. Password reset uses Django validators and hashing, invalidates
+established sessions through Django's session auth hash, and never auto-logs in
+the caller. Legacy User login remains allowed, and Profile Invitation continues
+using its independent proof contract.
+
+Current development: PostgreSQL 16.14 `hustlytasker_db`, 32 applied migrations
+(`accounts.0001`/`0002` and `workspace.0001`-`0004`), unchanged 3 Users and
+2 Sessions, zero checked business/AuditLog rows, zero verified Users, and zero
+tokens. The 15-column User table has nullable timestamptz/varchar254
+verification additions without database defaults. The 17-column token table
+has nine validated CHECKs, two validated FKs and nine valid/ready indexes;
+both User verification constraints are validated. Partial unique predicates/
+columns were inspected. All 39 public FKs have zero orphans. Expected metadata
+is 23 content types/92 permissions; 7 Admin log rows remain unchanged.
+
+Fresh Git-ignored backup:
+`.local_backups/HT-DB-P1-09/hustlytasker_dev_pre_accounts_0002_20261024T062543Z.dump`,
+93,598 bytes, SHA-256
+`195d7406015be1ce4d40f1b0f0f37094282abe7b82b7dd9b9c4b2c070827af49`.
+Matching host/container size/hash, 223-line TOC, full archive read, and isolated
+restore/rehearsal passed. Every legacy row matched before/after apply; no
+identity mapping or verification backfill was performed. The host backup must
+remain local/ignored. See HANDOVER for restoration context and cleanup state.
+
+Historical HT-AUTH-P1-02 isolated verification passed account security 44/44 in
+32.336s, Authentication/API/Invitation 113/113 in 99.629s,
+Workspace/RBAC/Task/Review 173/173 in 93.895s, and the full suite 286/286 in
+188.592s. Dependency, Django system, migration-drift, and diff checks pass.
+Current HT-DB-P1-09 account security 44/44 (30.549s), Authentication/API 29/29
+(7.523s), Invitation 40/40 (61.679s), Workspace/RBAC 140/140 (79.717s), and
+Task/Review 33/33 (8.457s) PASS. Dependency/system/migration checks and
+45-request read-only development smoke, including Task/Review boundaries, PASS.
+The completed targeted runs were reused after resume with unchanged source/
+schema. The unfinished full-suite gate was rerun: 286/286 PASS in 197.049s,
+exit 0, with retained ignored log/exit record. Final exact legacy-row
+preservation and consistency checks pass. No test/rehearsal database or runner
+remains; verified host backup is retained and development remains running.
+Status: `COMPLETE / OWNER REVIEW GATE`.
+**REAL EMAIL DELIVERY NOT VERIFIED**; the current cache throttles are process-
+local, and response-neutral password-reset requests are not timing-equalized.
+
 ## Approved target — implementation status
 
 | Domain | Approved boundary/behavior still awaiting its own task |
 |---|---|
-| Invitation | Joining Profile requires accepted invitation; direct Workspace add is limited to an already-active Profile member. A proposed ProfileInvitation record/token/state contract is documented below and in `RBAC_DESIGN.md`; no model, migration, service, or API exists. |
+| Invitation | Joining Profile requires accepted invitation; direct Workspace add is limited to an already-active Profile member. `ProfileInvitation`, additive `workspace.0004`, locked services, delivery abstraction, audit, and authenticated APIs are implemented and isolated-test verified. The development rollout is verified by HT-DB-P1-08; production and every other target remain unauthorized. |
 | Project/Client | Client belongs to Profile; Project belongs to Client/Profile and may span Workspaces. Current models have not been migrated. |
 | Finance | Invoice belongs to Workspace and same-Profile Client; Payment belongs to Invoice. Current finance schema has not been migrated and numbering/billing details remain undecided. |
 | Public access | Client Portal account and secure link are supported targets; ClientPortalLink and GuestReviewLink are separate, hashed, expiring, revocable, capability-scoped principals. Replacements are absent. |
@@ -1257,14 +1451,18 @@ Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
 | Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, Workspace routes and Task/Deliverable/internal Review scoping now exist with IDOR/concurrency/audit tests. General Profile CRUD/membership APIs and Client/Finance/Audit/external-review scoping remain absent. |
 | Task/Review workflow | The approved internal flow is implemented in source: manager create/assign, assigned Editor execute/submit, distinct manager approve or request changes, and completion only after valid approval. Client/Guest approval, arbitrary cancellation, comments, file storage/media handling, Task soft delete, and Payroll/Payment pricing/trigger remain separate and unimplemented. |
 
-## Approved ProfileInvitation contract — schema not implemented
+## Implemented ProfileInvitation contract — development schema applied
 
-This subsection is approved design information only. It does not describe
-current models, does not reserve a migration number, and is not authorization
-to implement Invitation in `HT-RBAC-P1-03`. Verified email identity is a
-production dependency; a hashed token alone is not sufficient identity proof.
+This subsection began as approved design in `HT-RBAC-P1-03` and is now
+reconciled to the `HT-INV-P2-04` implementation. It describes current source
+and additive migration `workspace.0004_profileinvitation`, which is applied
+only to the separately authorized development target. It does not authorize
+another persistent environment. A hash-only token is not authentication:
+recipient actions additionally require an active authenticated account with a
+uniquely matching freshly read current email and a credential accepted by the
+configured email channel.
 
-Proposed aggregate:
+Implemented aggregate:
 
 - required Profile FK as tenant boundary;
 - normalized recipient-email snapshot and optional unambiguously bound User;
@@ -1276,7 +1474,8 @@ Proposed aggregate:
 - at most one `PENDING` record for a Profile/normalized email and, when bound,
   per Profile/recipient User. A stale expired pending row is terminalized
   inside the locked service before a replacement is created;
-- Profile/status/expiry and safe recipient-inbox indexes; and
+- Profile/status/creation, recipient/status, inviter/creation, and
+  expiry/status indexes; no recipient-inbox endpoint is exposed; and
 - immutable terminal records, with reinvite/resend represented by a new
   credential/record rather than reusing a consumed token.
 
@@ -1286,10 +1485,13 @@ ProfileMembership rows. Constraints provide duplicate/replay defense while
 the service enforces recipient binding, expiry, role ceiling, one terminal
 winner, same-Profile scope, and atomic audit.
 
-Later schema/implementation work must still define unregistered-recipient
-onboarding, reactivate-versus-new membership history, historical WorkspaceMember
-behavior on rejoin, FK deletion behavior and inviter-authority revalidation.
-The approved initial TTL is 7 days; resend invalidates the prior credential;
+The implementation permits issuance before account registration, then requires
+the eventual signed-in account to match uniquely. It reactivates exactly one
+compatible inactive non-Owner ProfileMembership row, otherwise creates one or
+fails closed; it never changes an active member's role. Rejoin transactionally
+soft-revokes stale active WorkspaceMember rows, protected foreign keys retain
+actors, and the original inviter's current authority is revalidated. The
+approved TTL is 7 days; resend invalidates/rotates the prior credential;
 terminal metadata is retained at least 12 months; automated purge is out of
 scope.
 
@@ -1299,9 +1501,10 @@ scope.
   least one active Owner with transaction locking. This is intentionally not an
   at-most-one-owner constraint.
 - Deactivating a ProfileMembership does not delete its WorkspaceMember history.
-  Future authorization must require both active Profile membership and the
-  applicable Workspace access; invitation/rejoin work must decide whether old
-  Workspace access is restored or explicitly granted again.
+  Effective authorization requires both active Profile membership and
+  applicable Workspace access. Invitation acceptance soft-revokes any stale
+  active same-Profile WorkspaceMember rows so rejoin never restores access;
+  later access requires an explicit direct-add.
 - A selected Profile or Workspace is navigation context only, never evidence
   of authorization.
 - Tenant FKs become non-null only after target-specific inventory, explicit
@@ -1330,6 +1533,13 @@ checks. `HT-DB-P1-06` then applied `0003` to the approved development database
 after backup/restore rehearsal and passed current direct smoke, 17/17 targeted,
 140/140 Workspace, 29/29 auth/API, and 169/169 full PostgreSQL verification.
 HT-TASK-P2-03 subsequently passed 33/33 targeted, 169/169 existing regression,
-and 202/202 full PostgreSQL tests. Its `tasks.0002`/`reviews.0002` migrations
-remain unapplied on development pending separate Owner approval.
+and 202/202 full PostgreSQL tests. `HT-DB-P1-07` then backed up, restore-
+rehearsed and applied `tasks.0002`/`reviews.0002` to the approved development
+database; current Task 33/33, Auth/API 29/29, Workspace 140/140 and full
+202/202 PostgreSQL verification pass with unchanged inventory.
+HT-INV-P2-04 then passed Invitation 39/39, related regression 173/173 and full
+241/241 at its implementation gate. `HT-DB-P1-08` has now backed up,
+restore-rehearsed and applied `workspace.0004` to development, with schema,
+inventory and fixture-free smoke verified. Its current Invitation 39/39,
+Auth/API 29/29, related regression 173/173 and full 241/241 reruns also pass.
 Production and other persistent targets remain unauthorized and untouched.

@@ -416,7 +416,13 @@ rule, tenant scope, and tests are approved. This matrix deliberately does not
 authorize Django permission classes or role constants in this design task.
 
 
-Accepted membership boundary and proposed future invitation lifecycle:
+Accepted membership boundary and proposed future invitation lifecycle
+(historical `HT-RBAC-P1-03` checkpoint):
+
+The labels in this subsection record what was implemented at the 2026-10-17
+RBAC design checkpoint. They are preserved as history and are superseded for
+current Invitation behavior by the `HT-INV-P2-04` decision at the end of this
+file.
 
 - **[CURRENT IMPLEMENTATION OF APPROVED FOUNDATION]** A new Profile starts with
   its creator as owner in one transaction.
@@ -451,10 +457,14 @@ Accepted membership boundary and proposed future invitation lifecycle:
 - **[APPROVED BOUNDARY; DETAILS PENDING]** Users accept/decline invitations when joining a Profile. The accepted direct
   addition exception applies only when an Owner/Admin adds an already-active
   Profile member to a Workspace.
-- **[APPROVED TARGET — NOT IMPLEMENTED]** A supported User-deactivation flow
+- **[APPROVED TARGET — NOT IMPLEMENTED AT THIS HISTORICAL CHECKPOINT]** A supported User-deactivation flow
   revokes continued session usability and never cascade-deletes historical or
-  business data. Production Invitation also depends on persisted verified-email
-  identity; a hashed token alone is not sufficient identity verification.
+  business data. This checkpoint treated persisted verified-email identity as
+  a production dependency because a hashed token alone is not sufficient
+  identity verification. `HT-INV-P2-04` later resolves its narrower acceptance
+  boundary through an authenticated uniquely matching account plus a token
+  actually accepted by the configured mail backend; it does not create or
+  claim a global verified-email flag.
 
 
 Data-isolation invariants:
@@ -591,7 +601,8 @@ Resolution of that checklist:
   read-only Viewer boundary, invitation role ceilings/TTL/resend limits/rates/
   minimum metadata retention, cross-tenant non-disclosure, and platform-only
   global Django Admin boundary. Those items are no longer pending.
-- Details intentionally still downstream are: exact Task visibility and
+- At this historical checkpoint, details intentionally still downstream were:
+  exact Task visibility and
   contributor attribution; concrete Review role/states and payroll trigger;
   general Profile CRUD/settings, self-leave and Profile invitation/rejoin
   policy beyond the implemented bounded lifecycle; verified-email and
@@ -703,12 +714,18 @@ Compatibility boundary without a schema change:
 - Under least privilege, Profile Admin may manage an ordinary Profile
   `MEMBER`; it cannot grant or alter Profile `ADMIN` or `OWNER`.
 
-Production dependency and implementation boundary:
+Historical production dependency and implementation boundary:
 
 - Profile Invitation is not implemented by `HT-RBAC-P1-03`.
-- Persisted verified-email identity and reviewed account binding are required
-  before enabling Profile Invitation in production. A hash-only token is not
-  sufficient proof that the authenticated account controls the invited email.
+- At that checkpoint, persisted verified-email identity and reviewed account
+  binding were required before enabling Profile Invitation in production. A
+  hash-only token remains insufficient proof. The later authorized
+  `HT-INV-P2-04` implementation uses the narrower per-invitation proof recorded
+  below: an active authenticated account whose current normalized email is the
+  sole account match plus a one-time token whose delivery state is `SENT`.
+  This does not establish global email verification, and production operation
+  still requires a real configured mail provider whose delivery has been
+  verified.
 
 
 Source findings at the design checkpoint before `HT-RBAC-P1-03` implementation:
@@ -805,8 +822,11 @@ Resolution of the former owner-review checklist:
   Task/Review states remained downstream. HT-TASK-P2-03 later fixed the
   internal manager/Editor split and state machine; external review and Payroll
   effects remain downstream.
-- Verified-email/account binding is a production dependency, not an optional
-  substitute for token hashing. Invitation is not implemented in this task.
+- At the `HT-RBAC-P1-03` checkpoint, verified-email/account binding was a
+  production dependency and Invitation was not implemented. This historical
+  statement is superseded for the bounded `HT-INV-P2-04` acceptance proof by
+  the later decision below; token hashing remains mandatory and is never a
+  substitute for authenticated recipient matching or actual email delivery.
 - Remaining downstream gates cover Task soft delete/cancellation/comments/
   Marketplace/media and external Client/Guest review; lifecycle policy beyond
   the implemented bounded Profile/Workspace
@@ -1067,3 +1087,256 @@ Current evidence and rollout boundary:
   A separate controlled rollout must identify
   the exact target, inventory, back up, review the plan, apply, smoke, and
   regress before claiming deployment.
+
+
+---
+
+# Decision: Profile Invitation and Membership Onboarding
+
+Date:
+
+2026-10-21
+
+
+Status:
+
+`IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
+
+
+Authority and scope:
+
+The Owner explicitly authorized `HT-INV-P2-04` as a backend implementation
+task. This decision applies the already-approved Invitation role, lifetime,
+abuse-control, retention, tenancy, and consent boundaries without changing
+Django SessionAuthentication or introducing a second authorization model. It
+does not authorize a migration on a persistent development/production database
+or any Client, Finance, Portal, frontend, or unrelated workflow work.
+
+
+Accepted implementation contract:
+
+1. Profile Owner may issue and manage invitations requesting `ADMIN` or
+   `MEMBER`; Profile Admin may issue and manage only `MEMBER`. `MEMBER` is the
+   default. Invitation never grants `OWNER`, Workspace roles grant no Profile
+   invitation capability, and Django `is_staff`/`is_superuser` is not tenant
+   authorization.
+2. The lifecycle is `PENDING` to exactly one of `ACCEPTED`, `DECLINED`,
+   `REVOKED`, or `EXPIRED`. The default TTL is seven days. A resend creates a
+   new record and credential linked by immutable replacement history; it
+   revokes an old still-pending record or replaces an expired record rather
+   than reviving or extending the old credential.
+3. Credentials contain at least 256 bits of cryptographic randomness. Only a
+   unique SHA-256 digest is stored. Raw credentials are excluded from models,
+   manager responses, AuditLog metadata, logs, documentation, and exception
+   details and are single-use through locked terminal-state transitions.
+4. Acceptance/decline requires an active authenticated User whose freshly read
+   current email normalizes to the invitation email and resolves to exactly
+   that one account. A pre-bound `recipient_user`, when present, must also be
+   the actor. The invitation must have delivery state `SENT`, and the actor
+   must present the one-time credential received through the configured email
+   channel. These facts form proof scoped only to that invitation; they do not
+   create or assert a persistent/global verified-email flag. Token possession
+   is not authentication.
+5. An invitation may be issued before its recipient account exists. After the
+   recipient registers/signs in with the uniquely matching normalized email,
+   the same authenticated-plus-email-delivered-token proof applies. Ambiguous
+   case-insensitive account matches, changed/mismatching emails, inactive
+   accounts, a non-`SENT` delivery, and a mismatching stored account binding
+   fail closed.
+6. No recipient inbox endpoint is exposed. Without a persistent global
+   verified-email signal, listing invitations from only a self-asserted account
+   email would be a wider disclosure than the one-invitation token proof. The
+   public contract therefore exposes only authenticated token accept/decline
+   actions and no anonymous preview/inspection route.
+7. Acceptance never changes an existing active Profile membership. With no
+   history it creates one membership at the requested role. With exactly one
+   inactive non-Owner history row, it reactivates that same row only when its
+   stored role exactly equals the invitation role. Multiple inactive rows, a
+   role mismatch, or inactive `OWNER` history fail closed; history is not
+   deleted or silently rewritten.
+8. Rejoining a Profile does not restore historical Workspace authority.
+   Acceptance locks and soft-revokes any still-active same-Profile
+   `WorkspaceMember` rows for that User and writes audit events. A later
+   Workspace direct-add remains a separate explicit manager action.
+9. The original inviter's active same-Profile membership, active User, and
+   authority for the requested role are revalidated when an invitation is
+   accepted. Every manager mutation independently revalidates the current
+   actor under locks. An archived Profile blocks create, revoke, resend, and
+   acceptance; restoration never revives a terminal invitation.
+10. Issuance enforces the approved rolling 24-hour ceilings of five
+    invitations per normalized recipient email and 30 invitations per inviter.
+    Create/resend also use authenticated/cache throttles, and accept/decline
+    token attempts share an authenticated-user five-per-day throttle. Database
+    counts and PostgreSQL locking protect the issuance ceilings; the default
+    process-local cache remains an explicit multi-worker deployment limitation.
+11. Terminal metadata follows the approved minimum 12-month retention policy.
+    No automatic purge, anonymization schedule, or legal-hold rule is inferred
+    by this task.
+12. Delivery is scheduled with `transaction.on_commit`, so a rolled-back
+    invitation is not emailed. The persisted state distinguishes `QUEUED`,
+    `SENT`, and `FAILED`; a failed send is recorded and reported generically,
+    never claimed as sent. Console, dummy, and file backends are refused for
+    Invitation delivery; locmem is restricted to isolated testing. The source
+    abstraction exists, but real SMTP/provider delivery is not yet verified.
+
+
+Current API contract — six route shapes:
+
+```text
+GET/POST /api/v1/profiles/{profile_id}/invitations/
+GET      /api/v1/profiles/{profile_id}/invitations/{invitation_id}/
+POST     /api/v1/profiles/{profile_id}/invitations/{invitation_id}/revoke/
+POST     /api/v1/profiles/{profile_id}/invitations/{invitation_id}/resend/
+POST     /api/v1/invitations/accept/
+POST     /api/v1/invitations/decline/
+```
+
+All routes retain SessionAuthentication, deny anonymous access, enforce CSRF
+on unsafe methods, return non-cacheable responses, and use strict inputs.
+Manager querysets are Profile-scoped; Admin visibility is additionally limited
+to `MEMBER` invitations. Wrong-parent/cross-tenant objects are not disclosed.
+Manager output is sanitized and contains neither raw credential nor digest.
+
+
+Schema, audit, and rollout boundary:
+
+- `ProfileInvitation` is implemented in the existing Workspace app with
+  tenant/account/inviter relationships, requested role, digest, lifecycle,
+  expiry, delivery metadata, terminal actors/timestamps, and replacement
+  lineage. Database checks/unique constraints protect allowed roles/states,
+  terminal/delivery consistency, expiry ordering, credential uniqueness, and
+  at most one pending Profile/email or bound Profile/User invitation.
+- Locked services write material invitation, Profile membership, and stale
+  Workspace-access revocation events atomically with their state mutations.
+  Recipient email and raw/digested credentials are not stored in AuditLog.
+- The additive source migration is
+  `workspace.0004_profileinvitation`. It creates the new aggregate only and
+  performs no guessed mapping/backfill. As of this checkpoint it is not
+  applied to the persistent development database; production is untouched.
+- Verification is complete: targeted Invitation model/service/API/migration
+  tests pass 39/39, Authentication/API passes 29/29,
+  Workspace/RBAC/Task/Review passes 173/173, and the full PostgreSQL suite
+  passes 241/241. Dependency, Django system, and migration-drift checks pass.
+  The persistent development database is reconfirmed unchanged at 30 migration
+  records with `workspace.0004` unapplied and no Invitation table. The status
+  is therefore `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION
+  APPROVAL`; this is not authorization to apply the migration or configure a
+  real provider.
+
+Operational supersession note (2026-10-23): the Owner later authorized
+HT-DB-P1-08, which backed up/rehearsed and applied `workspace.0004` to the
+development database. Production and every other target remain unauthorized.
+
+
+---
+
+# Decision: Account Email Verification and Password Recovery Foundation
+
+Date:
+
+2026-10-23
+
+Implementation reconciliation: 2026-10-24
+
+
+Status:
+
+`HT-AUTH-P1-02` implementation is complete. Its original implementation gate
+did not authorize a persistent migration. The Owner subsequently conditionally
+authorized development-only `HT-DB-P1-09`: fresh inventory, verified backup,
+restore/migration rehearsal, and exact plan were required before applying
+`accounts.0002`. Those gates passed and the exact migration was applied to
+development at 2026-10-24 06:30:28.634074 UTC. No production or other persistent
+target is authorized. This records the actual rollout authorization/status;
+the ten identity/security decisions below remain unchanged. See `HANDOVER.md`
+for current verification and the Owner Review Gate.
+
+
+Decision:
+
+1. Keep Django server-side sessions and DRF `SessionAuthentication`; do not
+   introduce JWT, OAuth, a new authentication framework, or automatic login
+   after password reset.
+2. Email verification proves control of the currently normalized User email.
+   Persist a nullable verification timestamp and normalized-email snapshot;
+   verification is valid only while both exist and the snapshot still matches
+   the current email. A material email change clears verification and revokes
+   pending verification and reset credentials, including if the address later
+   changes back to its earlier value.
+3. Verification is not an activation gate in this slice. Registration still
+   creates an active User, and existing unverified Users may continue to log
+   in. The three legacy development Users are not auto-verified, deactivated,
+   or backfilled.
+4. Use a purpose-bound `AccountSecurityToken` for `EMAIL_VERIFICATION` and
+   `PASSWORD_RESET`. Generate at least 256 bits of randomness, persist only a
+   purpose-separated SHA-256 digest, bind to User and normalized-email
+   snapshot, require successful delivery before consumption, and enforce
+   expiry, rotation, replay protection, and one terminal transition under
+   transaction locks. Password-reset rows also store a SHA-256 fingerprint of
+   the encoded Django password state; verification rows must not store one.
+5. Email-verification credentials expire after 24 hours. Password-reset
+   credentials expire after one hour. Resend revokes the prior pending token
+   and creates an independently random replacement; a consumed, revoked, or
+   expired credential is never reusable.
+6. Email verification request/confirm requires the authenticated User and
+   CSRF. Password reset request/confirm is explicitly `AllowAny` because a
+   locked-out User cannot authenticate, but both public POSTs still require
+   CSRF. All four routes use strict input, no-cache responses, scoped abuse
+   throttles, and sensitive-parameter protection. Reset confirmation applies
+   independent submitted-token-fingerprint `10/hour` and client-address
+   `30/hour` limits.
+7. Password-reset request returns one neutral `202` HTTP status/body for eligible,
+   missing, ambiguous, inactive, unusable-password, and delivery-failure
+   cases. The API never returns a raw token, digest, email-resolution result,
+   or delivery outcome. Confirmation uses a generic invalid-token error. This
+   contract does not pad execution or claim timing-indistinguishability.
+8. Password reset runs Django password validators and `set_password()`. It
+   consumes the token atomically, creates no new session, and relies on
+   Django's password-backed session authentication hash to invalidate existing
+   sessions when they next authenticate. A change through `User.save()`
+   revokes pending reset credentials; a direct queryset change that bypasses
+   the hook still invalidates the stored fingerprint at confirmation. A
+   material email change revokes both verification and reset credentials,
+   including an `A -> B -> A` sequence.
+9. Security state transitions write AuditLog events without raw credentials,
+   digests, email addresses, or passwords. Credential email is scheduled only
+   after transaction commit and reuses the configured default-mail safety
+   boundary. Console/dummy/file backends are rejected; locmem remains limited
+   to isolated tests.
+10. Profile Invitation keeps its independent reviewed proof: authenticated
+    recipient, unique current-email match, delivery `SENT`, and that
+    invitation's one-time credential. HT-AUTH-P1-02 does not retroactively add
+    a global-verification gate, change invitation lifecycle, or infer global
+    verification from invitation acceptance. Any future stricter coupling
+    requires a separately approved compatibility change.
+
+
+Consequences:
+
+- Additive `accounts.0002_accountsecuritytoken_user_email_verification` adds
+  nullable User verification fields plus the account-security-token aggregate,
+  checks, partial uniqueness, and indexes. Its
+  `acctok_fingerprint_by_purpose` constraint requires password-state binding
+  only for reset credentials. It performs no data backfill.
+- `UserSerializer` exposes only the derived boolean `email_verified`; internal
+  timestamps/snapshots and token records are not serialized.
+- Public API allowlist gains only the two password-reset routes. Verification
+  routes remain authenticated. The existing registration/login/logout/me and
+  Profile Invitation contracts remain compatible.
+- Malformed Unicode in public reset and Invitation recipient input is handled
+  fail-closed as `400`, not an encoding-driven `500`; cache fingerprints never
+  contain raw submitted email/token values.
+- Final isolated PostgreSQL checks pass account security 44/44 in 32.336s,
+  Authentication/API/Invitation 113/113 in 99.629s,
+  Workspace/RBAC/Task/Review 173/173 in 93.895s, and full suite 286/286 in
+  188.592s. `pip check`, Django system, migration-drift, and diff checks pass.
+- At the historical implementation gate, development was PostgreSQL 16.14 `hustlytasker_db` at 31
+  migrations (`accounts.0001`, `workspace.0001`-`0004`), 3 Users, 2 sessions,
+  zero checked business/AuditLog rows, and no new columns/token table. The
+  separately authorized HT-DB-P1-09 now has 32 migrations and the verified new
+  schema, with unchanged Users/Sessions, no verified Users, and no token rows.
+  Authorization and inventory for every other target remain separate.
+- **REAL EMAIL DELIVERY NOT VERIFIED.** No real provider credential was used.
+  DRF throttles currently use the default process-local cache and therefore do
+  not provide distributed multi-worker enforcement. These deployment limits
+  must not be described as production-verified.

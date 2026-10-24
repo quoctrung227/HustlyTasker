@@ -12,11 +12,14 @@ class CustomUserAdmin(UserAdmin):
     readonly_fields = (
         "created_at",
         "updated_at",
+        "email_verified_at",
+        "verified_email_normalized",
     )
 
     list_display = (
         "email",
         "username",
+        "email_is_verified",
         "is_staff",
         "is_active",
     )
@@ -41,6 +44,13 @@ class CustomUserAdmin(UserAdmin):
                 "is_superuser",
                 "groups",
                 "user_permissions",
+            )
+        }),
+
+        ("Account security", {
+            "fields": (
+                "email_verified_at",
+                "verified_email_normalized",
             )
         }),
 
@@ -69,3 +79,7 @@ class CustomUserAdmin(UserAdmin):
             ),
         }),
     )
+
+    @admin.display(boolean=True, description="Email verified")
+    def email_is_verified(self, obj):
+        return obj.is_email_verified

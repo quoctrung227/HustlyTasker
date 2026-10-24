@@ -2,7 +2,7 @@ from collections.abc import Mapping
 
 from rest_framework import serializers
 
-from .models import Profile, Workspace, WorkspaceMember
+from .models import Profile, ProfileInvitation, Workspace, WorkspaceMember
 
 
 class StrictInputSerializer(serializers.Serializer):
@@ -104,6 +104,64 @@ class ProfileLifecycleSerializer(StrictInputSerializer):
     """Profile lifecycle actions intentionally accept no writable fields."""
 
     pass
+
+
+class ProfileInvitationReadSerializer(serializers.ModelSerializer):
+    """Sanitized manager metadata; invitation credentials are never exposed."""
+
+    profile_id = serializers.UUIDField(read_only=True)
+    recipient_email = serializers.EmailField(
+        source="recipient_email_normalized",
+        read_only=True,
+    )
+    status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProfileInvitation
+        fields = (
+            "id",
+            "profile_id",
+            "recipient_email",
+            "requested_role",
+            "status",
+            "delivery_status",
+            "expires_at",
+            "delivery_attempted_at",
+            "delivered_at",
+            "accepted_at",
+            "declined_at",
+            "revoked_at",
+            "expired_at",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+    def get_status(self, obj):
+        return obj.effective_status
+
+
+class ProfileInvitationCreateSerializer(StrictInputSerializer):
+    recipient_email = serializers.EmailField(max_length=254)
+    requested_role = serializers.ChoiceField(
+        choices=ProfileInvitation.Role.choices,
+        default=ProfileInvitation.Role.MEMBER,
+    )
+
+
+class ProfileInvitationActionSerializer(StrictInputSerializer):
+    """Manager lifecycle actions have no client-controlled fields."""
+
+    pass
+
+
+class ProfileInvitationTokenSerializer(StrictInputSerializer):
+    token = serializers.CharField(
+        max_length=512,
+        allow_blank=False,
+        trim_whitespace=False,
+        write_only=True,
+    )
 
 
 class WorkspaceMemberReadSerializer(serializers.ModelSerializer):

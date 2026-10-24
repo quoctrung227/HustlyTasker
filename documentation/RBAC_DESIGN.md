@@ -6,7 +6,7 @@ Status: `COMPLETE — APPROVED BY OWNER DELEGATION`
 
 Date: 2026-10-18
 
-Last implementation reconciliation: 2026-10-21
+Last implementation reconciliation: 2026-10-24
 
 The owner delegated the remaining RBAC decisions to the Technical Advisor on
 2026-10-17. That approval first authorized `HT-RBAC-P1-03` Tenant Access
@@ -15,16 +15,28 @@ Context and Scoped Service Foundation. The owner subsequently authorized
 initial schema-free Workspace write/member slice `HT-WORK-P2-02`, followed by
 its approved schema-dependent completion. Current `/api/v1/` behavior includes
 four Profile/Workspace reads, canonical-month Workspace creation/metadata
-update, Profile/Workspace archive/restore, and manager-only Workspace-member
-list/direct-add/role-update/soft-revoke/reactivation. General Profile CRUD,
-Invitation, and downstream domain APIs remain unavailable. Additive
+update, Profile/Workspace archive/restore, manager-only Workspace-member
+list/direct-add/role-update/soft-revoke/reactivation, and the bounded Profile
+Invitation management/recipient actions described in section 7. General
+Profile CRUD and downstream domain APIs remain unavailable. Additive
 `workspace.0003` completed its separately authorized controlled development
 rollout in `HT-DB-P1-06`; production and all other persistent environments
 remain behind separate approval gates. Owner then authorized the dedicated
 `HT-TASK-P2-03` contract. Its Task/Deliverable/internal Review permissions and
 routes are implemented in source and have passed 33/33 targeted, 169/169
 existing regression, and 202/202 full PostgreSQL tests. Its two additive
-migrations are not applied to development pending separate Owner approval.
+migrations completed their development rollout through HT-DB-P1-07. Owner
+then authorized `HT-INV-P2-04`; its source, additive `workspace.0004`, APIs,
+services, and isolated PostgreSQL verification are complete. Its separately
+authorized `HT-DB-P1-08` rollout applied `workspace.0004` to development after
+backup/rehearsal and verification; no other persistent target is authorized.
+`HT-AUTH-P1-02` implementation is complete. Owner separately authorized the
+development-only rollout `HT-DB-P1-09`; exact `accounts.0002` was applied at
+2026-10-24 06:30:28.634074 UTC after verified backup/restore rehearsal. The
+three legacy Users and two Sessions are preserved and no User is auto-verified.
+This operational status reconciliation changes no RBAC or Invitation decision.
+Current rollout verification is recorded in `HANDOVER.md`; every other
+persistent target remains separately gated.
 
 ## 1. Evidence and decision labels
 
@@ -147,9 +159,9 @@ implementation completed on 2026-10-18.
   `IsAuthenticated` establish identity. `apps/workspace/access.py` supplies
   the authorization facts, while `permissions.py` and tenant views adapt those
   facts to DRF with scoped querysets, action permissions, and non-enumerating
-  errors. Four reads plus the bounded Workspace write/member-manager and
-  Profile/Workspace lifecycle operations in section 8 are implemented; general
-  Profile CRUD/membership API and Invitation remain unavailable.
+  errors. Four reads plus the bounded Workspace write/member-manager,
+  Profile/Workspace lifecycle, and Profile Invitation operations in section 8
+  are implemented; general Profile CRUD/membership API remains unavailable.
 - **[CURRENT]** Client, Invoice/Payment, and AuditLog do not yet have a safe
   canonical tenant path; Project does not exist. Those APIs must stay closed.
 - **[CURRENT — HT-RBAC-P1-03]** `update_profile_membership()` now establishes
@@ -609,6 +621,79 @@ cross-row/cross-table invariant.
 
 ## 7. Profile Invitation contract
 
+### Current implementation reconciliation — HT-INV-P2-04 (2026-10-23)
+
+This paragraph is authoritative for current source and supersedes the
+historical proposal/dependency/open wording retained in sections 7.3-7.7 for
+design traceability. `ProfileInvitation` and additive
+`workspace.0004_profileinvitation` are implemented. The aggregate stores only
+a unique SHA-256 digest of a >=256-bit credential, normalized recipient email,
+optional recipient binding, requested `ADMIN`/`MEMBER` role, protected Profile
+and inviter membership, seven-day expiry, five-state lifecycle,
+`QUEUED`/`SENT`/`FAILED` delivery state, terminal actors/timestamps, and
+one-to-one replacement lineage. Database constraints/indexes enforce the
+approved enums, consistency, ordering, uniqueness, and lookup paths.
+
+Recipient accept/decline requires an active authenticated User whose freshly
+locked current email is the unique normalized account match, an optional bound
+recipient match, a `SENT` invitation, and the one-time credential. This is
+email-control proof scoped to the invitation, not global verified-email state;
+therefore no recipient inbox is exposed. Issuance before registration is
+allowed, but eventual ambiguous/mismatching/inactive identity fails closed.
+Acceptance never changes an active membership role. It creates one membership
+or reactivates exactly one compatible inactive non-Owner row, and atomically
+soft-revokes stale active WorkspaceMember rows so Profile rejoin never restores
+Workspace access.
+
+Create/revoke/resend/accept/decline use Profile-first locking, revalidate the
+manager/original inviter, write AuditLog in the state transaction, and allow
+one terminal winner under concurrency. Resend creates a replacement and rotates
+the credential; replay fails. Delivery runs on commit, refuses console/dummy/
+file backends, records failures honestly, and recovers through scoped manager
+discovery plus resend. Durable PostgreSQL issuance limits enforce five per
+normalized recipient/24h and 30 per inviter/24h; cache throttles are additional
+process-local protection pending a shared deployment cache. **REAL EMAIL
+DELIVERY NOT VERIFIED.** `workspace.0004` has completed its separately
+authorized development rollout; production and every other persistent target
+remain unauthorized.
+
+### HT-AUTH-P1-02 compatibility reconciliation — 2026-10-24
+
+HT-AUTH-P1-02 adds a durable current-email verification signal and independent
+email-verification/password-reset credentials in the Accounts domain. This is
+global identity-security state, not a Profile/Workspace role, membership, or
+tenant authorization claim. Verification request and confirmation require the
+same authenticated User. Password reset is public and neutral in HTTP status/
+body across account outcomes, but request timing is not equalized or verified
+indistinguishable. Neither verification nor reset can grant Profile access.
+
+Reset credentials are also bound to a fingerprint of the exact encoded Django
+password state. A normal password change revokes pending reset credentials;
+even a direct queryset password update that bypasses the model hook fails the
+fingerprint comparison at confirmation. A material email change revokes both
+pending verification and reset credentials, including an `A -> B -> A`
+sequence. These identity controls remain independent of tenant capabilities.
+
+The existing Invitation contract is deliberately unchanged by this task.
+Accept/decline continues to require an active authenticated recipient, a unique
+fresh match between the current normalized account email and invitation email,
+delivery state `SENT`, and that invitation's one-time credential. It does not
+also require `User.is_email_verified`. This preserves the reviewed Invitation
+flow and avoids suddenly blocking the three unverified legacy development
+Users. No verified status is inferred from legacy data or from accepting an
+Invitation.
+
+The new verification state makes a future stricter Invitation policy
+technically possible, but introducing such a gate would be a separate approved
+behavior change with legacy/onboarding compatibility tests. Until then, the
+historical verified-email dependency wording in section 7.4 is superseded by
+the current implementation reconciliations above. **REAL EMAIL DELIVERY NOT
+VERIFIED** remains true for both Invitation and account-security messages, and
+their cache throttles remain process-local without a shared production cache.
+Reset confirmation uses independent token-fingerprint `10/hour` and client-
+address `30/hour` counters. Malformed Unicode in public reset or Invitation
+recipient input fails closed with `400`, not `500`.
+
 The consent boundary, email binding, one-time expiring credential, role ceiling,
 seven-day TTL, resend invalidation, initial rate limits, and minimum metadata
 retention below are **[APPROVED BY OWNER DELEGATION]**. This remains a design
@@ -652,9 +737,10 @@ service, endpoint, token, or delivery flow. Bullets still labeled
   email. Exact account binding still depends on verified-email support as
   described in section 7.4.
 
-### 7.3 Proposed future record
+### 7.3 Historical record proposal (superseded by HT-INV-P2-04)
 
-This is schema design only; no model or migration exists:
+The following table is retained as design history. The implementation
+reconciliation above and current source are authoritative:
 
 | Field/constraint | Proposed contract |
 |---|---|
@@ -676,7 +762,7 @@ token. The proposed state machine keeps terminal records immutable and retains
 their metadata for at least 12 months. Automated purge is explicitly outside
 this task.
 
-### 7.4 Recipient and account binding
+### 7.4 Historical recipient/account proposal (superseded)
 
 - **[REQUIREMENT]** Input identity is email; username is never invitation
   identity.
@@ -710,7 +796,7 @@ this task.
   current authentication has no verified-email invitation onboarding flow.
   Ambiguous case-insensitive account matches must fail closed.
 
-### 7.5 Token and delivery security
+### 7.5 Historical token/delivery proposal (superseded)
 
 - Generate at least 32 cryptographically random bytes (256 bits) and encode
   URL-safely. Store only a unique SHA-256 digest; never store or log raw token.
@@ -734,7 +820,7 @@ this task.
   enforcement mechanism before production; these approved limits are not
   implemented by this task.
 
-### 7.6 State and concurrency contract
+### 7.6 Historical state/concurrency proposal (superseded)
 
 ```text
 PENDING ──accept──> ACCEPTED
@@ -762,7 +848,7 @@ PENDING ──accept──> ACCEPTED
   invitations survive inviter demotion/removal, is **[DEFER]** to the Invitation
   implementation review. Revalidation is the proposed fail-closed policy.
 
-### 7.7 Audit events
+### 7.7 Historical audit proposal (superseded)
 
 Proposed events:
 
@@ -786,8 +872,10 @@ All routes use global SessionAuthentication and `IsAuthenticated`; no tenant
 route receives `AllowAny`. `HT-API-P1-04` supplies the four reads and
 `HT-WORK-P2-02` supplies the bounded Workspace write/member-manager and
 Profile/Workspace lifecycle operations marked current below. Every unsafe
-method requires CSRF. General Profile CRUD/membership APIs, hard delete,
-self-leave, and Invitation remain unavailable behind their own gates.
+method requires CSRF. General Profile CRUD/membership APIs, hard delete, and
+self-leave remain unavailable behind their own gates. `HT-INV-P2-04` adds the
+bounded authenticated Invitation routes in section 8.3; `workspace.0004`
+remains unapplied to development.
 
 `HT-TASK-P2-03` additionally implements the bounded Task and internal Review
 routes in section 8.2. Those source routes are not deployed to development
@@ -908,35 +996,39 @@ POST      /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id
 
 ```text
 GET/POST   /api/v1/profiles/{profile_id}/invitations/
+GET        /api/v1/profiles/{profile_id}/invitations/{invitation_id}/
 POST       /api/v1/profiles/{profile_id}/invitations/{invitation_id}/revoke/
-POST       /api/v1/profiles/{profile_id}/invitations/{invitation_id}/reinvite/
-GET        /api/v1/profile-invitations/me/
-POST       /api/v1/profile-invitations/accept/   {"token": "..."}
-POST       /api/v1/profile-invitations/decline/  {"token": "..."}
+POST       /api/v1/profiles/{profile_id}/invitations/{invitation_id}/resend/
+POST       /api/v1/invitations/accept/   {"token": "..."}
+POST       /api/v1/invitations/decline/  {"token": "..."}
 ```
 
-Management list/detail never returns token or hash. Avoid a public invitation
-preview. If future UX requires one, it needs explicit owner/security approval,
-uniform minimal responses, no-store/no-referrer behavior, and throttling.
+These routes are implemented in source by `HT-INV-P2-04`. There is no
+recipient inbox or anonymous preview. HT-AUTH-P1-02 now adds a global
+verified-email signal in source, but `accounts.0002` is not yet applied to
+development and the Invitation API deliberately retains its narrower
+delivered-token proof rather than changing discovery/access behavior in this
+task. Management list/detail never returns token, digest, recipient User ID,
+inviter identity, or terminal actor IDs.
 
-Compact proposed contract (exact envelope/status approval remains part of the
-error-contract review):
+Current contract:
 
 | Operation | Actor/input | Validation and response boundary |
 |---|---|---|
-| List Profile invitations | Profile Owner; Admin only within approved role ceiling | Tenant-scoped sanitized records; no token/hash, unmasked email outside approved management scope, or cross-Profile count |
-| Create | Authorized manager; `{recipient_email, requested_role}` | Server sets Profile/inviter/status/expiry/hash; canonicalize email; enforce role ceiling, existing-member and pending-duplicate rules; proposed `201` sanitized record; conflict uses stable `409` without leaking accounts publicly |
-| Revoke | Authorized manager; no client-supplied status/actor | Lock/recheck pending record and management ceiling; proposed `200` sanitized terminal state; outside scope `404`, visible forbidden action `403` |
-| Reinvite | Authorized manager; optional approved delivery channel only | Terminalize/replace pending credential atomically; never return raw token/hash; proposed `201` replacement summary; delivery runs after commit |
-| Recipient inbox | Active authenticated User; no tenant supplied | Only safely bound/matching invitations; sanitized result grants no Profile/Workspace read before acceptance |
-| Accept/decline | Matching active authenticated User; `{token}`; CSRF | Server derives invitation/Profile/recipient; ignores all role/tenant fields; same-recipient accepted replay may return idempotent `200`; invalid/unavailable cases use one proposed generic `400` shape; accept returns only approved membership/navigation summary |
+| List/detail Profile invitations | Profile Owner; Admin only within `MEMBER` ceiling | Tenant-scoped paginated/sanitized records; token/digest and User/actor identities omitted; wrong-parent/cross-tenant/hidden role is generic `404` |
+| Create | Owner invites `ADMIN`/`MEMBER`; Admin only `MEMBER`; `{recipient_email, requested_role?}` | Server sets tenant/inviter/lifecycle/expiry/digest; default role `MEMBER`; returns sanitized `201`; malformed Unicode recipient is `400`, never `500`; no pre-accept grant |
+| Revoke | Authorized manager; exactly empty object | Locked pending transition; sanitized `200`; current capability revalidated |
+| Resend | Authorized manager; exactly empty object | Pending/expired source gets an immutable replacement and new credential; old token cannot replay; sanitized `200`; delivery runs after commit |
+| Accept/decline | Matching active authenticated User; `{token}`; CSRF | Server derives tenant/recipient and requires unique current-email match plus `SENT` delivery; terminal/expired/replayed/mismatched state is generic `409`; accept returns only membership/navigation summary |
 
-Request serializers reject/ignore server-owned fields including Profile,
-recipient User, inviter, status, digest, expiry overrides, terminal metadata,
-membership User, and audit metadata. The seven-day TTL, resend invalidation,
-and initial throttle ceilings are approved but not implemented. Verified email
-remains a production dependency; unregistered-recipient onboarding, delivery,
-and exact error-envelope details remain deferred.
+Request serializers reject unknown/server-owned fields. All routes use
+SessionAuthentication, deny anonymous callers, enforce CSRF on unsafe methods,
+and return non-cacheable responses. The approved seven-day TTL, resend
+invalidation, role ceilings, durable issuance limits, token-action throttle,
+inviter revalidation, and locked membership/rejoin behavior are implemented.
+`workspace.0004` is applied only to the approved development database after
+HT-DB-P1-08; all other persistent rollouts remain gated. Delivery was tested
+only with the isolated locmem adapter; **REAL EMAIL DELIVERY NOT VERIFIED**.
 
 ### 8.4 Deliberately deferred APIs
 

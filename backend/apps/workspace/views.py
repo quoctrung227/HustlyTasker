@@ -1,9 +1,13 @@
 from django.core.exceptions import ValidationError
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
+from django.views.decorators.debug import (
+    sensitive_post_parameters,
+    sensitive_variables,
+)
 from rest_framework import generics, status
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.exceptions import APIException, NotFound
+from rest_framework.exceptions import APIException, NotFound, Throttled
 from rest_framework.exceptions import ValidationError as ApiValidationError
 from rest_framework.response import Response
 
@@ -11,6 +15,7 @@ from api.pagination import StandardResultsSetPagination
 
 from .access import (
     TenantAccessNotFound,
+    profile_invitations_visible_to_managers,
     profiles_visible_to,
     workspace_members_visible_to_managers,
     workspaces_visible_to,
@@ -19,6 +24,7 @@ from .permissions import (
     CanCreateWorkspace,
     CanEditWorkspaceMetadata,
     CanManageProfileLifecycle,
+    CanManageProfileInvitations,
     CanManageWorkspaceLifecycle,
     CanManageWorkspaceMembers,
     HasActiveTenantIdentity,
@@ -26,6 +32,10 @@ from .permissions import (
     HasWorkspaceReadAccess,
 )
 from .serializers import (
+    ProfileInvitationActionSerializer,
+    ProfileInvitationCreateSerializer,
+    ProfileInvitationReadSerializer,
+    ProfileInvitationTokenSerializer,
     ProfileLifecycleSerializer,
     ProfileReadSerializer,
     WorkspaceCreateSerializer,
@@ -35,6 +45,21 @@ from .serializers import (
     WorkspaceMemberUpdateSerializer,
     WorkspaceReadSerializer,
     WorkspaceUpdateSerializer,
+)
+from .invitation_delivery import InvitationDeliveryUnavailable
+from .invitation_services import (
+    InvitationConflict,
+    InvitationRateLimitExceeded,
+    accept_profile_invitation,
+    create_profile_invitation,
+    decline_profile_invitation,
+    resend_profile_invitation,
+    revoke_profile_invitation,
+)
+from .invitation_throttles import (
+    InvitationRecipientThrottle,
+    InvitationSendThrottle,
+    InvitationTokenActionThrottle,
 )
 from .services import (
     WorkspaceMembershipConflict,
@@ -57,6 +82,12 @@ class Conflict(APIException):
     default_code = "conflict"
 
 
+class ServiceUnavailable(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = "Invitation delivery is currently unavailable."
+    default_code = "service_unavailable"
+
+
 def _django_validation_detail(exc):
     if hasattr(exc, "message_dict"):
         return exc.message_dict
@@ -68,7 +99,13 @@ class TenantApiViewMixin:
     pagination_class = StandardResultsSetPagination
 
     def handle_exception(self, exc):
-        if isinstance(
+        if isinstance(exc, InvitationConflict):
+            exc = Conflict()
+        elif isinstance(exc, InvitationRateLimitExceeded):
+            exc = Throttled()
+        elif isinstance(exc, InvitationDeliveryUnavailable):
+            exc = ServiceUnavailable()
+        elif isinstance(
             exc,
             (WorkspaceMembershipConflict, WorkspacePeriodConflict),
         ):
@@ -157,6 +194,137 @@ class ProfileArchiveView(ProfileLifecycleView):
 
 class ProfileRestoreView(ProfileLifecycleView):
     lifecycle_service = staticmethod(restore_profile)
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProfileInvitationListView(TenantApiViewMixin, generics.ListAPIView):
+    serializer_class = ProfileInvitationReadSerializer
+    permission_classes = (CanManageProfileInvitations,)
+    http_method_names = ("get", "post", "head", "options")
+
+    def get_throttles(self):
+        if self.request.method == "POST":
+            return [InvitationSendThrottle(), InvitationRecipientThrottle()]
+        return []
+
+    def get_queryset(self):
+        return profile_invitations_visible_to_managers(
+            self.profile_access_context
+        ).order_by("-created_at", "-id")
+
+    def post(self, request, *args, **kwargs):
+        serializer = ProfileInvitationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        invitation = create_profile_invitation(
+            actor=request.user,
+            profile_id=self.profile_access_context.profile_id,
+            **serializer.validated_data,
+        )
+        invitation.refresh_from_db()
+        return Response(
+            ProfileInvitationReadSerializer(invitation).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProfileInvitationDetailView(
+    TenantReadOnlyViewMixin,
+    ScopedRetrieveMixin,
+    generics.RetrieveAPIView,
+):
+    serializer_class = ProfileInvitationReadSerializer
+    permission_classes = (CanManageProfileInvitations,)
+    lookup_field = "id"
+    lookup_url_kwarg = "invitation_id"
+
+    def get_queryset(self):
+        return profile_invitations_visible_to_managers(
+            self.profile_access_context
+        )
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProfileInvitationManagerActionView(
+    TenantApiViewMixin,
+    ScopedRetrieveMixin,
+    generics.GenericAPIView,
+):
+    serializer_class = ProfileInvitationActionSerializer
+    permission_classes = (CanManageProfileInvitations,)
+    http_method_names = ("post", "options")
+    lookup_field = "id"
+    lookup_url_kwarg = "invitation_id"
+    invitation_service = None
+    throttle_classes = ()
+
+    def get_queryset(self):
+        return profile_invitations_visible_to_managers(
+            self.profile_access_context
+        )
+
+    def post(self, request, *args, **kwargs):
+        invitation = self.get_object()
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        invitation = self.invitation_service(
+            actor=request.user,
+            profile_id=self.profile_access_context.profile_id,
+            invitation_id=invitation.id,
+        )
+        invitation.refresh_from_db()
+        return Response(ProfileInvitationReadSerializer(invitation).data)
+
+
+class ProfileInvitationRevokeView(ProfileInvitationManagerActionView):
+    invitation_service = staticmethod(revoke_profile_invitation)
+
+
+class ProfileInvitationResendView(ProfileInvitationManagerActionView):
+    invitation_service = staticmethod(resend_profile_invitation)
+    throttle_classes = (InvitationSendThrottle,)
+
+
+@method_decorator(never_cache, name="dispatch")
+@method_decorator(sensitive_post_parameters("token"), name="dispatch")
+class ProfileInvitationRecipientActionView(
+    TenantApiViewMixin,
+    generics.GenericAPIView,
+):
+    serializer_class = ProfileInvitationTokenSerializer
+    permission_classes = (HasActiveTenantIdentity,)
+    throttle_classes = (InvitationTokenActionThrottle,)
+    http_method_names = ("post", "options")
+    invitation_service = None
+
+    @sensitive_variables()
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = self.invitation_service(
+            actor=request.user,
+            token=serializer.validated_data["token"],
+        )
+        return Response(self.response_data(result))
+
+
+class ProfileInvitationAcceptView(ProfileInvitationRecipientActionView):
+    invitation_service = staticmethod(accept_profile_invitation)
+
+    def response_data(self, membership):
+        return {
+            "status": "ACCEPTED",
+            "profile_id": str(membership.profile_id),
+            "membership_id": str(membership.id),
+            "role": membership.role,
+        }
+
+
+class ProfileInvitationDeclineView(ProfileInvitationRecipientActionView):
+    invitation_service = staticmethod(decline_profile_invitation)
+
+    def response_data(self, invitation):
+        return {"status": invitation.status}
 
 
 @method_decorator(never_cache, name="dispatch")

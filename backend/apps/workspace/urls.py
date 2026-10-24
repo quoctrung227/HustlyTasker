@@ -1,6 +1,12 @@
 from django.urls import path
 
 from .views import (
+    ProfileInvitationAcceptView,
+    ProfileInvitationDeclineView,
+    ProfileInvitationDetailView,
+    ProfileInvitationListView,
+    ProfileInvitationResendView,
+    ProfileInvitationRevokeView,
     ProfileArchiveView,
     ProfileDetailView,
     ProfileListView,
@@ -17,6 +23,16 @@ from .views import (
 app_name = "workspace"
 
 urlpatterns = [
+    path(
+        "invitations/accept/",
+        ProfileInvitationAcceptView.as_view(),
+        name="profile-invitation-accept",
+    ),
+    path(
+        "invitations/decline/",
+        ProfileInvitationDeclineView.as_view(),
+        name="profile-invitation-decline",
+    ),
     path(
         "profiles/",
         ProfileListView.as_view(),
@@ -36,6 +52,32 @@ urlpatterns = [
         "profiles/<str:profile_id>/restore/",
         ProfileRestoreView.as_view(),
         name="profile-restore",
+    ),
+    path(
+        "profiles/<str:profile_id>/invitations/",
+        ProfileInvitationListView.as_view(),
+        name="profile-invitation-list",
+    ),
+    path(
+        "profiles/<str:profile_id>/invitations/<str:invitation_id>/",
+        ProfileInvitationDetailView.as_view(),
+        name="profile-invitation-detail",
+    ),
+    path(
+        (
+            "profiles/<str:profile_id>/invitations/"
+            "<str:invitation_id>/revoke/"
+        ),
+        ProfileInvitationRevokeView.as_view(),
+        name="profile-invitation-revoke",
+    ),
+    path(
+        (
+            "profiles/<str:profile_id>/invitations/"
+            "<str:invitation_id>/resend/"
+        ),
+        ProfileInvitationResendView.as_view(),
+        name="profile-invitation-resend",
     ),
     path(
         "profiles/<str:profile_id>/workspaces/",

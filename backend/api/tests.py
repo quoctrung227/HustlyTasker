@@ -11,6 +11,8 @@ from api.views import HealthCheckView
 from apps.accounts.views import (
     CsrfTokenView,
     LoginView,
+    PasswordResetConfirmView,
+    PasswordResetRequestView,
     RegisterView,
 )
 from config import urls as root_urls
@@ -75,6 +77,8 @@ class ApiConfigurationTests(SimpleTestCase):
             CsrfTokenView,
             RegisterView,
             LoginView,
+            PasswordResetRequestView,
+            PasswordResetConfirmView,
         }
 
         self.assertEqual(actual_public_views, intended_public_views)

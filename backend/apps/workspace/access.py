@@ -4,7 +4,13 @@ from uuid import UUID
 from django.core.exceptions import ValidationError
 from django.db.models import OuterRef, Q, Subquery
 
-from .models import Profile, ProfileMembership, Workspace, WorkspaceMember
+from .models import (
+    Profile,
+    ProfileInvitation,
+    ProfileMembership,
+    Workspace,
+    WorkspaceMember,
+)
 
 
 _CONTEXT_VERIFICATION = object()
@@ -361,6 +367,42 @@ def can_manage_profile_lifecycle(context):
         return False
 
     return current_context.profile_role == ProfileMembership.Role.OWNER
+
+
+def can_manage_profile_invitations(context):
+    """Profile Owners/Admins may manage invitations within their role ceiling."""
+
+    try:
+        current_context = _refresh_profile_access_context(context)
+    except TenantAccessNotFound:
+        return False
+
+    return current_context.profile_role in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    )
+
+
+def profile_invitations_visible_to_managers(context):
+    """Return invitation metadata limited by tenant and manager role ceiling."""
+
+    current_context = _refresh_profile_access_context(context)
+    if not can_manage_profile_invitations(current_context):
+        raise TenantAccessNotFound()
+
+    queryset = ProfileInvitation.objects.filter(
+        profile_id=current_context.profile_id,
+        profile__memberships__id=current_context.membership_id,
+        profile__memberships__user_id=current_context.user_id,
+        profile__memberships__user__is_active=True,
+        profile__memberships__is_active=True,
+        profile__memberships__role=current_context.profile_role,
+    )
+    if current_context.profile_role == ProfileMembership.Role.ADMIN:
+        queryset = queryset.filter(
+            requested_role=ProfileInvitation.Role.MEMBER,
+        )
+    return queryset.distinct()
 
 
 def _has_active_workspace_state(context):

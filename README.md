@@ -3,6 +3,84 @@
 HustlyTasker uses Django 6.1, Django REST Framework, and PostgreSQL 16. The
 frontend is planned but is not implemented yet.
 
+## Backend tests and CI
+
+From the repository root, use PowerShell 5.1 or 7 with Docker Desktop/Engine
+and Compose v2. The launcher supplies Python 3.12 and PostgreSQL 16; it does
+not need `.env`, development credentials, or changes to the Owner's venv.
+
+```powershell
+# Full PostgreSQL regression suite and required checks
+.\scripts\test-backend.ps1
+
+# Targeted modules/classes/test methods use dotted Django labels
+.\scripts\test-backend.ps1 -TestLabel apps.accounts.tests,api.tests
+```
+
+The first run builds a dependency-only test image from the pinned
+`backend/requirements.txt`. Later runs can reuse that image/build cache while
+mounting the current source read-only. The Docker build context excludes
+private environment files and local backups.
+
+Each invocation creates a new labelled Compose project, internal network,
+and PostgreSQL cluster with tmpfs data, no published DB port, and no persistent
+data volume. The shared `scripts/test_backend.py` command runs `pip check`,
+Django system checks, model/migration drift and graph/history checks, builds
+the current migration chain on a uniquely named owned test database, and runs
+the selected tests serially. Application password hashing/validation,
+SessionAuthentication, permissions, and CSRF remain enabled. Mail is locmem.
+
+Test settings read only the explicit test endpoint/run identity and ignore
+inherited `POSTGRES_*`, Django deployment settings, and PostgreSQL connection
+environment. They never read `.env` or select the development database.
+The core refuses a non-fresh cluster or an existing database rather than
+autoclobbering it. Its internal reuse is limited to the database it just
+created and marked; CLI settings/runner/keepdb/parallel overrides are rejected.
+The approved development schema already includes `accounts.0002` through
+HT-DB-P1-09; running tests does not apply migrations to that database.
+
+Normal completion and Ctrl+C attempt cleanup. After a hard interruption or
+Docker daemon outage, use the printed run ID from the same checkout:
+
+```powershell
+.\scripts\test-backend.ps1 -CleanupRunId '<printed 32-character run ID>'
+```
+
+Cleanup verifies exact repository/run/project labels and resource identity
+before removing only that run's containers/network. The core additionally
+checks PostgreSQL cluster, role, and database marker before dropping its
+owned database. Ownership mismatches fail; do not replace this with broad
+Docker prune/down-volume commands. The reusable dependency image may remain
+cached, but it contains no database state.
+
+With Python 3.12 and the pinned backend requirements installed, the harness
+guard unit tests are:
+
+```text
+python -m unittest discover -s scripts -p test_test_backend.py
+```
+
+`.github/workflows/backend-ci.yml` runs on pull requests and pushes to `main`.
+It uses Python 3.12 and a fresh PostgreSQL 16 service on a random job-local
+port, installs the pinned requirements, runs the guard tests, then invokes
+`python scripts/test_backend.py`. This uses the same core without Docker-in-
+Docker. The workflow has read-only repository permission, no deployment step,
+no production secrets, and no `continue-on-error` for required gates. Failures
+propagate as nonzero exit codes. In GitHub's Actions tab, open **Backend
+PostgreSQL checks** and inspect the failed step/log; a local run is not proof
+that GitHub accepted or executed the workflow.
+
+HT-TEST-P1-01 is **COMPLETE / OWNER REVIEW GATE — LOCAL TEST HARNESS VERIFIED**.
+Actual local results: 14/14 guard tests (0.513s), targeted API 10/10 (0.044s),
+and full PostgreSQL 286/286 (166.382s), with dependency/system/migration-chain
+checks and cleanup PASS. A deliberate nonexistent test label returns exit 1
+and still cleans its resources. Run-ID cleanup removes owned interruption
+fixtures and refuses a wrong-repository fixture. PowerShell parser, Compose
+configuration, actionlint, and diff checks PASS. The original development
+Users/Sessions were compared in memory before/after and remain unchanged;
+development stays at 32 migrations, 3 Users, 2 Sessions, and zero token rows.
+**CI WORKFLOW IMPLEMENTED — REMOTE RUN NOT VERIFIED.**
+
 ## Local setup
 
 Prerequisites: Docker Desktop and Python 3.12 with the Windows Python Launcher

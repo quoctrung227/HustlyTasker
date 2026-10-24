@@ -1,6 +1,376 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-10-21 (HT-TASK-P2-03)
+## Current Snapshot - 2026-10-24 (HT-TEST-P1-01)
+
+Status: **COMPLETE / OWNER REVIEW GATE — LOCAL TEST HARNESS VERIFIED**
+
+- Added dedicated `backend/config/test_environment.py` and `test_settings.py`
+  for explicit isolated test endpoints. Deployment/`POSTGRES_*`/PG connection
+  variables and `.env` do not supply the test target. Session authentication,
+  CSRF, password hashing/validators, application rules, and migration files are
+  unchanged; credential email uses the locmem test adapter.
+- `scripts/test_backend.py` is the shared local/CI command. It runs dependency,
+  system, model-drift and migration graph/history checks, creates a unique
+  owned database, verifies the full migration chain there, runs serial
+  full/targeted tests, and cleans only that database after cluster/role/run-
+  marker checks. It refuses pre-existing DB/non-fresh cluster and unsafe CLI
+  settings/runner/keepdb/parallel overrides.
+- Local `scripts/test-backend.ps1`, `docker/compose.test.yml`, and the test
+  Dockerfile/ignore create a separate labelled Python 3.12/PostgreSQL 16 test
+  project with read-only source, tmpfs PG data, an internal network, no
+  published PG port, and no persistent volume. Normal/signal cleanup and an
+  explicit verified `-CleanupRunId` path handle disposable resources.
+- Added `.github/workflows/backend-ci.yml`: PR/push-main, Python 3.12, fresh
+  job-local PostgreSQL 16 service, pinned requirements, harness guard tests,
+  and the same full core command. No deploy/production secrets; repository
+  permissions are read-only and required failures are not suppressed.
+  **CI WORKFLOW IMPLEMENTED — REMOTE RUN NOT VERIFIED.**
+- Actual current evidence: harness safety unit tests **14/14 PASS** in 0.513s;
+  targeted API **10/10 PASS** in 0.044s; full PostgreSQL **286/286 PASS** in
+  **166.382s** through the one-command local launcher, exit 0. Dependency,
+  system, model-drift, graph/history, full migration-chain and owned-DB
+  cleanup checks all pass. The first targeted attempt exposed a harness-only
+  SimpleTestCase DB-selection issue, which was fixed without business edits.
+- A deliberate nonexistent label returns exit 1 and cleans all run resources.
+  Simulated hard-interruption fixtures (two owned containers/network) clean
+  through `-CleanupRunId`; a wrong-repository network is correctly refused and
+  preserved, then removed separately by its verified fixture ID. PowerShell
+  parser, Compose configuration, actionlint, and `git diff --check` pass;
+  actionlint's initial service-port numeric-key issue was fixed to a string key.
+- Final read-only development baseline remains 32 migration records, including
+  `accounts.0002`, 3 Users, 2 Sessions, and zero account-security token rows.
+  Original User/Session fields compare equal before/after in memory without
+  exposing private values. Audit/business data is unchanged. No labelled test
+  containers/networks or test DB remains; only the original PostgreSQL container
+  is running. No development migration is part of this task. Existing dirty
+  source/docs are preserved; README documents full/targeted commands and cleanup.
+
+All local acceptance criteria pass. **CI WORKFLOW IMPLEMENTED — REMOTE RUN
+NOT VERIFIED**: no GitHub push/remote run was performed. Stop at **OWNER REVIEW
+GATE**. The proposed next task is `HT-PROJ-P2-05 — Project, Subtask, Deadline &
+Priority`, only after Owner review/authorization. Real email, distributed
+production throttling, and reset timing limitations are unchanged; this does
+not mark the full application complete.
+
+---
+
+## Historical Snapshot - 2026-10-24 (HT-DB-P1-09)
+
+The rollout below is the completed baseline preceding HT-TEST-P1-01. Its test
+results do not substitute for the current harness verification gates.
+
+Status: **COMPLETE / OWNER REVIEW GATE**
+
+- Owner-authorized conditional rollout targets only the repository Compose
+  development PostgreSQL 16.14 database `hustlytasker_db`, container
+  `hustlytasker_postgres`, loopback `127.0.0.1:5432`, volume
+  `docker_postgres_data`. Production and other persistent environments remain
+  outside this authorization.
+- Re-inventory before apply found 31 migrations, 3 active Users, 2 Sessions,
+  zero checked business/AuditLog rows, 22 content types, 88 permissions, and
+  7 Admin log rows. Existing foreign keys had no orphans and no ambiguous
+  legacy email identities were found.
+- Retained fresh Git-ignored custom backup
+  `.local_backups/HT-DB-P1-09/hustlytasker_dev_pre_accounts_0002_20261024T062543Z.dump`:
+  93,598 bytes; SHA-256
+  `195d7406015be1ce4d40f1b0f0f37094282abe7b82b7dd9b9c4b2c070827af49`.
+  Host/container size/hash match; 223-line TOC and full archive read PASS.
+  Restore into an isolated PostgreSQL database matched every legacy row;
+  applying the exact migration there and rehearsal checks passed.
+- Applied exactly `accounts.0002_accountsecuritytoken_user_email_verification`
+  once to development at `2026-10-24 06:30:28.634074 UTC`. Development now has
+  32 migrations, 15 User columns, and an empty 17-column token table. Token
+  CHECKs/FKs/indexes and the User verification constraints are validated;
+  all 39 public FKs have zero orphans. Legacy rows are byte-exact unchanged,
+  including 3 Users and 2 Sessions. Zero Users were verified; no token or
+  business/AuditLog rows were created. Standard Django metadata is now 23
+  content types and 92 permissions; Admin log count remains 7.
+- `pip check`, Django system check, `makemigrations --check --dry-run`,
+  `migrate --check`, and the empty migration plan PASS.
+- **DEV SMOKE PASSED**: 45 fixture-free Django-handler requests (the original
+  36 plus eight Task/Review boundary requests and one extra CSRF bootstrap)
+  against persistent development in a PostgreSQL READ ONLY transaction with CSRF
+  enforced. Health/CSRF return 200, missing-CSRF 403, malformed auth/reset
+  input 400, protected anonymous routes 403, disallowed methods 405,
+  unknown-email reset request neutral 202, and invalid reset confirm generic
+  400. Supplemental Task/Review anonymous boundaries return 403. No 500, PII
+  disclosure, email attempt, or User/Session/token mutation.
+  Authenticated success and real verification/reset/Invitation acceptance are
+  **NOT TESTED ON PERSISTENT DEVELOPMENT**; those paths use isolated tests.
+- Current isolated reruns: account security **44/44 PASS** in 30.549s;
+  Authentication/API Foundation **29/29 PASS** in 7.523s; Invitation
+  **40/40 PASS** in 61.679s; Workspace/RBAC **140/140 PASS** in 79.717s; and
+  Task/Review **33/33 PASS** in 8.457s. These completed task runs were reused
+  after resume because source/schema had not changed. Only the unfinished
+  full-suite gate was rerun: **286/286 PASS** in 197.049s, exit 0. Its log and
+  exit record are retained under Git-ignored
+  `.local_backups/HT-DB-P1-09/full_postgresql_tests.log` and
+  `.local_backups/HT-DB-P1-09/full_postgresql_tests.exit`.
+- Final system/dependency/migration checks pass. Exact legacy-row comparison
+  against the rehearsal again passes. The rehearsal database, temporary
+  Python runner, and container-side backup copy were removed; no `test_%` or
+  `htdb_p109%` database remains. The verified host backup is retained with its
+  original size/digest. Development PostgreSQL remains running with 32
+  migrations, 3 Users, 2 Sessions, and no account-security token rows.
+- No feature code, model, migration file, environment credential, or business
+  rule changes are part of this operational task. All pre-existing dirty work
+  is preserved.
+
+All rollout acceptance criteria pass. Stop at **OWNER REVIEW GATE**; no
+implementation blocker remains and no next feature starts automatically.
+**REAL EMAIL DELIVERY NOT VERIFIED. DISTRIBUTED RATE LIMITING NOT VERIFIED.**
+Cache throttles remain process-local; reset-request response neutrality does
+not establish timing indistinguishability.
+
+---
+
+## Historical Snapshot - 2026-10-24 (HT-AUTH-P1-02 implementation gate)
+
+The following records the pre-rollout implementation gate. Its source-only
+migration boundary and inventory are superseded by HT-DB-P1-09 above.
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture / account verification and recovery`
+
+### HT-AUTH-P1-02 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
+
+Status: **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL**
+
+- Added a persistent email-verification signal to `User` and a purpose-bound
+  `AccountSecurityToken` aggregate for email verification and password reset.
+  Raw credentials are generated with high entropy, delivered only by email,
+  and represented in PostgreSQL only by a unique SHA-256 digest. Tokens are
+  single-use, expiring, rotated on resend, and transitioned under row locks.
+  Password-reset records additionally store a SHA-256 fingerprint of the
+  encoded Django password state. `acctok_fingerprint_by_purpose` requires that
+  fingerprint only for reset credentials.
+- Added additive `accounts.0002_accountsecuritytoken_user_email_verification`.
+  It adds nullable verification fields and the token table, constraints, and
+  indexes without backfilling or guessing verification for legacy users. The
+  migration exists in source and passes isolated migration tests, but it is
+  **NOT APPLIED TO PERSISTENT DEVELOPMENT OR PRODUCTION**.
+- Added authenticated, CSRF-protected email-verification request/confirm
+  routes and public, CSRF-protected password-reset request/confirm routes.
+  Password-reset request returns the same `202` HTTP status/body for eligible,
+  unknown, ambiguous, inactive, unusable-password, or delivery-failure cases.
+  Confirmation applies Django password validators, consumes the token, does
+  not log the user in, and invalidates established sessions through Django's
+  password-backed session authentication hash. This response contract does
+  not equalize or prove indistinguishable request timing.
+- A material email change clears the persisted verification signal and
+  revokes pending email-verification and password-reset tokens, including an
+  `A -> B -> A` email sequence. A password change through `User.save()` revokes
+  pending reset credentials; a direct queryset password update that bypasses
+  that hook still fails confirmation because the stored password fingerprint
+  no longer matches. Verification is tied to the uniquely resolved normalized
+  current email. Existing registration and login remain active for the three
+  legacy development users; no account was auto-verified or blocked. Profile
+  Invitation keeps its existing independent delivered-token/current-email
+  proof and is not newly gated by this task.
+- Account security mail now reuses the shared configured-mail safety boundary.
+  Console/dummy/file backends are refused for credential delivery; locmem is
+  used only by isolated tests. Responses, logs, audit metadata, and model
+  string representations do not expose raw credentials or passwords. Reset
+  confirmation has independent token-fingerprint `10/hour` and client-address
+  `30/hour` throttles; malformed Unicode is handled fail-closed so public reset
+  and Invitation recipient input return `400` instead of `500`.
+- Final isolated PostgreSQL evidence: account security **44/44 PASS** in
+  32.336s; Authentication/API/Invitation **113/113 PASS** in 99.629s;
+  Workspace/RBAC/Task/Review **173/173 PASS** in 93.895s; and the full suite
+  **286/286 PASS** in 188.592s. `pip check`, Django system check,
+  `makemigrations --check --dry-run`, and `git diff --check` pass; the latter
+  reports only existing LF/CRLF notices, not whitespace errors.
+- Read-only development inventory remains PostgreSQL 16.14 on
+  `hustlytasker_db`, 31 applied migrations (`accounts.0001` only and
+  `workspace.0001`-`0004`), 3 Users, 2 sessions, and zero checked business or
+  AuditLog rows. The verification columns and
+  `accounts_accountsecuritytoken` table are absent, and no test database
+  remains.
+### Owner review gate
+
+- **REAL EMAIL DELIVERY NOT VERIFIED.** No provider credential was configured
+  or exercised. DRF throttle state uses the default process-local cache and is
+  not distributed protection for a multi-worker deployment.
+- Response status/body neutralization does not provide constant-time password-
+  reset requests; timing equalization remains unimplemented and unverified.
+- Do not apply `accounts.0002` to persistent development or production and do
+  not start another feature. The next allowed action is Owner review and, only
+  with separate authorization, a controlled development migration rollout.
+
+---
+
+## Previous Snapshot - 2026-10-23 (HT-DB-P1-08)
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture / controlled Invitation development rollout`
+
+### HT-DB-P1-08 — COMPLETE / OWNER REVIEW GATE
+
+Status: **CONTROLLED DEVELOPMENT ROLLOUT VERIFIED**
+
+- Reconfirmed the repository-owned PostgreSQL 16.14 development target
+  `hustlytasker_db`. Before apply it had 30 migration records, 3 Users, 2
+  sessions, no `workspace_profileinvitation` table, and zero checked business
+  rows. No production target was accessed.
+- Created and retained the Git-ignored custom-format backup
+  `.local_backups/HT-DB-P1-08/hustlytasker_dev_pre_workspace_0004_20261023T050527Z.dump`
+  (78,758 bytes; SHA-256
+  `57f05837925c74a1bef83200a4211c3ed1cffbbe1e24552377d7efefc9baaf76`).
+  Host/container size and digest matched, the 198-line TOC was readable, and a
+  full archive read passed.
+- Restored that backup into an isolated rehearsal database, applied only
+  `workspace.0004_profileinvitation`, verified its schema and unchanged source
+  counts, then removed the exact rehearsal database with absence confirmed.
+- Applied only `workspace.0004_profileinvitation` to development at
+  2026-10-23 05:09:39.628419 UTC. Development now has 31 migration records and
+  an empty 22-column `workspace_profileinvitation` table. Seven CHECKs and
+  seven foreign keys are validated; two partial unique constraints and all 16
+  table indexes are valid/ready. Users, sessions, and all checked business-row
+  counts are unchanged.
+- Django system check, migration drift check, and `migrate --check` pass after
+  apply. Fixture-free direct smoke passes: health `GET` 200 / `POST` 405,
+  CSRF bootstrap 200, missing-CSRF registration 403, valid-CSRF invalid
+  registration payload 400, and anonymous Profile lifecycle, Workspace
+  read/write/lifecycle, Workspace membership read/write/revoke, and every
+  Invitation route shape 403. No request returned 500, exposed a
+  token/digest/User PII, or changed row/session counts.
+- Current isolated PostgreSQL verification passes: Invitation **39/39** in
+  62.528s, Authentication/API **29/29** in 7.475s,
+  Workspace/RBAC/Task/Review **173/173** in 97.378s, and full suite **241/241**
+  in 167.960s. Each Django-created test database was destroyed; the full run
+  reported zero system-check issues.
+- Cleanup is verified: no `test_%` or `htdb_p108_restore_%` database remains;
+  the exact container-side temporary archive was hash-checked then removed;
+  disposable runners `htp_p108_runner` and `htp_p108_resume_smoke` were
+  removed. The host backup remains at the documented Git-ignored path with the
+  same size/hash. The development
+  PostgreSQL container was running at task start and remains intentionally
+  running.
+- Final `git diff --check` passes; Git reports only existing LF-to-CRLF
+  conversion warnings and no whitespace error. Final `git status --short`
+  contains only the preserved HT-INV-P2-04 source/documentation work.
+- Persistent development has no Profile/Workspace fixture and no valid
+  authenticated session available for the smoke. Therefore authenticated
+  Invitation success/mutation flows were **NOT TESTED ON PERSISTENT
+  DEVELOPMENT**; isolated test databases remain the evidence for those paths.
+- **REAL EMAIL DELIVERY NOT VERIFIED.** No SMTP/provider credential was
+  configured. Cache-based DRF throttles remain process-local for multi-worker
+  deployments; locked database issuance limits remain authoritative for
+  create/resend.
+
+### Exact continuation / review gate
+
+Stop at `HT-DB-P1-08 — COMPLETE / OWNER REVIEW GATE`. The Owner must select
+and explicitly authorize the next roadmap task; a candidate is
+`HT-AUTH-P1-02 — Account Verification & Recovery`. Do not start it, another
+feature, or a rollout to another environment automatically.
+
+---
+
+## Previous Snapshot - 2026-10-23 (HT-INV-P2-04)
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture / Profile Invitation onboarding`
+
+### HT-INV-P2-04 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
+
+- Implemented the Profile-scoped `ProfileInvitation` aggregate and additive
+  `workspace.0004_profileinvitation` with digest-only one-time credentials,
+  seven-day lifecycle, delivery/terminal metadata, resend lineage, constraints,
+  indexes, and no data backfill.
+- Implemented locked transactional creation, revoke, resend/rotation,
+  accept/decline, expiration, original-inviter revalidation, compatible
+  membership creation/reactivation, stale Workspace-access soft revocation,
+  durable issuance limits, and atomic audit events.
+- Recipient actions require SessionAuthentication, CSRF, a uniquely matching
+  freshly locked current account email, and a one-time credential whose mail
+  adapter accepted delivery. This is per-invitation email-control proof, not a
+  global verified-email flag. No recipient inbox or anonymous preview exists.
+- Added six manager/recipient route shapes with tenant scoping, Owner/Admin
+  role ceilings, strict input, sanitized/no-cache output, generic IDOR-safe
+  responses, replay protection, and cache/durable abuse controls.
+- Targeted Invitation PostgreSQL tests pass **39/39** (61.056s), Auth/API
+  regression **29/29** (7.220s), Workspace/RBAC/Task/Review regression
+  **173/173** (90.298s), and the full PostgreSQL suite **241/241** (157.059s).
+  `pip check`, Django system check, and migration-drift check also pass.
+- Read-only development post-check remains unchanged at 30 migration records,
+  3 Users, 2 sessions, and zero checked business rows. `workspace.0004` is
+  unapplied, its table is absent, and no test database remains. Production was
+  not contacted.
+- Delivery abstraction is implemented and locmem-tested, but **REAL EMAIL
+  DELIVERY NOT VERIFIED**. Default cache throttles are process-local; a shared
+  production cache remains deployment work. Database issuance counters remain
+  authoritative for create/resend limits.
+
+### Exact continuation / review gate
+
+Stop at `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`.
+Do not apply `workspace.0004` or start another feature. After Owner review, the
+next proposed task is a separately authorized controlled development
+inventory/backup/rehearsal/apply/smoke for `workspace.0004`.
+
+---
+
+## Previous Snapshot - 2026-10-21 (HT-DB-P1-07)
+
+### Current Phase
+
+`PHASE 2.2 - API Architecture / controlled Task and Review development rollout`
+
+### HT-DB-P1-07 — COMPLETE / OWNER REVIEW GATE
+
+- Confirmed the authorized target is the repository's local Docker Desktop
+  Compose PostgreSQL 16.14 development database `hustlytasker_db`, exposed only
+  on `127.0.0.1:5432` with named volume `docker_postgres_data`. Production was
+  not contacted.
+- Pre-apply state had 28 migrations: Workspace 0001-0003 applied and
+  Tasks/Reviews only 0001. Counts were 3 active Users, 2 sessions, and zero
+  checked tenant/workflow rows. Migration history, physical schema, connection
+  state, locks, and every invalid-enum/duplicate/orphan/cross-tenant/
+  unvalidated preflight check matched the safe baseline.
+- Created and verified the ignored custom-format backup
+  `.local_backups/HT-DB-P1-07/hustlytasker_dev_pre_task_review_0002_20261020T233252Z.dump`
+  (75,502 bytes; SHA-256
+  `4d89fe198da9a245c6ae39c466a11944a80914735c876dbeb18f546d55391f22`).
+  Host/container hashes match, the 192-line TOC is readable, and a complete
+  archive read passed.
+- A full restore rehearsal in isolated database
+  `htdb_p107_restore_20261020233252` reproduced the baseline, applied
+  `tasks.0002` then `reviews.0002`, passed schema/integrity checks, and was
+  removed with absence verified.
+- Applied `tasks.0002_task_workflow_foundation` explicitly to development at
+  2026-10-20 23:35:36 UTC, passed its intermediate gate, then applied
+  `reviews.0002_review_workflow_foundation` explicitly at 23:36:12 UTC.
+  Development now has 30 migration records.
+- Post-check confirmed `TaskAssignment.is_active` and nullable
+  `Deliverable.revision` with expected nullability/no permanent database
+  defaults, five validated named CHECKs, one validated Review uniqueness
+  constraint, six valid/ready named indexes, and validated actor FKs. All
+  integrity/duplicate/orphan checks remain zero and row/session counts are
+  unchanged.
+- Fixture-free development smoke passed: health methods, CSRF/login behavior,
+  and anonymous denial across Profile/Workspace/Task/Deliverable route shapes
+  matched the contract with no `500`. Successful authenticated business
+  mutations were intentionally not run on persistent development because it
+  has no business fixtures; isolated tests cover those paths.
+- `pip check`, Django system/migration checks, Task 33/33 (7.998s), Auth/API
+  29/29 (7.183s), Workspace 140/140 (77.774s), and full PostgreSQL 202/202
+  (93.368s) all passed. Test/rehearsal databases and temporary runners were
+  removed. No code, migration file, Authentication contract, fixture, or
+  production environment changed.
+
+### Exact continuation / review gate
+
+Stop at `HT-DB-P1-07 — COMPLETE / OWNER REVIEW GATE`. The Owner must select
+and explicitly authorize the next roadmap implementation. Do not automatically
+start another module. Every non-development rollout remains separately gated.
+
+---
+
+## Previous Snapshot - 2026-10-21 (HT-TASK-P2-03)
 
 ### Current Phase
 

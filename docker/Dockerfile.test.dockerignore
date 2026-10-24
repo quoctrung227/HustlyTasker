@@ -1,0 +1,6 @@
+**
+!backend/
+!backend/requirements.txt
+!docker/
+!docker/Dockerfile.test
+!docker/Dockerfile.test.dockerignore

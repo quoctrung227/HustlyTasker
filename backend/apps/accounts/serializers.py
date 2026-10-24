@@ -8,8 +8,29 @@ from rest_framework import serializers
 User = get_user_model()
 
 
+class StrictSerializer(serializers.Serializer):
+    """Reject undeclared input instead of silently discarding it."""
+
+    def to_internal_value(self, data):
+        if not hasattr(data, "keys"):
+            raise serializers.ValidationError({
+                "detail": "Expected a JSON object."
+            })
+        unknown_fields = set(data.keys()) - set(self.fields)
+        if unknown_fields:
+            raise serializers.ValidationError({
+                field: "Unexpected field." for field in sorted(unknown_fields)
+            })
+        return super().to_internal_value(data)
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Public representation of the authenticated user."""
+
+    email_verified = serializers.BooleanField(
+        source="is_email_verified",
+        read_only=True,
+    )
 
     class Meta:
         model = User
@@ -20,6 +41,7 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "created_at",
+            "email_verified",
         )
         read_only_fields = fields
 
@@ -145,4 +167,52 @@ class LoginSerializer(serializers.Serializer):
             )
 
         attrs["user"] = user
+        return attrs
+
+
+class EmailVerificationRequestSerializer(StrictSerializer):
+    pass
+
+
+class EmailVerificationConfirmSerializer(StrictSerializer):
+    token = serializers.CharField(
+        min_length=32,
+        max_length=512,
+        trim_whitespace=False,
+        write_only=True,
+    )
+
+
+class PasswordResetRequestSerializer(StrictSerializer):
+    email = serializers.EmailField(max_length=254)
+
+    def validate_email(self, value):
+        return value.strip().casefold()
+
+
+class PasswordResetConfirmSerializer(StrictSerializer):
+    token = serializers.CharField(
+        min_length=32,
+        max_length=512,
+        trim_whitespace=False,
+        write_only=True,
+    )
+    new_password = serializers.CharField(
+        max_length=128,
+        trim_whitespace=False,
+        write_only=True,
+        style={"input_type": "password"},
+    )
+    new_password_confirm = serializers.CharField(
+        max_length=128,
+        trim_whitespace=False,
+        write_only=True,
+        style={"input_type": "password"},
+    )
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError({
+                "new_password_confirm": "The two password fields did not match."
+            })
         return attrs

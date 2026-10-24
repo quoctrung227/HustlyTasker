@@ -349,6 +349,15 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth_login": "10/minute",
         "auth_register": "5/hour",
+        "auth_email_verification_request": "5/hour",
+        "auth_email_verification_confirm": "10/hour",
+        "auth_password_reset_request_email": "5/hour",
+        "auth_password_reset_request_ip": "20/hour",
+        "auth_password_reset_confirm": "10/hour",
+        "auth_password_reset_confirm_ip": "30/hour",
+        "invitation_send": "30/day",
+        "invitation_recipient": "5/day",
+        "invitation_token_action": "5/day",
     },
 
     # Ignore spoofable proxy headers by default. Set a positive value only

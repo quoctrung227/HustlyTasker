@@ -1,10 +1,27 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-10-21
+Last updated: 2026-10-24
 
 ## Giai đoạn hiện tại
 
 `PHASE 2.2 - API Architecture`
+
+Current authorized task: **HT-TEST-P1-01 — COMPLETE / OWNER REVIEW GATE**.
+**LOCAL TEST HARNESS VERIFIED**. Dedicated test
+settings, a shared guarded PostgreSQL runner, a disposable local Docker
+launcher, and GitHub Actions backend CI are implemented. Current local
+evidence is 14/14 harness safety tests, targeted API 10/10, and full PostgreSQL
+286/286 in 166.382s, with dependency/system/migration-chain, failure/ownership
+cleanup, actionlint, and unchanged-development checks passing.
+**CI WORKFLOW IMPLEMENTED — REMOTE RUN NOT VERIFIED.**
+
+HT-DB-P1-09 is the completed development-rollout baseline: `accounts.0002`
+applied once, 32 migration records, 3 active Users/2 Sessions preserved,
+zero verified Users/tokens/business/AuditLog rows, and full PostgreSQL 286/286
+PASS at that earlier gate. Current tooling does not migrate development or
+change business rules. Stop at Owner Review Gate after local acceptance;
+`HT-PROJ-P2-05 — Project, Subtask, Deadline & Priority` is proposed next and
+must not start automatically.
 
 Nguyên tắc thực hiện: hoàn thành P0/P1 và test gate trước khi mở business API; không tạo frontend, migration nghiệp vụ lớn hoặc thay đổi business rule khi contract chưa được chốt.
 
@@ -26,10 +43,25 @@ development database. Direct development smoke, targeted suites và full
 PostgreSQL 169/169 đều PASS. `HT-DB-P1-06` đã dừng đúng Owner review gate và
 Owner sau đó mở `HT-TASK-P2-03`. Task/Deliverable/internal Review workflow hiện
 đã implement trong source; targeted PostgreSQL 33/33, regression 169/169 và
-full PostgreSQL 202/202 đều PASS. Trạng thái là `IMPLEMENTATION COMPLETE —
-PENDING DEVELOPMENT MIGRATION APPROVAL`. Additive `tasks.0002`/
-`reviews.0002` chưa apply development; production không bị tác động và
-Invitation vẫn ngoài scope.
+full PostgreSQL 202/202 đều PASS. Owner tiếp tục phê duyệt rollout development
+có kiểm soát qua `HT-DB-P1-07`; backup/restore rehearsal, explicit apply
+`tasks.0002` rồi `reviews.0002`, post-check, fixture-free smoke và current full
+202/202 đều đạt. Development hiện có 30 migration records; production không bị
+tác động. Owner sau đó mở `HT-INV-P2-04`; Profile Invitation và membership
+onboarding hiện đã hoàn tất implementation trong source, targeted PostgreSQL
+39/39 và full suite 241/241 PASS. Owner đã phê duyệt controlled development
+rollout `HT-DB-P1-08`: backup/restore rehearsal, exact apply
+`workspace.0004`, schema/inventory post-check và fixture-free direct smoke đã
+đạt. Development hiện có 31 migration records và bảng Invitation trống; mọi
+count hiện hữu không đổi. Current Invitation 39/39, Auth/API 29/29,
+Workspace/RBAC/Task/Review 173/173 và full PostgreSQL 241/241 đều PASS. Trạng
+thái hiện tại là **HT-DB-P1-08 COMPLETE / OWNER REVIEW GATE**. Production và
+mọi target khác không được tác động.
+
+The HT-DB-P1-08 state above is the immediate completed baseline, not the
+current task. The Owner subsequently authorized HT-AUTH-P1-02 and then the
+controlled development rollout HT-DB-P1-09 recorded above and below. Older
+inventory/test counts in this narrative are historical snapshots.
 
 ## P0 - An toàn và khả năng kiểm chứng
 
@@ -79,25 +111,107 @@ Invitation vẫn ngoài scope.
 
 ## P1 - Hoàn thành Phase 2.2
 
-### HT-TEST-P1-01 - Test baseline cô lập
+### HT-TEST-P1-01 - PostgreSQL Test Harness & CI Baseline — COMPLETE / OWNER REVIEW GATE
 
-- **Mục tiêu:** tạo regression gate trước auth và business API.
-- **Phạm vi:** test settings/fixtures, smoke tests, migration/system checks.
-- **Ảnh hưởng:** developer workflow và CI sau này.
-- **Dependencies:** toàn bộ P0.
-- **Acceptance criteria:** test không thể kết nối production; endpoint/schema nền tảng có tests; lệnh duy nhất chạy lặp lại được trên fresh checkout.
-- **Kiểm thử:** full Django suite trên PostgreSQL test database.
-- **Rủi ro:** SQLite nhanh hơn nhưng không phản ánh đầy đủ PostgreSQL; ưu tiên PostgreSQL container.
+- **Mục tiêu:** chuẩn hóa full/targeted PostgreSQL regression gọn và lặp lại
+  được, bảo toàn development cùng mọi business rule hiện có.
+- **Phạm vi đã triển khai:** dedicated test settings/environment, shared
+  `scripts/test_backend.py`, guard tests, PowerShell local launcher, test-only
+  Compose/Dockerfile/context ignore, và backend GitHub Actions workflow.
+- **Commands:** full `.\scripts\test-backend.ps1` from repository root;
+  targeted `-TestLabel apps.accounts.tests,api.tests`; verified hard-interruption cleanup
+  `-CleanupRunId <printed UUID>`.
+- **Isolation:** fresh PostgreSQL 16 tmpfs cluster/local internal network,
+  read-only source, no development credentials/ports/volume. Shared core
+  refuses stale/non-fresh targets, creates a uniquely marked owned DB,
+  validates the migration chain, uses serial tests, and validates ownership
+  before cleanup. Test environment does not fall back to `.env`/deployment
+  configuration; existing venv is untouched.
+- **CI:** Python 3.12, job-local PostgreSQL 16 service, pinned requirements,
+  dependency/system/model-drift/graph/history/chain/full-test checks, PR and
+  push to `main`, `contents: read`, no deploy or production secrets. Required
+  failures return nonzero. **REMOTE RUN NOT VERIFIED.**
+- **Kiểm thử thực chạy:** guard unit tests 14/14 (0.513s), targeted API
+  10/10 (0.044s), full PostgreSQL 286/286 (166.382s), dependency/system/model-
+  drift/graph/history/chain checks PASS. Intentional nonexistent-label exit 1
+  propagates and cleanup succeeds; owned interruption fixtures clean while a
+  wrong-repository fixture is refused. PowerShell parser/Compose/actionlint/
+  diff checks PASS. Original development User/Session fields match before/after;
+  32 migrations, 3 Users/2 Sessions and zero token rows remain unchanged. No
+  owned test container/network/DB remains.
+- **Review gate:** **LOCAL TEST HARNESS VERIFIED**; local acceptance criteria
+  and documentation are complete, remote GitHub execution remains unverified.
+  Dừng Owner review; task kế tiếp dự kiến
+  `HT-PROJ-P2-05 — Project, Subtask, Deadline & Priority` chưa được bắt đầu.
 
-### HT-AUTH-P1-02 - Xác minh và khôi phục tài khoản
+### HT-AUTH-P1-02 - Xác minh và khôi phục tài khoản — IMPLEMENTATION COMPLETE / DEVELOPMENT MIGRATION APPLIED
 
-- **Mục tiêu:** hoàn tất activation và password recovery an toàn trên foundation hiện có.
-- **Phạm vi:** email link hoặc OTP, token one-time/expiry, reset password, logout-all và production-grade abuse controls.
-- **Ảnh hưởng:** email delivery, account lifecycle và khả năng revoke mọi session.
-- **Dependencies:** owner phê duyệt activation link hay OTP; shared-cache/proxy deployment contract; HT-TEST-P1-01.
-- **Acceptance criteria:** token hash-at-rest, one-time và hết hạn; không user enumeration; reset revoke session phù hợp; throttle production được kiểm chứng.
-- **Kiểm thử:** activation/reset success-failure-expiry-replay, neutral response, session revocation và abuse controls.
-- **Rủi ro:** tạo user inactive trước khi có đường activate sẽ khóa luồng onboarding; không triển khai rời rạc.
+- **Mục tiêu:** bổ sung email verification và password recovery an toàn trên
+  Django SessionAuthentication hiện có, không biến verification thành activation
+  gate và không khóa các tài khoản legacy.
+- **Phạm vi đã triển khai:** token-by-email ngẫu nhiên, digest-only, purpose-bound,
+  one-time và có hạn; verification 24 giờ; reset 1 giờ; rotation/replay/expiry;
+  email-change invalidation cho cả verification/reset kể cả `A -> B -> A`;
+  HTTP-status/body-neutral reset request; Django password validation; session
+  invalidation after password change; audit không chứa secret; bốn API POST
+  strict/no-cache/CSRF và cache throttles theo endpoint/identity. Reset token
+  còn bind với fingerprint của encoded password state: `User.save()` đổi
+  password revoke pending reset, còn direct queryset update fail khi confirm.
+- **Schema:** additive
+  `accounts.0002_accountsecuritytoken_user_email_verification` thêm hai trường
+  verification nullable vào `User` và `AccountSecurityToken`, gồm reset-only
+  `password_fingerprint` cùng `acctok_fingerprint_by_purpose`. Không backfill
+  verification cho User hiện hữu. Migration đã được backup/rehearse và apply
+  đúng development qua HT-DB-P1-09; production và target khác chưa authorize.
+- **Compatibility:** đăng ký/login bằng session giữ nguyên; ba legacy User vẫn
+  active và unverified. Profile Invitation tiếp tục dùng proof độc lập gồm
+  session + unique current-email match + delivered invitation token; task này
+  không thêm verification gate hoặc thay đổi invitation lifecycle.
+- **Access:** email verification request/confirm yêu cầu authenticated session;
+  password-reset request/confirm là hai `AllowAny` endpoint được review rõ ràng.
+  Cả bốn POST đều bắt buộc CSRF. Reset không auto-login.
+- **Abuse/error hardening:** reset-confirm dùng hai throttle độc lập: token
+  fingerprint `10/hour` và client address `30/hour`; malformed Unicode trên
+  public reset và Invitation recipient input fail closed thành `400`, không
+  `500`. Cache key không lưu raw email/token.
+- **Kiểm thử cuối:** `pip check`, system check, migration drift và diff check
+  PASS; account-security 44/44 (32.336s), Authentication/API/Invitation
+  113/113 (99.629s), Workspace/RBAC/Task/Review 173/173 (93.895s), và full
+  PostgreSQL 286/286 (188.592s) PASS trên test database cô lập.
+- **Rủi ro/giới hạn:** **REAL EMAIL DELIVERY NOT VERIFIED**; chưa cấu hình provider
+  thật. Default cache throttle là process-local và chưa phải distributed
+  multi-worker enforcement. Reset request trung tính về HTTP status/body nhưng
+  timing không được equalize hoặc xác minh indistinguishable. Standalone
+  logout-all/account deactivation vẫn là task riêng.
+- **Review gate:** implementation review đã dẫn đến authorization rollout
+  development riêng qua HT-DB-P1-09. Dừng sau verification của task đó; không
+  bắt đầu task mới hoặc migrate target khác khi chưa được Owner authorize.
+
+### HT-DB-P1-09 - Controlled Account Security Development Migration & Verification — COMPLETE / OWNER REVIEW GATE
+
+- **Scope:** operational rollout of the existing exact `accounts.0002` to
+  repository-owned development PostgreSQL only. No feature/schema-source/API
+  change is authorized by this task.
+- **Safety completed:** actual inventory, target identity, exact dependency/
+  empty-after-apply plan, fresh verified backup, isolated restore with exact
+  legacy row comparison, and additive migration rehearsal.
+- **Applied:** `2026-10-24 06:30:28.634074 UTC`; development has 32 migration
+  records, verified User/token constraints/indexes, zero orphan FKs, unchanged
+  3 Users/2 Sessions, no verified User/token, and no business data changes.
+- **Direct smoke:** 45 read-only, fixture-free requests PASS with CSRF,
+  including eight Task/Review anonymous-boundary requests and an extra bootstrap;
+  authenticated success/mutation is not run on persistent development.
+- **Current tests:** security 44/44 in 30.549s, Authentication/API 29/29 in
+  7.523s, Invitation 40/40 in 61.679s, Workspace/RBAC 140/140 in 79.717s,
+  and Task/Review 33/33 in 8.457s PASS. Completed targeted runs were reused
+  after resume with unchanged source/schema; final full PostgreSQL rerun
+  passes 286/286 in 197.049s, exit 0, with a retained ignored log.
+- **Final gate:** system/dependency/migration checks, exact legacy-row
+  comparison, and cleanup PASS. No test/rehearsal database or runner remains;
+  host backup is retained. Stop at **OWNER REVIEW GATE**. No task starts
+  automatically and no implementation blocker remains.
+- **Limits:** REAL EMAIL DELIVERY NOT VERIFIED; DISTRIBUTED RATE LIMITING NOT
+  VERIFIED; process-local throttles and non-equalized reset timing remain.
 
 ### HT-RBAC-DESIGN-P0-01 - Capability, tenant scope và invitation contract — COMPLETE / ACCEPTED BY OWNER DELEGATION
 
@@ -309,7 +423,7 @@ Invitation vẫn ngoài scope.
   Owner review. Không tự mở feature mới, Invitation, Profile creation,
   Client/Project/Task/Finance, Review workflow hay frontend.
 
-### HT-TASK-P2-03 - Task Management & Internal Approval Workflow — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
+### HT-TASK-P2-03 - Task Management & Internal Approval Workflow — COMPLETE — DEVELOPMENT ROLLOUT VERIFIED
 
 - **Mục tiêu:** hiện thực workflow backend từ Task assignment đến Deliverable
   và internal Review mà không kéo theo Client approval, Payroll/Payment,
@@ -338,21 +452,112 @@ Invitation vẫn ngoài scope.
   Authentication/API/Workspace regressions **169/169 PASS** trong 87.783s; và
   final full PostgreSQL **202/202 PASS** trong 92.343s. Test databases đều được
   hủy; independent final code review PASS.
-- **Development migration gate:** `tasks.0002` và `reviews.0002` chưa apply
-  development và không được phép apply trong task implementation này.
-  Read-only `showmigrations` xác nhận Workspace 0001-0003 applied nhưng Tasks/
-  Reviews chỉ có 0001; `migrate --plan` chỉ liệt kê additive `tasks.0002` rồi
-  `reviews.0002`. Dừng ở Owner review gate trước mọi apply.
+- **Development rollout:** `HT-DB-P1-07` đã inventory/backup/rehearse và apply
+  explicit `tasks.0002` rồi `reviews.0002` trên đúng local development target.
+  Post-check có 30 migrations, schema objects validated/valid, inventory không
+  đổi, direct fixture-free smoke PASS và current full PostgreSQL 202/202 PASS.
+  Mọi target khác, đặc biệt production, vẫn cần authorization và controlled
+  rollout độc lập.
 - **Remaining product boundaries:** Task soft delete/retention, Client approval,
   actual file upload/storage, comments, payroll pricing/eligibility/trigger,
   and external review remain separate tasks. Internal approval không tạo
   Payroll/Payment hoặc tính tiền.
+
+### HT-DB-P1-07 - Controlled Task & Review Development Migration — COMPLETE / OWNER REVIEW GATE
+
+- **Mục tiêu:** rollout an toàn hai additive migration workflow đã review lên
+  development sau target verification, inventory, backup và restore rehearsal.
+- **Target:** local Docker Desktop/Compose PostgreSQL 16.14
+  `hustlytasker_db`, loopback-only, volume `docker_postgres_data`; không truy
+  cập production.
+- **Preflight/backup:** baseline 28 migrations, 3 active Users, 2 sessions,
+  zero checked business/workflow rows; schema/history và integrity checks sạch.
+  Backup custom-format 75,502 bytes có matching SHA-256, readable 192-line TOC
+  và full archive read; isolated restore/apply rehearsal PASS và đã cleanup.
+- **Apply:** explicit `tasks.0002` lúc 2026-10-20 23:35:36 UTC, intermediate
+  gate PASS; explicit `reviews.0002` lúc 23:36:12 UTC. Post-state có 30
+  migrations, expected columns/constraints/indexes/FKs hợp lệ, counts không đổi
+  và zero integrity/duplicate/orphan anomaly.
+- **Verification:** fixture-free development smoke PASS không `500`; Task
+  33/33, Auth/API 29/29, Workspace 140/140 và full PostgreSQL 202/202 PASS;
+  dependency/system/migration consistency checks PASS; temporary resources đã
+  cleanup.
+- **Boundary/review gate:** successful authenticated business mutations được
+  verify trên isolated test DB, không tạo fixture trên persistent development.
+  Dừng tại Owner review; Owner phải chọn và authorize task roadmap kế tiếp.
+  Không tự mở module mới hoặc rollout sang môi trường khác.
+
+### HT-INV-P2-04 - Profile Invitation & Membership Onboarding — COMPLETE — DEVELOPMENT ROLLOUT VERIFIED
+
+- **Mục tiêu:** hiện thực hóa consent-based Profile onboarding mà không thay
+  Authentication, tự cấp Workspace access, hoặc mở domain lân cận.
+- **Schema:** `ProfileInvitation` trong Workspace app và additive
+  `workspace.0004_profileinvitation`; digest-only credential, TTL 7 ngày,
+  lifecycle/delivery/terminal metadata, resend lineage, checks, partial unique
+  constraints và indexes; không backfill hoặc đoán mapping.
+- **Lifecycle/services:** create, revoke, resend/rotate, accept, decline và
+  expiry chạy transaction/locking; revalidate inviter; tạo hoặc reactivate duy
+  nhất membership history tương thích; soft-revoke stale Workspace access khi
+  rejoin; audit atomic; archived Profile và ambiguous identity fail closed.
+- **Identity/security:** recipient phải authenticated, active, có current email
+  normalize khớp duy nhất và credential đã được mail backend chấp nhận. Đây là
+  proof theo từng invitation, không phải global email verification. Token chỉ
+  lưu SHA-256 digest, không xuất hiện trong API/AuditLog/documentation.
+- **API/RBAC:** Owner mời/quản lý `ADMIN` hoặc `MEMBER`; Admin chỉ `MEMBER`;
+  không `OWNER`, không Workspace-role escalation. Có manager
+  list/create/detail/revoke/resend và recipient accept/decline; giữ
+  SessionAuthentication, CSRF, strict input, no-cache, IDOR-safe scoping. Không
+  có anonymous preview hoặc recipient inbox.
+- **Delivery/abuse:** `transaction.on_commit`, trạng thái
+  `QUEUED`/`SENT`/`FAILED`, resend sau failure luôn rotate token; durable
+  PostgreSQL issuance ceilings cộng cache throttles. Default cache vẫn
+  process-local cho multi-worker và **REAL EMAIL DELIVERY NOT VERIFIED**.
+- **Verification:** `pip check`, system check và migration drift PASS;
+  Invitation 39/39, Auth/API 29/29, Workspace/RBAC/Task/Review 173/173, full
+  PostgreSQL 241/241 PASS. Test databases bị hủy.
+- **Development rollout:** Owner đã mở `HT-DB-P1-08`; fresh backup và restore
+  rehearsal đạt, rồi `workspace.0004` được apply đúng development lúc
+  2026-10-23 05:09:39.628419 UTC. Post-state có 31 migrations, bảng Invitation
+  trống, expected constraints/FKs/indexes hợp lệ và inventory không đổi.
+  Fixture-free smoke đạt; authenticated success/mutation không chạy trên
+  development trống. Current isolated Invitation 39/39, Auth/API 29/29,
+  Workspace/RBAC/Task/Review 173/173 và full PostgreSQL 241/241 đều PASS.
+- **Review gate:** development rollout đã được xác minh qua `HT-DB-P1-08`.
+  Dừng Owner review; không tự mở feature kế tiếp hoặc rollout sang target khác.
+
+### HT-DB-P1-08 - Controlled Invitation Development Migration & Verification — COMPLETE / OWNER REVIEW GATE
+
+- **Mục tiêu:** rollout an toàn additive `workspace.0004_profileinvitation`
+  lên development sau inventory, fresh backup, restore rehearsal và exact plan
+  review; không thay đổi production hoặc feature contract.
+- **Preflight/backup:** baseline 30 migrations, 3 Users, 2 sessions, zero
+  checked business rows và table absent. Backup custom-format Git-ignored
+  78,758 bytes có SHA-256 matching, readable 198-line TOC và full archive read.
+- **Rehearsal/apply:** isolated restore/apply/schema check PASS và rehearsal DB
+  đã xóa. Exact 0004 apply trên development hoàn tất lúc
+  2026-10-23 05:09:39.628419 UTC; post-state 31 migrations, empty 22-column
+  table, 7 validated CHECKs, 7 validated FKs, 2 partial unique constraints và
+  16 valid/ready indexes; counts không đổi.
+- **Direct smoke:** health/CSRF/anonymous denial đạt, không 500 và không thay
+  đổi dữ liệu. Successful authenticated Invitation flows **NOT TESTED ON
+  PERSISTENT DEVELOPMENT** vì không có fixture/session hợp lệ.
+- **Regression:** Invitation 39/39 (62.528s), Auth/API 29/29 (7.475s),
+  Workspace/RBAC/Task/Review 173/173 (97.378s), và full PostgreSQL 241/241
+  (167.960s) PASS trên isolated Django test databases; từng test DB đã bị hủy
+  và full run báo system check 0 issues.
+- **Cleanup:** không còn test/rehearsal database; container temp archive và
+  runner `htp_p108_runner` đã xóa. Host backup giữ nguyên, Git-ignored và
+  hash/size không đổi. Development PostgreSQL vốn đang chạy khi task bắt đầu và
+  được giữ chạy có chủ ý.
+- **Review gate:** dừng để Owner review/chọn task tiếp theo. **REAL EMAIL
+  DELIVERY NOT VERIFIED** và process-local throttle limitation vẫn còn.
 
 Các module Review/Guest/Client Portal, CRM/Finance/Payroll, Notification/Automation và frontend chỉ được xếp lịch sau các nền tảng trên theo thứ tự dependency trong `ORIGINAL_REQUIREMENTS.md`.
 
 ## P3 - Quality, delivery và mở rộng
 
 - OpenAPI/schema publishing sau khi API contract ổn định.
-- CI chạy dependency check, migration drift, system checks và tests trên PostgreSQL service.
+- Backend CI baseline được triển khai qua HT-TEST-P1-01; remote GitHub run
+  chưa được xác minh. Deployment/monitoring vẫn là task riêng.
 - Backend container/deployment hardening, logging/monitoring và backup strategy.
 - Frontend chỉ bắt đầu sau khi chủ dự án chốt React SPA hay Next.js và API/auth contract đã ổn định.
