@@ -3,6 +3,8 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.audit.models import AuditLog
+from apps.notifications.models import Notification
+from apps.notifications.services import emit_task_notifications
 from apps.reviews.models import Deliverable, Review
 from apps.workspace.access import (
     TenantAccessNotFound,
@@ -78,7 +80,7 @@ def _lock_deliverable(*, task, deliverable_id):
 
 
 def _write_audit(*, actor, action, entity, profile_id, workspace_id, metadata):
-    AuditLog.objects.create(
+    return AuditLog.objects.create(
         user=actor,
         action=action,
         entity_name=entity.__class__.__name__,
@@ -135,6 +137,7 @@ def create_task(
     description=None,
     priority=Task.Priority.MEDIUM,
     deadline=None,
+    parent_id=None,
 ):
     context, workspace, _ = lock_workspace_mutation_context(
         actor=actor,
@@ -143,8 +146,13 @@ def create_task(
     )
     _require_manager(context)
 
+    parent = None
+    if parent_id is not None:
+        parent = _lock_task(workspace=workspace, task_id=parent_id)
+
     task = Task(
         workspace=workspace,
+        parent=parent,
         title=(title or "").strip(),
         description=description,
         status=Task.Status.PENDING,
@@ -164,6 +172,7 @@ def create_task(
         metadata={
             "status": task.status,
             "priority": task.priority,
+            "parent_id": str(task.parent_id) if task.parent_id else None,
         },
     )
     return task
@@ -180,6 +189,7 @@ def update_task(
     description=_UNSET,
     priority=_UNSET,
     deadline=_UNSET,
+    parent_id=_UNSET,
 ):
     context, workspace, _ = lock_workspace_mutation_context(
         actor=actor,
@@ -190,6 +200,16 @@ def update_task(
     task = _lock_task(workspace=workspace, task_id=task_id)
 
     changed_fields = []
+    previous_parent_id = task.parent_id
+    if parent_id is not _UNSET:
+        # Resolve before validation through the locked Workspace scope, so
+        # foreign, malformed and nonexistent parents share the same 404.
+        parent = None if parent_id is None else _lock_task(
+            workspace=workspace, task_id=parent_id,
+        )
+        if task.parent_id != (parent.id if parent else None):
+            task.parent = parent
+            changed_fields.append("parent")
     if title is not _UNSET:
         normalized_title = (title or "").strip()
         if task.title != normalized_title:
@@ -216,7 +236,13 @@ def update_task(
         entity=task,
         profile_id=workspace.profile_id,
         workspace_id=workspace.id,
-        metadata={"changed_fields": changed_fields},
+        metadata={
+            "changed_fields": changed_fields,
+            **({
+                "parent_id_before": str(previous_parent_id) if previous_parent_id else None,
+                "parent_id_after": str(task.parent_id) if task.parent_id else None,
+            } if "parent" in changed_fields else {}),
+        },
     )
     return task
 
@@ -339,7 +365,7 @@ def assign_task(
         if previous_assignment_id is None
         else "task.reassigned"
     )
-    _write_audit(
+    event = _write_audit(
         actor=actor,
         action=action,
         entity=assignment,
@@ -356,6 +382,12 @@ def assign_task(
             "task_status_before": previous_status,
             "task_status_after": task.status,
         },
+    )
+    emit_task_notifications(
+        event=event,
+        actor=actor,
+        task=task,
+        event_type=Notification.EventType.TASK_ASSIGNED,
     )
     return assignment
 
@@ -452,7 +484,7 @@ def submit_deliverable(
         task=task,
         next_status=Task.Status.REVIEW,
     )
-    _write_audit(
+    event = _write_audit(
         actor=actor,
         action="task.deliverable.submitted",
         entity=deliverable,
@@ -466,6 +498,13 @@ def submit_deliverable(
             "task_status_before": previous_status,
             "task_status_after": task.status,
         },
+    )
+    emit_task_notifications(
+        event=event,
+        actor=actor,
+        task=task,
+        event_type=Notification.EventType.REVIEW_SUBMITTED,
+        deliverable=deliverable,
     )
     return deliverable
 
@@ -552,7 +591,7 @@ def _review_deliverable(
     deliverable.save(update_fields=("status", "updated_at"))
     _save_task_status(task=task, next_status=next_task_status)
 
-    _write_audit(
+    event = _write_audit(
         actor=actor,
         action=action,
         entity=review,
@@ -569,6 +608,17 @@ def _review_deliverable(
             "task_status_before": task_status_before,
             "task_status_after": task.status,
         },
+    )
+    emit_task_notifications(
+        event=event,
+        actor=actor,
+        task=task,
+        event_type=(
+            Notification.EventType.REVIEW_APPROVED
+            if review_status == Review.Status.APPROVED
+            else Notification.EventType.REVIEW_CHANGES_REQUESTED
+        ),
+        deliverable=deliverable,
     )
     return review
 

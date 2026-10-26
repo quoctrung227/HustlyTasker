@@ -10,6 +10,17 @@ class StrictInputSerializer(serializers.Serializer):
 
     def to_internal_value(self, data):
         if isinstance(data, Mapping):
+            # Never reflect an unencodable key into a JSON error response.
+            # Normal unknown-field errors retain their existing contract.
+            for field in data:
+                try:
+                    if not isinstance(field, str) or "\x00" in field:
+                        raise ValueError()
+                    field.encode("utf-8", errors="strict")
+                except (UnicodeEncodeError, ValueError):
+                    raise serializers.ValidationError({
+                        "non_field_errors": ["Field names must be valid Unicode text."],
+                    }) from None
             unknown_fields = set(data) - set(self.fields)
             if unknown_fields:
                 raise serializers.ValidationError({

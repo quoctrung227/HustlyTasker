@@ -2,7 +2,233 @@
 
 # HustlyTasker Database Design
 
-Version: 0.9
+Version: 0.11 source and approved development schema.
+
+## HT-DB-P1-11 development rollout — 2026-10-26 — COMPLETE / OWNER REVIEW GATE
+
+Verified target: PostgreSQL 16.14 `hustlytasker_db`, original
+`hustlytasker_postgres`, 127.0.0.1:5432, `docker_postgres_data`. Both migrations
+were absent at preflight. Fresh custom archive: 104,092 bytes, SHA256
+`72ae8d37df5e35ed535ddd29549bf681ee3de1bfebb703a3433f9d320a5fe4d0`,
+matching host/container size/hash, 240-line TOC/full archive read and owned
+isolated restore/rehearsal all PASS. Backup path is retained in HANDOVER.md.
+
+Applied through standard Django, separately and exactly once:
+
+| Migration | Applied at UTC | Development migration records |
+|---|---|---|
+| `tasks.0004_task_comments` | `2026-10-25T17:54:39.849628+00:00` | 33→34 |
+| `notifications.0002_notification_context` | `2026-10-25T17:55:08.420459+00:00` | 34→35 |
+
+Both timestamps are 2026-10-26 locally. Comment now has 8 columns, including
+nullable edited_at/deleted_at with no permanent defaults, valid lifecycle
+CHECKs and history index. Notification now has 12 columns, nullable context/type
+without permanent defaults, valid context/type CHECKs, four new validated FKs,
+feed index and partial UNIQUE(user_id,event_id) WHERE event_id IS NOT NULL.
+All 44 public FKs have zero orphans; all constraints/indexes are valid/ready.
+SQL FKs remain deferrable NO ACTION; PROTECT is the Django ORM deletion policy.
+The 4000-character limit remains application validation on the TEXT column.
+
+Every legacy row compares exactly with pre-apply and restored data in private
+process memory, excluding only the two approved migration records and new
+nullable columns. Users 3/Sessions 2, business/token/Audit rows 0 and metadata
+23 content types/92 permissions/7 Admin logs are preserved. No demo data,
+backfill, production action, applied-migration edit or new migration was added.
+System/model-drift/graph/history/empty-plan/migrate-check/showmigrations PASS.
+
+Development READ ONLY smoke: 67 requests plus 28 serializer-only checks PASS.
+Current isolated post-rollout verification:
+
+| Group | Result |
+|---|---|
+| Comment/migration | 40/40 PASS — 13.140s |
+| Notification/migration | 34/34 PASS — 8.431s |
+| Task/Comment/hierarchy/Review | 128/128 PASS — 41.694s |
+| Authentication/security/Invitation/Workspace/RBAC/API | 253/253 PASS — 224.745s |
+| Full PostgreSQL | 415/415 PASS — 259.978s |
+
+All actual launcher/Python exits are 0; Django OK, dependency/system/model-drift/
+graph/full-chain checks and owned cleanup PASS. Final integrity/exact legacy
+comparison after all tests PASS; counts/schema unchanged. Owned rehearsal DB
+and container dump copy removed after ownership verification, retained host
+archive size/hash rechecked. No disposable test database/container/network
+remains; original development container/volume and all 143 protected asset
+hashes are unchanged. No blocker. Historical 415/415 below is not reused as
+current proof. Do not reapply either migration. Project remains PENDING OWNER
+DECISION; stop at OWNER REVIEW GATE before any new implementation.
+
+## Historical HT-COM-P2-06 source checkpoint — 2026-10-25
+
+Pre-rollout verification/status below is historical and superseded by
+HT-DB-P1-11. The schema definitions and application boundaries remain current.
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.**
+Stop at **OWNER REVIEW GATE**.
+
+The existing TaskComment and Notification aggregates are extended; no second
+comment/event system, new application, Project/AI model or unrelated Task
+hierarchy change is introduced. New migrations are isolated-test-only and
+**NOT APPLIED TO PERSISTENT DEVELOPMENT/PRODUCTION**. Development remains
+33 migration records, tasks.0003 and notifications.0001, with no new Comment
+lifecycle or Notification context columns. Inventory is 3 Users/2 Sessions
+and zero checked business/security-token/Audit rows. Earlier rollout facts
+below are historical evidence, not authorization for these new migrations.
+
+### TaskComment changes — tasks.0004_task_comments
+
+- Reuse required Task and author User FKs, unrestricted physical text column
+  and BaseModel UUID/created_at/updated_at. Change Task deletion policy to
+  Django ORM PROTECT; author already uses PROTECT. SQL FK action is not claimed
+  to be a SQL `PROTECT` action. Current Admin remains inspection-only.
+- Add nullable `edited_at` and `deleted_at`, no defaults/backfill. New text
+  writes enforce trimmed non-blank Unicode and 4,000 characters using service/
+  serializer validation and MaxLengthValidator; existing oversized rows are
+  preserved without a destructive DB length constraint. Legacy oversized rows
+  can be soft-deleted without revalidating/trimming unchanged content.
+- Add `comment_edit_after_create` and `comment_delete_after_create` CHECKs
+  allowing NULL lifecycle timestamps or values at/after created_at; add
+  `comment_task_created_id_idx(task_id,created_at,id)`.
+- Soft deletion keeps the body internally while API returns a tombstone with
+  null content. Edit audit/markers do not implement text revision history or
+  automatic retention/purge. Concurrent edits serialize last-writer-wins,
+  without an optimistic-version field. No hard-delete endpoint exists and
+  separate successful Comment POSTs are not deduplicated by content or a
+  general Idempotency-Key mechanism.
+
+Dependency is only tasks.0003. No applied migration is rewritten and existing
+Task/Deliverable/Review keys, User schema, status machine, deadline/priority and
+parent completion policy are unchanged.
+
+### Notification changes — notifications.0002_notification_context
+
+Keep existing `user`, `title`, `message`, `is_read` and timestamps; no duplicate
+read-state field. Add nullable `event_type` and nullable protected FKs to
+Profile, Workspace, Task and AuditLog (`event`). Allowed types:
+TASK_ASSIGNED, REVIEW_SUBMITTED, REVIEW_APPROVED,
+REVIEW_CHANGES_REQUESTED and TASK_COMMENTED.
+
+- `notif_context_complete`: all five added context/type fields are NULL for
+  legacy rows, or all are present for typed events. Legacy title/message/read
+  state/IDs/timestamps remain unchanged; no tenant/event mapping is guessed.
+- `notif_valid_event_type`: NULL or one supported event choice.
+- `uniq_notif_event_user`: partial uniqueness of `(user_id,event_id)` where
+  event is non-NULL, preventing duplicate delivery of the same event/recipient.
+- `notif_user_read_created_idx(user_id,is_read,created_at DESC,id)` supports
+  personal read state/feed access; FK indexes remain standard Django indexes.
+
+Dependencies are notifications.0001, tasks.0004_task_comments,
+workspace.0004_profileinvitation and audit.0001. Model validation and scoped
+services enforce canonical Task/Workspace/Profile equality; a normal row CHECK
+does not prove cross-table tenant identity. Feed/count/read also repeat current
+recipient User/membership/Workspace access and canonical context predicates,
+so inaccessible or unscoped legacy rows are hidden rather than reassigned.
+Restoring valid Task read access may make a retained notification visible
+again with its prior is_read state; the row itself never grants that access.
+
+Typed notifications contain constant event messages and an AuditLog event
+reference, not task titles, comment text, review text or PII. Producers persist
+inside the business/audit transaction; notification failure rolls back the
+whole operation. Existing Profile→Workspace locks serialize supported membership
+changes/event persistence; mark-read revalidates under those locks while allowing
+still-readable archived contexts. No signal/outbox/worker/email side effect is
+used. Detailed event recipients/API contracts are in API_DOCUMENTATION.md.
+
+### Historical implementation verification and deployment gate
+
+Current isolated Comment suite **40/40 PASS in 6.919s**, including CRUD,
+Unicode/input, tenant/capability/CSRF, tombstones, atomic rollback, concurrent
+edit/delete and migration empty/legacy oversized-row preservation. Notification
+suite **34/34 PASS in 5.401s** verifies typed events/recipients, dedup, rollback,
+live target access, read state and migration compatibility. Task/Comment/
+hierarchy/Review regression **128/128 PASS in 22.637s**; security/Invitation/
+Workspace/API regression **253/253 PASS in 165.756s**; full PostgreSQL
+**415/415 PASS in 191.226s**. All five runs pass dependency/system/model-drift/
+graph/full-chain checks, native launcher and Python runner exits 0, Django `OK`
+and owned cleanup. Historical 341/341 results are not reused as current proof.
+
+Final read-only development remains 33 migrations, 3 Users/2 Sessions and zero
+checked Task/Comment/Notification/Profile/Workspace/token/Audit rows. Both new
+migration records and lifecycle/context columns remain absent there. No test
+DB/container/network remains; the original development PostgreSQL container
+and volume are preserved. No persistent migration or production write occurred.
+Applied migration files remain unchanged. Deployment requires separate Owner
+approval with target inventory, backup/rehearsal and controlled rollout.
+
+AI Feedback Analyzer prerequisites remain design gaps: immutable edited-text
+history/citations, authorized aggregate retrieval, source invalidation and human
+confirmation. No estimated-duration/AI Suggestions/Project schema is added.
+Retained deleted bodies remain subject to tombstones/authorized projections;
+constant notification messages are not feedback text. Project remains pending
+Owner decision and persistent rollout remains a separate approval gate.
+
+## HT-DB-P1-10 development rollout — 2026-10-25 — COMPLETE / OWNER REVIEW GATE
+
+After fresh inventory, custom-backup validation and isolated restore/rehearsal,
+exact `tasks.0003_task_hierarchy` was applied once to `hustlytasker_db` at
+2026-10-25 03:43:19.588793 UTC. Development now has 33 migrations/11 Task
+columns. `parent_id` is nullable UUID with no default; the self FK and
+`task_not_own_parent` CHECK are validated; `task_ws_parent_created_idx` and
+the FK index are valid/ready. All 40 public FKs have zero orphans and all
+constraints/indexes are valid. Parent SQL FK is NO ACTION, DEFERRABLE INITIALLY
+DEFERRED; PROTECT remains the Django ORM deletion policy, not a SQL action.
+
+All legacy row values match before/after in memory; only the one migration
+record was added. 3 Users/2 Sessions, 23 content types/92 permissions/7 admin logs
+remain unchanged; business/security-token/Audit rows remain 0. No guessed
+mapping, fixture/backfill or change to existing Task/Review keys occurred.
+Backup path/size/SHA256 and rehearsal evidence are in HANDOVER.md. Current
+Task 88/88 and fixture-free read-only development smoke 51 requests PASS;
+16 serializer-only checks are separate from authenticated HTTP validation.
+Current broader regression 253/253 (162.615s) and full PostgreSQL 341/341
+(170.987s) PASS with launcher/Python exits 0, required checks and owned cleanup.
+Final exact legacy-row comparison with rehearsal and retained backup digest
+PASS. Rehearsal DB is removed; host backup retained. Production and other targets
+remain unauthorized. No business/schema code changed in this rollout.
+
+## HT-TASK-P2-05 additive schema — 2026-10-25
+
+**IMPLEMENTATION COMPLETE — DEVELOPMENT MIGRATION APPLIED BY HT-DB-P1-10.**
+The implementation test counts below are historical, not current rollout
+regression evidence.
+
+Added only nullable `Task.parent` → Task with PROTECT deletion and `subtasks`
+reverse name; existing rows become roots (NULL), no guessed mapping/backfill.
+Keep current Workspace FK, priority choices/default, nullable deadline,
+assignment, Deliverable and Review relationships. Added DB CHECK
+`task_not_own_parent` and index `task_ws_parent_created_idx`
+(`workspace_id`, `parent_id`, `created_at`), in addition to the FK index.
+Services/model validation enforce same
+Workspace, acyclicity and depth3 including moved descendants; transactions
+reuse Profile→Workspace locks. Cross-row graph invariants are not claimed as
+raw SQL/bulk-write database constraints. Existing Task Admin stays inspection
+only. Project and estimated duration are design-only, not schema changes.
+
+New file: `tasks.0003_task_hierarchy`, depending only on tasks.0002. It adds
+no Project, deadline or priority column, data migration or guessed mapping.
+Applied migration files stay unchanged. Isolated migration tests **2/2 PASS**
+(1.465s): empty schema plus preservation of related legacy Task/Assignment/
+Deliverable/Review history, priorities, aware/null deadlines and IDs. The
+shared harness also applies the complete current migration chain successfully.
+Additional API tests **42/42 PASS** and hierarchy/workflow **43/43 PASS**;
+Workspace/RBAC **122/122 PASS** (60.495s), full PostgreSQL **341/341 PASS**
+(174.058s), including full-chain/model-drift checks and owned cleanup.
+Depth0 root + depth1–3 children is the supported
+maximum. A moved subtree must fit entirely within this cap.
+
+At the historical implementation gate development was tasks.0002/32 records
+with no parent column. HT-DB-P1-10 supersedes that operational state above;
+do not reapply the migration or generalize development approval to production.
+Every other target still requires explicit authorization and its own fresh
+inventory, verified backup and isolated rehearsal.
+
+Each node owns its workflow, assignments, Deliverables and Reviews. Parent
+completion neither approves nor completes children; child changes/completion
+do not alter parent state. Deadline/priority are independent per node, do not
+inherit, and have no parent-date ordering or Workspace-month constraint.
+No scheduler, automatic overdue transition, deadline-triggered notification
+or AI write exists. HT-COM-P2-06 adds separate business-event notifications.
+
+Status below is historical HT-DB-P1-09 rollout evidence:
 
 Status:
 
@@ -972,12 +1198,12 @@ be treated as implemented unless they also exist in models/migrations.
 | Workspace | `profile → Profile` plus transitional `owner → User` | Profile FK remains nullable for safe transition; supported new writes require a canonical non-null monthly period, while schema nullability preserves unresolved legacy rows. Lifecycle state is implemented in source, and owner remains a transitional second ownership representation. |
 | WorkspaceMember | `workspace + user` | One historical row per pair is retained; `is_active` distinguishes effective assignment from soft revocation, and validated activation requires active membership in the Workspace Profile. |
 | Task | `workspace → Workspace → Profile` | Supported create/update/assignment transitions enforce an active tenant and manager capability; the creator is retained with `PROTECT`. Direct ORM/bulk writes remain outside that guarantee. |
-| TaskAssignment/TaskComment | `task → workspace → profile` | Supported assignment targets an active ordinary Profile Member with effective Workspace Editor access and retains one active assignee. TaskComment has no public workflow API yet. |
+| TaskAssignment/TaskComment | `task → workspace → profile` | Supported assignment targets an active ordinary Profile Member with effective Workspace Editor access and retains one active assignee. HT-COM-P2-06 adds scoped Comment CRUD/tombstones; tasks.0004 is applied to approved development through HT-DB-P1-11. |
 | Deliverable/Review | `task → workspace → profile` | Supported submit/review paths enforce current assignee or internal manager capability, prevent self-review, and retain actor references with `PROTECT`; Client/Guest review is separate and absent. |
 | Client | None | Global row cannot be tenant-filtered safely. |
 | ShareLink | `client`, but Client is global | Raw token, no tenant, creator, capabilities, revoke state, or token hash. |
 | Invoice/Payment | `invoice → client`, but Client is global | No tenant boundary; invoice number is globally unique. |
-| Notification | Recipient User | No structured Profile/Workspace context. |
+| Notification | Recipient User plus nullable typed Profile/Workspace/Task/AuditLog context | HT-COM-P2-06 adds current-access personal feed and event persistence. Legacy unscoped rows remain unchanged/hidden; notifications.0002 is applied to approved development through HT-DB-P1-11. |
 | AuditLog | Optional User + generic entity ID | No reliable tenant path or enforced target reference. |
 
 The schema foundation adds explicit ProfileMembership uniqueness and role
@@ -1449,7 +1675,7 @@ local, and response-neutral password-reset requests are not timing-equalized.
 | Public access | Client Portal account and secure link are supported targets; ClientPortalLink and GuestReviewLink are separate, hashed, expiring, revocable, capability-scoped principals. Replacements are absent. |
 | Soft delete/retention | Soft delete remains the target default for Profile, Workspace, Client, Project, and Task; hard delete is controlled; Invoice/Payment/AuditLog are protected under the eventual retention policy; User departure must not cascade-delete business data. Bounded Profile/Workspace archive, Workspace-member soft revoke, protected workflow actor FKs, inspection-only Task Admin, and disabled Workspace Admin delete are implemented. Client/Project/Task soft delete fields, legal retention periods, purge, self-leave, and full Profile-membership rejoin policy remain undecided or unimplemented. |
 | Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, Workspace routes and Task/Deliverable/internal Review scoping now exist with IDOR/concurrency/audit tests. General Profile CRUD/membership APIs and Client/Finance/Audit/external-review scoping remain absent. |
-| Task/Review workflow | The approved internal flow is implemented in source: manager create/assign, assigned Editor execute/submit, distinct manager approve or request changes, and completion only after valid approval. Client/Guest approval, arbitrary cancellation, comments, file storage/media handling, Task soft delete, and Payroll/Payment pricing/trigger remain separate and unimplemented. |
+| Task/Review workflow | The approved internal flow is implemented in source: manager create/assign, assigned Editor execute/submit, distinct manager approve or request changes, and completion only after valid approval. HT-COM-P2-06 adds discussion/event notifications without changing that flow. Client/Guest approval, arbitrary cancellation, file storage/media handling, Task soft delete, and Payroll/Payment pricing/trigger remain separate and unimplemented. |
 
 ## Implemented ProfileInvitation contract — development schema applied
 

@@ -1,6 +1,204 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-10-23
+Last updated: 2026-10-26
+
+## HT-FE-P3-01 frontend consumer — 2026-10-26
+
+Frontend foundation consumes the existing CSRF/login/logout/me and four scoped
+Profile/Workspace read endpoints; no backend route, response or permission
+contract changed. Same-origin Vite proxy preserves Host. Browser-managed session
+cookies and memory-only CSRF token are used; login rotation, logout/cache/tab
+cleanup and anonymous SessionAuthentication403 are handled. A tenant403 checks
+current identity quietly without treating every permission denial as logout.
+The UI remains read-only for Profile/Workspace. See FRONTEND_GUIDE.md for client,
+proxy, routes and runtime contracts. Mock96/96 and real isolated Django/PG/Chrome
+integration6/6 PASS are distinct; no persistent-development authenticated or
+production-deployment claim follows. HANDOVER.md has exact current evidence.
+
+## HT-DB-P1-11 development verification — 2026-10-26 — COMPLETE / OWNER REVIEW GATE
+
+Approved development rollout applied tasks.0004 then notifications.0002 exactly
+once after backup/isolated restore rehearsal. Both source APIs now have their
+required development columns; 35 migrations and 44 valid orphan-free FKs verify.
+No route, response contract, Authentication, RBAC or Task/Review policy changed.
+
+**DEVELOPMENT SMOKE PASSED:** 67 anonymous requests through the Django handler
+in a READ ONLY transaction and 28 serializer-only checks. Health/CSRF bootstrap,
+auth CSRF rejection, Profile/Workspace/Task/Comment/Notification anonymous
+boundaries and safe method/input checks pass without HTTP 500, login, fixtures,
+email or row changes. New-column ORM selects/context joins also pass. Protected
+endpoints return 403 before authenticated method/body validation; this does not
+claim an authenticated 405/validation success contract was exercised there.
+
+**AUTHENTICATED SUCCESS FLOWS NOT TESTED ON PERSISTENT DEVELOPMENT.** Comment
+CRUD/moderation, Notification events/recipients/dedup/read state, current-target
+access and authenticated CSRF/mutations are isolated-test obligations. Current
+post-rollout Comment 40/40 (13.140s), Notification 34/34 (8.431s) and Task/Review
+128/128 (41.694s), security/RBAC 253/253 (224.745s) and full PostgreSQL 415/415
+(259.978s) PASS. All five actual launcher/Python exits are 0; Django OK,
+dependency/system/model-drift/graph/full-chain and owned cleanup PASS.
+**ISOLATED COMMENT/NOTIFICATION TESTS PASSED.** They verify authenticated CRUD,
+moderation, recipient/event proof, dedup, rollback, read-state ownership, live
+target access, tenant/RBAC/CSRF and concurrency without writing development.
+
+Final development schema/inventory/exact legacy-row comparison and retained
+backup size/hash recheck PASS; owned rehearsal/temp copy removed. No disposable
+test resources remain and no source/API contract changed. Historical 415/415
+below is not reused as post-rollout proof. See HANDOVER.md for current evidence.
+No blocker. Project remains PENDING OWNER DECISION; proposed next step is Owner
+Project A/B′ scope review. Real email delivery and remote CI remain unverified.
+Stop at OWNER REVIEW GATE; no new task starts automatically.
+
+## Historical HT-COM-P2-06 implementation verification — 2026-10-25
+
+The pending-migration status and test results immediately below record the
+pre-rollout checkpoint, superseded operationally by HT-DB-P1-11 above. API
+contracts following that historical evidence remain current.
+
+Status: **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL**.
+Stop at **OWNER REVIEW GATE**. Comment and Notification contracts below
+describe the verified source, not an approved development
+rollout. New `tasks.0004_task_comments` and
+`notifications.0002_notification_context` are **NOT APPLIED TO DEVELOPMENT**.
+Read-only inventory remains 33 migrations, tasks.0003/notifications.0001,
+3 Users, 2 Sessions and zero checked business/token/Audit rows. Do not run new
+write flows against the old persistent schema before a separately approved
+rollout. Project remains **PENDING OWNER DECISION**.
+
+Current isolated verification:
+
+| Group | Result |
+|---|---|
+| Comment/API/service/migrations | **40/40 PASS — 6.919s** |
+| Notification/API/events/migrations | **34/34 PASS — 5.401s** |
+| Task/Comment/hierarchy/Review regression | **128/128 PASS — 22.637s** |
+| Authentication/security/Invitation/Workspace/API regression | **253/253 PASS — 165.756s** |
+| Full PostgreSQL suite | **415/415 PASS — 191.226s** |
+
+All five runs pass dependency/system/model-drift/graph/full-chain checks,
+native launcher exit 0, Python runner Docker die-event exit 0, Django `OK`
+and owned cleanup. These are current runs, not the historical 341/341 evidence.
+Final read-only development inventory is unchanged: both new migration records
+and their new columns are absent; no Task/Comment/Notification/tenant/token/
+Audit rows or test resources were left on development. See HANDOVER.md for
+the retained log/exit evidence and exact continuation gate.
+
+### Task and Subtask comments
+
+Subtask is a Task and uses the same routes. Base path:
+`/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/comments/`.
+
+| Method/path | Contract |
+|---|---|
+| `GET` collection | Paginated comments, including redacted deleted tombstones; stable `created_at,id` order. |
+| `POST` collection | Strict `{"content":"Feedback text"}`; create as the authenticated author; return `201`. |
+| `GET {comment_id}/` | Current scoped comment or generic `404`; deleted comments remain readable as tombstones. |
+| `PATCH {comment_id}/` | Author-only content replacement; requires `content`; return `200`. |
+| `DELETE {comment_id}/` | Empty body; author or current Task manager soft-deletes; return `204`, idempotent for an already deleted row. |
+
+All routes use SessionAuthentication, active tenant access and no-cache
+responses; unsafe methods require CSRF. Existing Task readers may read
+comments. Profile Owner/Admin, Workspace Admin and active Editor may create;
+Viewer is read-only. The author must retain current commenting capability to
+edit/delete. Managers may moderate by deleting but cannot rewrite another
+author's text. Staff/superuser flags confer no tenant authority. Archived
+Profile/Workspace content retains its existing read policy while mutations
+are denied; revoked/inactive memberships grant no access.
+
+Text must be a non-blank string, trimmed, at most 4,000 Unicode characters;
+NUL/surrogate input and malformed Unicode field names return `400` without
+reflecting unencodable keys. Author, task and lifecycle fields are server-owned
+and rejected in request bodies. A known in-scope permission denial is `403`;
+malformed/missing/wrong-parent/cross-tenant nested resource resolution uses
+generic `404` under the existing permission-first conventions. Editing a
+deleted comment returns `409`; repeat deletion does not repeat audit/state
+changes. PUT and collection DELETE are not supported.
+
+Read fields are `id`, `task_id`, `author_profile_membership_id`, `content`,
+`is_deleted`, `edited_at`, `deleted_at`, `created_at`, `updated_at`. No author
+email, username or global User ID is exposed. The author membership projection
+is current and nullable if the author no longer belongs to this Profile.
+Deleted content is always `null` in API output; the original body stays in
+the protected database row. Author projection is batched for list reads.
+Pagination keeps the standard `count/next/previous/results` envelope,
+default 20/max 100 and existing page/format semantics.
+
+Comment services repeat scope/capability checks under Profile → Workspace →
+Task → Comment locks. Creation/edit/soft-delete writes identifier-only audit
+metadata in the same transaction; bodies are not copied into AuditLog or
+Notification. Only creation emits a notification event. Comment changes never
+approve/reject a Deliverable, change Task status/parent policy or create a
+Review. Concurrent edits serialize with last-writer-wins behavior; no
+optimistic version/ETag contract is implemented. Edit markers and audit events
+are not full text-version history. Collection POST has no general
+Idempotency-Key contract: a separate successful POST creates another Comment.
+
+### Personal in-app notifications
+
+| Method/path | Contract |
+|---|---|
+| `GET /api/v1/notifications/` | Own currently accessible notifications; stable `-created_at,id`, standard bounded pagination; optional validated `is_read=true/false`. |
+| `GET /api/v1/notifications/unread-count/` | `{"unread_count": number}` from the same current-access scope. |
+| `POST /api/v1/notifications/{notification_id}/read/` | Empty strict body; mark own still-accessible row read; return its representation, idempotently. |
+
+These routes require an active authenticated User and retain SessionAuthentication,
+CSRF for POST, no-cache responses and the global deny-by-default policy. No
+mark-all-read, recipient override, write/create API or public endpoint exists.
+Other users' IDs, malformed IDs and inaccessible targets are generic `404`.
+
+Output fields are `id`, `event_type`, `profile_id`, `workspace_id`, `task_id`,
+`title`, `message`, `target_url`, `is_read`, `created_at`, `updated_at`. Display
+text is fixed per event, never Task titles, free-text comments/review feedback,
+raw credentials or actor/recipient PII. `target_url` is generated by reversing
+the canonical nested Task route, not taken from user input or external URLs.
+Identifiers/links are navigation data, never authorization.
+
+The feed/count/read scope repeats live active-User/Profile membership and
+effective Workspace read rules, plus canonical Task → Workspace → Profile
+equality. Profile Owner/Admin inherit same-Profile reads; ordinary Members
+require active Workspace ADMIN/MEMBER/VIEWER. Revocation or unsupported role
+removes old notifications from all three APIs. Incomplete unscoped legacy rows
+are retained but hidden. No staff bypass exists. Archived contexts remain
+readable where Task reads are allowed; mark-read changes only personal metadata
+and locks Profile → Workspace → own Notification before revalidation.
+If valid Task read access is later restored, an old notification can reappear
+with its existing read state; hiding is not destructive deletion or a new grant.
+
+| Event | Actor/trigger | Eligible recipients |
+|---|---|---|
+| `TASK_ASSIGNED` | Manager successfully assigns/reassigns Task | That event's current active Editor assignment. |
+| `REVIEW_SUBMITTED` | Assigned Editor submits Deliverable | Current same-Profile Owner/Admin and current Workspace Admin reviewers. |
+| `REVIEW_APPROVED` | Authorized reviewer approves latest Deliverable | Its uploader, if still a current Task reader. |
+| `REVIEW_CHANGES_REQUESTED` | Authorized reviewer requests changes | Its uploader, if still a current Task reader. |
+| `TASK_COMMENTED` | Authorized User creates Comment | Task creator and active assignee, where still current readers. |
+
+Every set excludes actor, duplicates, inactive identities and recipients lacking
+current Task access. There is no whole-Profile broadcast or parent/subtask
+cascade. Producer validation binds the persisted AuditLog event and entity to
+the canonical Task context; replaying an assignment event does not target a
+later assignee. New notifications are not generated for archived/ineligible
+event replays or a now-deleted Comment.
+
+Consistency is **atomic database persistence**, not best effort: business
+mutation + AuditLog + notifications share the enclosing transaction, and a
+notification insert failure rolls all of them back. The `(user,event)` unique
+constraint and get-or-create deduplicate retries of the same persisted event
+without resetting `is_read`. This is event deduplication, not a general HTTP
+POST idempotency-key service. No signal, `on_commit` delivery callback,
+background worker, Celery/Redis, SMTP or push provider is introduced.
+
+### AI Feedback Analyzer readiness
+
+Authorized Task/Workspace context, individual Review feedback, Comment IDs/
+timestamps and Deliverable revisions can become future feedback sources.
+They are not automatically interpreted as Review outcomes or Task instructions.
+Notifications are event indicators, not a feedback-text source. Retained
+deleted Comment bodies must not bypass tombstones or authorized projections
+in any future analyzer. Remaining design gaps include immutable edited-text versions/source citations,
+an explicitly authorized aggregate feedback retrieval contract, source
+invalidation/deletion handling, and human confirmation before creating suggested
+Task/Subtask changes. No LLM/provider/key, AI Suggestions table or autonomous
+database write is part of this task. Project scope remains independently gated.
 
 ## API boundary and public allowlist
 
@@ -494,6 +692,20 @@ was configured. Cache-based DRF throttles remain process-local by default.
 Source/development status: `HT-TASK-P2-03 COMPLETE — DEVELOPMENT ROLLOUT
 VERIFIED BY HT-DB-P1-07`
 
+The base workflow rollout above remains valid. The hierarchy/planning
+extension below is `HT-TASK-P2-05`: **IMPLEMENTATION COMPLETE**. Owner later
+authorized HT-DB-P1-10, which applied exact `tasks.0003_task_hierarchy` to
+development after fresh verified backup and isolated restore rehearsal on
+2026-10-25. At that historical checkpoint, development had 33 migration records
+and nullable parent_id; HT-DB-P1-11 now supersedes the operational state above.
+No API contract, permission or workflow was changed by either rollout. Historical
+Task 88/88, broader regression 253/253 and full PostgreSQL 341/341 (170.987s)
+PASS, with native launcher/Python runner exits 0 and owned cleanup verified.
+The 51-request READ ONLY development handler smoke also passes; authenticated
+success/mutations remain isolated-test-only. HT-DB-P1-10 is COMPLETE / OWNER
+REVIEW GATE at that earlier checkpoint. Historical implementation results below
+remain distinct from current HT-DB-P1-11 evidence; production remains unauthorized.
+
 Base nested path:
 `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/`
 
@@ -509,6 +721,7 @@ different Profile/Workspace.
 | `GET` | `(collection)` | Any caller with effective read access to the Workspace | Paginated Task list. |
 | `POST` | `(collection)` | Profile Owner/Admin or assigned Workspace Admin | Create a `PENDING` Task. |
 | `GET` | `{task_id}/` | Effective Workspace read access | Return one scoped Task. |
+| `GET` | `{task_id}/subtasks/` | Effective Workspace read access | Paginated direct children of one scoped Task; no recursive tree. |
 | `PATCH` | `{task_id}/` | Profile Owner/Admin or assigned Workspace Admin | Update Task metadata, never status/tenant. |
 | `POST` | `{task_id}/assign/` | Profile Owner/Admin or assigned Workspace Admin | Assign/reassign one eligible Editor and enter `ASSIGNED`. |
 | `POST` | `{task_id}/start/` | Current active assignee with Editor capability | Move `ASSIGNED -> WORKING`; empty body. |
@@ -539,9 +752,12 @@ Create accepts only:
 }
 ```
 
-`title` is required. `description`, `priority`, and `deadline` are optional;
-priority defaults to `MEDIUM`. `PATCH` accepts a subset of those four mutable
-metadata fields; empty or unchanged input is a no-op with no audit event.
+`title` is required. `description`, `priority`, `deadline`, and `parent_id` are
+optional; priority defaults to `MEDIUM` and parent defaults to null (root).
+`PATCH` accepts a subset of these five mutable metadata fields; empty or
+unchanged input is a no-op with no audit event. The example above remains valid
+unchanged. To create a Subtask, include `"parent_id": "same-workspace-task-uuid"`
+in the existing collection POST; there is no second Subtask write endpoint.
 Unknown and server-owned fields—including
 `profile_id`, `workspace_id`, `status`, creator, assignment, revisions,
 reviewer, IDs, and timestamps—are rejected with `400 Bad Request`.
@@ -550,6 +766,7 @@ Task responses contain exactly:
 
 - `id`
 - `workspace_id`
+- `parent_id`
 - `title`
 - `description`
 - `status`
@@ -565,6 +782,88 @@ email, username, or other PII. If the assignee no longer has a current active
 same-Profile membership, historical attribution is retained in the database
 but the serialized ProfileMembership identifier becomes null rather than
 exposing a stale tenant identifier.
+
+### HT-TASK-P2-05 hierarchy, deadline and priority — 2026-10-25
+
+`parent_id` is the only added response field; all existing fields and the
+paginated envelope remain. Null identifies a root. A Task may have many direct
+children. The maximum depth is three parent edges below a root (depth 0), or
+four levels total. Reparenting and detaching use the existing Task PATCH;
+`parent_id: null` detaches. Both the ancestor chain and the deepest moved
+descendant must remain within that cap. Self-parent, cycles and invalid depth
+return `400`; a syntactically valid missing, foreign-Workspace or foreign-
+Profile parent reference returns the same generic `404`. Malformed body UUIDs
+return serializer `400`. Workspace/Profile identity never changes.
+
+Each Subtask is a Task with its own assignment, status, Deliverables and
+Reviews. Its lifecycle remains `PENDING -> ASSIGNED -> WORKING -> REVIEW ->
+COMPLETED`, with request-changes returning that same Task to `WORKING`.
+Parent and child status are independent: a parent can be approved while
+children remain unfinished; parent approval does not approve or complete
+children; completed children do not complete their parent; child revision
+does not reopen the parent. Existing reviewer capability, no-self-review,
+latest-revision and atomic audit checks apply separately to each Task.
+These are the bounded implementation choices for the authorized foundation,
+not a claim of a new separate Owner approval of downstream aggregate rules.
+
+Deadline remains nullable and is not tied to the Workspace month. ISO datetime
+input with an offset is normalized to UTC; input without an offset follows the
+existing Django UTC timezone. Invalid formats/calendar dates and timezone
+conversion overflow return `400`, never an intentional `500` path. A child
+deadline is independent of its parent's deadline and may fall later; no
+clamping, propagation, automatic overdue status, deadline-triggered notification or scheduler is
+introduced. Existing legacy Task deadlines are not backfilled or rewritten.
+
+Priority reuses the existing `LOW`, `MEDIUM`, `HIGH`, `URGENT` choices and
+`MEDIUM` default. A change never changes status. Only current Task managers
+(same-Profile Owner/Admin or the Workspace's active Admin) may change
+parent/deadline/priority. An assigned Editor and a Viewer cannot change those
+fields. Creation and material changes use the existing atomic
+`task.created`/`task.updated` audit conventions; parent changes record previous
+and next parent IDs. Archived Profile/Workspace writes remain forbidden and
+inactive memberships do not grant access.
+
+Collection GET stays flat and includes roots and descendants by default.
+Clients can reconstruct a bounded structure from `id`/`parent_id`, or request
+one paginated child level through `{task_id}/subtasks/` (`GET`/`HEAD`/`OPTIONS`
+only). No nested children or unbounded tree is embedded in a Task response.
+The existing prefetch now also obtains active same-Profile membership IDs in
+one query, avoiding per-child assignment-identity queries.
+
+Optional domain filters on the collection and child list:
+
+| Parameter | Contract |
+|---|---|
+| `root_only=true` | Roots only; cannot combine true with `parent_id`. |
+| `parent_id=<uuid>` | Direct children of an existing Task resolved inside the current Workspace; inaccessible/missing parent is generic `404`. |
+| `status` | One existing status choice. |
+| `priority` | One existing priority choice. |
+| `deadline_after`, `deadline_before` | Inclusive lower/upper ISO datetime bounds; null deadlines are excluded; reversed bounds return `400`. |
+| `ordering` | `created_at` (default), `-created_at`, `priority`, `-priority`, `deadline`, or `-deadline`; ID breaks ties. Priority uses `LOW < MEDIUM < HIGH < URGENT`; null deadlines sort last in both directions. |
+
+Invalid domain filter values return `400`. DRF retains its existing
+`page`, `page_size`, maximum-page-size and format negotiation behavior,
+including `page=last` and default fallback for invalid/nonpositive page size.
+All filters run after tenant scoping and cannot widen access. No route is
+public; SessionAuthentication, CSRF, read-only Viewer access, inactive-member
+denial and staff-without-membership denial remain unchanged.
+
+Historical HT-TASK-P2-05 isolated evidence: new and existing Task API **42/42 PASS** (4.990s),
+model/service and existing workflow **43/43 PASS** (4.770s), and hierarchy
+migration tests **2/2 PASS** (1.465s), including legacy relationship retention.
+Workspace/RBAC regression **122/122 PASS** (60.495s) and full PostgreSQL
+regression **341/341 PASS** (174.058s). Dependency/system/model-drift/migration-
+chain checks and owned-resource cleanup pass through the shared harness.
+At that implementation gate development had32 migrations,3 Users/2 Sessions
+and zero token/business rows, with no parent column or tasks.0003 record.
+HT-DB-P1-10 superseded that state at its checkpoint: migration applied,33 records,
+nullable parent column and unchanged legacy data. Current HT-DB-P1-11 evidence
+is in HANDOVER.md. Authenticated success/mutation/hierarchy validation HTTP
+flows are **NOT TESTED ON PERSISTENT DEVELOPMENT**: they use isolated fixtures.
+The 51-request read-only handler smoke has no 500/PII/CSRF bypass or row mutation;
+16 serializer-only checks are not authenticated HTTP coverage.
+Project remains design-only:
+`PROJECT_ARCHITECTURE_REVIEW.md` is **PENDING OWNER DECISION**.
 
 Assign accepts exactly:
 
@@ -638,8 +937,9 @@ PENDING -> ASSIGNED -> WORKING -> REVIEW
 
 There is no arbitrary status field update. `CANCELLED` remains a constrained
 storage value but has no route in this slice. No `PUT` or `DELETE` method is
-available for Task or Deliverable; Comments, claim/Marketplace, Client/Guest
-review, file-upload/media, Finance/Payroll, and soft-delete APIs are absent.
+available for Task or Deliverable. HT-COM-P2-06 adds only the separately
+documented Comment CRUD routes; claim/Marketplace, Client/Guest review,
+file-upload/media, Finance/Payroll and Task soft-delete APIs remain absent.
 
 - invalid or unknown input fields: `400`;
 - visible object but missing action capability/self-review: `403`;

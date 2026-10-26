@@ -24,6 +24,7 @@ class TaskApiTests(APITestCase):
     task_fields = {
         "id",
         "workspace_id",
+        "parent_id",
         "title",
         "description",
         "status",

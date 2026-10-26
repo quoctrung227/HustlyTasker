@@ -1,15 +1,171 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-10-24
+Last updated: 2026-10-26
 
 ## Giai đoạn hiện tại
 
-`PHASE 2.2 - API Architecture`
+`PHASE 3 - Frontend Foundation`
 
-Current authorized task: **HT-TEST-P1-01 — COMPLETE / OWNER REVIEW GATE**.
+Current authorized task: **HT-FE-P3-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+
+Owner authorizes one frontend SPA for the existing Django/DRF APIs: layout,
+design system, SessionAuthentication/CSRF login/logout/current-user integration
+and read-only Profile/Workspace pages. Source now uses React19.3.1, strict
+TypeScript6, Vite6.4.5, React Router7.18.4, Tailwind4, TanStack Query5 and
+Biome2.6.3 with npm lockfile. No parallel backend, JWT, schema change or
+persistent development test mutation is authorized.
+
+ui-ux-pro-max local skill/CLI research informs the shared design master and
+semantic tokens, not a new style for each screen. Final strict typecheck, Biome
+lint24 files, production build6.67s and mocked frontend96/96 across4 files
+(8.60s: API47/primitives15/Auth16/App18) PASS. Separate real isolated Django/
+PostgreSQL/Chrome integration6/6 PASS (40.7s); native launcher/Playwright/backend
+exits0 and owned DB/containers/two-network cleanup PASS. Session/CSRF/identity/
+tenant reads, expiry/revocation and no cross-tenant access verify. Responsive
+375/768/1440 and812×375 landscape, keyboard/native dialog and axe WCAG2/2.1 AA
+checks PASS with0 violations;13 screenshots retained and visual PNG review done.
+Interactive manual-browser testing and persistent authenticated flows were not run.
+Final development35 migrations/3 Users/2 Sessions/0 checked business rows and143
+protected asset hashes unchanged. Historical backend415/415 was not rerun because
+no backend implementation changed. No production deployment, email or remote CI
+verification claim. No blocker. Stop at OWNER REVIEW GATE. HT-FE-P3-02 Workspace &
+Task Management UI is proposed only. Project remains PENDING OWNER DECISION;
+no Task/Review/AI screens or automatic next task are part of this slice.
+
+### Historical completed backend checkpoint — HT-DB-P1-11 — 2026-10-26
+
+Historical authorized task: **HT-DB-P1-11 — COMPLETE / OWNER REVIEW GATE**.
+
+The Owner-approved development rollout applied `tasks.0004_task_comments` once,
+then `notifications.0002_notification_context` once, after fresh inventory,
+custom-backup validation and an isolated restore/rehearsal of both targets.
+These were separate migration transactions; no other migration or feature
+change was included. PostgreSQL 16.14 `hustlytasker_db` remains on the original
+`hustlytasker_postgres` container, loopback port 5432 and `docker_postgres_data` volume.
+
+Verified state: 33→34→35 migration records, Comment 6→8/Notification 7→12 columns,
+40→40→44 valid foreign keys without orphans. New CHECKs, history/feed indexes
+and partial event/recipient UNIQUE index are valid/ready; nullable new fields
+have no permanent defaults or guessed legacy mapping. Exact legacy rows are
+unchanged: 3 Users, 2 Sessions, 0 business/token/Audit rows; metadata 23 content
+types/92 permissions/7 Admin logs. System/model-drift/graph/history/empty-plan
+and migration checks PASS.
+
+Development smoke PASS: 67 anonymous handler requests in READ ONLY transaction
+plus 28 serializer-only checks, without login, fixtures, email, row changes or
+HTTP 500. Authenticated success/mutations remain isolated-test-only. Current
+post-rollout evidence:
+
+| Group | Result |
+|---|---|
+| Comment/migration | 40/40 PASS — 13.140s |
+| Notification/migration | 34/34 PASS — 8.431s |
+| Task/Comment/hierarchy/Review | 128/128 PASS — 41.694s |
+| Authentication/security/Invitation/Workspace/RBAC/API | 253/253 PASS — 224.745s |
+| Full PostgreSQL | 415/415 PASS — 259.978s |
+
+All five runs have actual launcher/Python exits 0, Django OK and owned cleanup;
+dependency/system/model-drift/graph/full-chain checks PASS. Final read-only
+integrity and exact legacy-row comparison PASS after all tests. Owned rehearsal
+database/container dump copy are removed; host backup retains its verified
+size/hash. No test database/container/network remains; original development
+container/volume and all 143 protected source/configuration/harness hashes are
+unchanged. Historical 415/415 below is not reused for this rollout.
+
+Backup and exact apply timestamps are recorded in HANDOVER.md. No blocker.
+Stop at OWNER REVIEW GATE. Proposed next step is Owner Project A/B′ scope
+review; Project remains PENDING OWNER DECISION. No implementation starts
+automatically. Remote CI and real email delivery remain unverified.
+
+### Historical implementation checkpoint — HT-COM-P2-06 — 2026-10-25
+
+The following pre-rollout status is historical and superseded by HT-DB-P1-11.
+
+Historical authorized task: **HT-COM-P2-06 — IMPLEMENTATION COMPLETE — PENDING
+DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW GATE**.
+
+Task/Subtask Comments and typed personal in-app Notifications are implemented
+in source using the existing models. Comments are limited to 4000 characters,
+use author-only editing, manager/author soft deletion and redacted tombstones;
+Viewer remains read-only. Notification producers cover assignment, submission,
+approval, requested changes and Comment creation, with current-recipient
+filtering, AuditLog-event deduplication and atomic business/audit persistence.
+Own feed/count/read APIs repeat live Task access; Notification grants no access.
+
+Current isolated evidence: Comment **40/40 PASS (6.919s)**, Notification
+**34/34 PASS (5.401s)**, Task/Review **128/128 PASS (22.637s)**, security/RBAC
+**253/253 PASS (165.756s)** and full PostgreSQL **415/415 PASS (191.226s)**.
+All five runs have native launcher exit 0, Python runner Docker die-event exit 0,
+Django OK, dependency/system/drift/graph/full-chain checks and owned cleanup.
+Historical 341/341 below is not reused for these new features. Additive
+`tasks.0004_task_comments` and `notifications.0002_notification_context` are
+source-only, not applied to persistent development. Actual read-only baseline
+remains 33 migrations, 3 Users/2 Sessions and 0 Comment/Notification/business/
+token/Audit rows. No development migration is authorized in this task.
+
+Final read-only inspection confirms both new migration records/columns remain
+absent. Only original development PostgreSQL remains; no disposable test DB,
+container or network is left. Protected assets and applied migration files
+remain unchanged. The shared strict-input Unicode-key guard is the documented
+minimal integration change outside the Comment/Notification modules.
+
+Project remains PENDING OWNER DECISION. Stop at Owner review before a separately
+authorized controlled rollout of the exact two new migrations; no automatic task.
+No AI provider, worker, email/push or frontend is introduced.
+
+Historical completed preceding task: **HT-DB-P1-10 — COMPLETE / OWNER REVIEW GATE**.
+
+The exact `tasks.0003_task_hierarchy` was applied once to approved development
+at `2026-10-25 03:43:19.588793 UTC`, after fresh inventory, verified backup,
+exact-row restore comparison and isolated rehearsal. Development is the
+original PostgreSQL 16.14 `hustlytasker_db`, loopback/container/volume unchanged.
+It now has 33 migration records, 11 Task columns and 40 valid FKs/no orphans;
+nullable UUID parent, self-parent CHECK/FK and lookup index all verify.
+Legacy rows and metadata are unchanged: 3 Users/2 Sessions, 0 business/token/
+AuditLog rows, 23 content types/92 permissions/7 Admin logs.
+
+Development read-only smoke 51 requests +16 serializer-only checks PASS.
+Authenticated success/mutations are NOT TESTED ON PERSISTENT DEVELOPMENT.
+Current isolated Task 88/88 PASS (11.780s), related regression 253/253 PASS
+(162.615s) and full PostgreSQL 341/341 PASS (170.987s), each with actual
+launcher exit 0, Python-container die-event exit 0, Django `OK` and owned DB
+cleanup verified. Final checks, empty pending plan and exact legacy-row
+comparison pass. Fresh backup is retained; owned rehearsal/temp copy cleaned;
+no test container/network/DB remains. All 129 baseline backend/configuration/
+Docker/harness assets have unchanged hashes. No source/business rule changed.
+
+Project remains PENDING OWNER DECISION. Stop at Owner review; proposed next
+step is Project A/B′ scope selection or a separately authorized roadmap task.
+Do not reapply tasks.0003 or start adjacent implementation automatically.
+
+Historical preceding implementation gate: **HT-TASK-P2-05 — IMPLEMENTATION COMPLETE — PENDING
+DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW GATE**.
+Task hierarchy/deadline/priority code is present. Current isolated evidence:
+Task API 42/42 PASS (4.990s), hierarchy and existing workflow services 43/43
+PASS (4.770s), hierarchy migration tests 2/2 PASS (1.465s). Dependency,
+Django, model-drift and migration-chain checks pass with these runs.
+Workspace/RBAC regression passes 122/122 (60.495s); full PostgreSQL passes
+341/341 (174.058s), including Authentication, security, Invitation and workflow
+regression. Django reports `OK`; required checks and owned-test-DB cleanup
+are verified in the run logs. No launcher child exit-code claim is made.
+
+The Owner authorized `HT-TASK-P2-05` independently of Project. This supersedes
+the earlier proposed bundled `HT-PROJ-P2-05` scope. **PROJECT ARCHITECTURE
+REVIEW — PENDING OWNER DECISION** is documented in
+`PROJECT_ARCHITECTURE_REVIEW.md`; no Project model/API/migration is authorized.
+At that implementation gate, additive `tasks.0003_task_hierarchy` had run only
+on isolated PostgreSQL; persistent development apply was not yet authorized.
+Its read-only development inventory was 32 migrations, 3 Users,
+2 Sessions, zero verified Users/tokens and zero checked business/AuditLog rows.
+There was no tasks.0003 migration record or parent column on development.
+No test database/container/network remained. That proposed controlled rollout
+was later authorized and completed as HT-DB-P1-10 above; do not apply it again.
+Project decision remains a separate gate; no next task starts automatically.
+
+Historical preceding task: **HT-TEST-P1-01 — COMPLETE / OWNER REVIEW GATE**.
 **LOCAL TEST HARNESS VERIFIED**. Dedicated test
 settings, a shared guarded PostgreSQL runner, a disposable local Docker
-launcher, and GitHub Actions backend CI are implemented. Current local
+launcher, and GitHub Actions backend CI are implemented. Historical tooling
 evidence is 14/14 harness safety tests, targeted API 10/10, and full PostgreSQL
 286/286 in 166.382s, with dependency/system/migration-chain, failure/ownership
 cleanup, actionlint, and unchanged-development checks passing.
@@ -18,10 +174,11 @@ cleanup, actionlint, and unchanged-development checks passing.
 HT-DB-P1-09 is the completed development-rollout baseline: `accounts.0002`
 applied once, 32 migration records, 3 active Users/2 Sessions preserved,
 zero verified Users/tokens/business/AuditLog rows, and full PostgreSQL 286/286
-PASS at that earlier gate. Current tooling does not migrate development or
-change business rules. Stop at Owner Review Gate after local acceptance;
-`HT-PROJ-P2-05 — Project, Subtask, Deadline & Priority` is proposed next and
-must not start automatically.
+PASS at that earlier gate. That completed tooling task did not migrate
+development or change business rules and stopped at Owner Review Gate;
+`HT-PROJ-P2-05 — Project, Subtask, Deadline & Priority` was the proposed next
+task at that historical gate. The current Owner instruction replaces that
+bundle with HT-TASK-P2-05 plus a separate Project design gate above.
 
 Nguyên tắc thực hiện: hoàn thành P0/P1 và test gate trước khi mở business API; không tạo frontend, migration nghiệp vụ lớn hoặc thay đổi business rule khi contract chưa được chốt.
 
@@ -111,6 +268,37 @@ inventory/test counts in this narrative are historical snapshots.
 
 ## P1 - Hoàn thành Phase 2.2
 
+### HT-DB-P1-10 - Controlled Task Hierarchy Development Migration — COMPLETE / OWNER REVIEW GATE
+
+- **Scope:** exact existing tasks.0003 development rollout only; no feature,
+  migration rewrite, guessed backfill, demo data or production operation.
+- **Safety gates passed:** read-only identity/schema/history/data inventory;
+  migration graph/model drift; plan containing only three additive operations;
+  fresh retained custom archive and exact-row restore/rehearsal.
+- **Backup:** `.local_backups/HT-DB-P1-10/hustlytasker_dev_pre_tasks_0003_20261025T034208Z.dump`,
+  102,780 bytes, SHA256
+  `5225dc8a531df81c30d932bf400c896e707f9562d627e0336c51e1ee50ff4c83`.
+  Matching host/container size/hash, 237-line TOC and full archive read PASS;
+  backup stays Git-ignored and retained.
+- **Applied:** tasks.0003 once at 2026-10-25 03:43:19.588793 UTC. Post-check:
+  33 migrations, nullable UUID parent, validated self-parent CHECK/FK (SQL NO
+  ACTION, deferrable; ORM PROTECT), ready/valid index and 40 FKs without orphans.
+  Exact legacy rows remain unchanged; only migration record added.
+- **Current evidence:** dependency/Django/drift/migration checks, development
+  read-only 51-request smoke and 16 serializer checks PASS. Isolated Task 88/88
+  PASS (11.780s), related regression 253/253 PASS (162.615s), full PostgreSQL
+  341/341 PASS (170.987s). All actual launcher/Python-container exit codes are
+  0; summaries and owned DB cleanup verify. Authentication/mutation success
+  uses isolated fixtures only. Historical 341/341 is not reused as current.
+- **Final preservation:** post-test system/drift/migration checks, empty plan
+  and exact legacy-row comparison against rehearsal PASS. Only ownership-
+  verified rehearsal DB/container dump copy removed; host backup size/hash
+  unchanged and retained. No test/rehearsal resources remain; all 129 baseline
+  source/configuration/harness asset hashes unchanged.
+- **Gate:** stop for Owner review, then Project A/B′ scope selection or another
+  separately authorized roadmap task. No further tasks.0003 apply is needed.
+  Project remains a separate pending decision; no new implementation follows.
+
 ### HT-TEST-P1-01 - PostgreSQL Test Harness & CI Baseline — COMPLETE / OWNER REVIEW GATE
 
 - **Mục tiêu:** chuẩn hóa full/targeted PostgreSQL regression gọn và lặp lại
@@ -141,8 +329,8 @@ inventory/test counts in this narrative are historical snapshots.
   owned test container/network/DB remains.
 - **Review gate:** **LOCAL TEST HARNESS VERIFIED**; local acceptance criteria
   and documentation are complete, remote GitHub execution remains unverified.
-  Dừng Owner review; task kế tiếp dự kiến
-  `HT-PROJ-P2-05 — Project, Subtask, Deadline & Priority` chưa được bắt đầu.
+  Dừng Owner review tại gate lịch sử này. Owner sau đó mở HT-TASK-P2-05 và
+  Project design gate riêng; không authorize Project implementation.
 
 ### HT-AUTH-P1-02 - Xác minh và khôi phục tài khoản — IMPLEMENTATION COMPLETE / DEVELOPMENT MIGRATION APPLIED
 
@@ -349,6 +537,120 @@ inventory/test counts in this narrative are historical snapshots.
 
 ## P2 - Business domains tiếp theo
 
+### HT-DB-P1-11 - Controlled Comment & Notification Development Migration — COMPLETE / OWNER REVIEW GATE
+
+- **Rollout DONE:** fresh custom backup/validation/owned restore rehearsal,
+  then tasks.0004 and notifications.0002 applied exactly once to development.
+  Integrity and fixture-free READ ONLY smoke pass; source/business rules unchanged.
+- **Current isolated evidence:** Comment/migration 40/40 PASS (13.140s) and
+  Notification/migration 34/34 PASS (8.431s), Task/Review 128/128 PASS (41.694s),
+  security/RBAC 253/253 PASS (224.745s), full PostgreSQL 415/415 PASS (259.978s),
+  all with launcher/Python exits 0, required checks and owned cleanup.
+- **Final preservation:** exact legacy rows, schema and backup size/hash verify;
+  owned rehearsal database/temp copy removed, host archive retained. All 143
+  protected asset hashes unchanged. No rollout blocker remains.
+- **Gate:** stop at OWNER REVIEW GATE. Proposed next step is Project A/B′ scope
+  review, not automatic implementation. See HANDOVER.md for complete evidence.
+
+### HT-COM-P2-06 - Task Comments & In-App Notification Foundation — IMPLEMENTATION COMPLETE
+
+The separate HT-DB-P1-11 rollout has applied its exact two migrations to approved
+development. The implementation test evidence below is historical; current
+post-rollout verification is recorded under HT-DB-P1-11.
+
+- **Scope:** reuse TaskComment and Notification, not a new app or parallel
+  event system. Subtasks use the same Task Comment API.
+- **Comment rules:** text up to 4000 characters on new writes; current managers
+  and Editors create; author with current capability edits own text; author or
+  manager soft-deletes. Managers cannot rewrite another author's text, Viewer
+  cannot mutate, revoked/inactive membership loses access, and archived
+  Profile/Workspace preserves readable history while denying business writes.
+  Deleted body is retained internally but API returns a tombstone; edit/delete
+  facts are audited without copying body/PII. Full text revision history is not
+  added. Comment→Task is protected; scoped reads use a batched author projection.
+- **Notification events:** assignment→new eligible assignee; submitted review→
+  current eligible managers; approved/requested changes→persisted uploader;
+  new Comment→Task creator+active assignee. Actor, duplicate and inaccessible
+  recipients are excluded. No parent cascade or whole-Profile member broadcast.
+- **Consistency/access:** AuditLog FK identifies the event; unique(event,user)
+  protects repeat emission. Notification inserts are atomic with business/audit
+  mutations, and failures roll back the whole operation. Stored/rendered text
+  is constant, not Task titles, Comment bodies or identity. Own list/count/read
+  share current tenant scope; mark-read is idempotent and supports archived
+  targets that remain readable. SessionAuthentication/CSRF are unchanged.
+- **APIs:** scoped Comment list/create/detail/edit/delete under existing Task
+  routes; `/api/v1/notifications/`, `unread-count/`, `{id}/read/`; pagination and
+  stable ordering. Minimal malformed-Unicode field-name hardening prevents
+  unrenderable strict-input errors without changing normal error contracts.
+- **Schema:** additive tasks.0004 plus notifications.0002; new nullable legacy
+  lifecycle/context fields, constraints/indexes, no guessed tenant mapping or
+  destructive data migration. Unscoped legacy Notifications are retained but
+  hidden from the new API. The exact migrations are now applied development
+  through HT-DB-P1-11; no other persistent environment is authorized.
+- **Historical implementation evidence:** Comment 40/40 (6.919s), Notification 34/34 (5.401s), Task/Review
+  128/128 (22.637s), security/RBAC 253/253 (165.756s) and full PostgreSQL
+  415/415 (191.226s) PASS. All five launcher/Python runner exits are 0; Django
+  OK, dependency/system/drift/graph/full-chain and owned cleanup checks pass.
+- **Limits:** Comment edits are last-writer-wins, with audit facts and edit
+  timestamps but no full text revision history. Event/recipient deduplication
+  does not provide an HTTP POST idempotency key. Hidden notifications can
+  reappear after access restoration with prior read state preserved. Atomic
+  notification insert failure intentionally rolls back business state/audit.
+- **AI readiness:** Task/Workspace, Review feedback, Comment and authorized
+  Deliverable/revision sources are available for a future Feedback Analyzer.
+  Precise Comment revision attribution, full edit history, suggestion acceptance
+  semantics and retention remain future design gaps. Human confirmation must
+  precede corrective Task creation; retained deleted bodies are not AI-readable
+  by default and future retrieval must honor authorization/tombstone redaction.
+  No LLM/Suggestions table/AI writer here.
+- **Gate:** implementation and the approved HT-DB-P1-11 development rollout
+  are complete. Do not reapply either migration or start Project/AI/another
+  task automatically. Stop at Owner review.
+
+### HT-TASK-P2-05 - Task Hierarchy, Deadline & Priority Foundation — IMPLEMENTATION COMPLETE
+
+The separate Owner-authorized HT-DB-P1-10 has applied and verified the existing
+tasks.0003 on approved development; current full regression is 341/341 PASS
+(170.987s) with actual launcher/Python exit codes verified.
+The implementation evidence below is historical, including its original
+unapplied-development state and wrapper exit-code limitation.
+
+- **Authorized scope:** Task/Subtask foundation; Project architecture review
+  only. The prior proposed bundled HT-PROJ-P2-05 does not authorize Project.
+- **Source:** nullable protected `Task.parent`, self-parent database CHECK,
+  same-Workspace/cycle/depth validation and subtree move validation. Root depth
+  is 0, maximum depth is 3; hierarchy mutations reuse the Profile/Workspace
+  locks, scoped parent resolution, manager capability and atomic audit.
+- **Workflow:** each node keeps its own assignee, Deliverable, Review and
+  status. Parent completion may coexist with unfinished children; no upward
+  or downward status, priority, assignment or deadline propagation occurs.
+- **Deadline/priority:** reuse existing fields, nullable aware deadline and
+  LOW/MEDIUM/HIGH/URGENT (default MEDIUM), manager-only mutations, safe
+  datetime validation. No scheduler, notification, AI writer or duration field.
+- **API:** additive `parent_id` on Task reads/create/update; read-only
+  paginated direct-children route; flat list retains all Tasks by default,
+  with optional root/parent/status/priority/deadline filtering and bounded
+  ordering. Existing nested Task and review endpoints remain canonical.
+- **Schema:** only additive `tasks.0003_task_hierarchy`; no guessed backfill,
+  no Project migration, existing Tasks remain roots. Initially tested only on
+  isolated PostgreSQL, later applied to approved development by HT-DB-P1-10;
+  production and other persistent targets remain unauthorized.
+- **Historical implementation evidence:** API42/42 (4.990s), hierarchy/workflow43/43 (4.770s),
+  migration2/2 (1.465s) PASS through the shared harness. Required dependency,
+  system, model-drift, graph/history/full-chain checks pass. Workspace/RBAC
+  122/122 (60.495s) and full PostgreSQL341/341 (174.058s) PASS. Django `OK`
+  and owned-DB cleanup are verified in logs; no unretained child exit code is
+  claimed. Final read-only development remains unmigrated for this feature:
+  32 migration records, 3 Users/2 Sessions, zero verified/token/business rows,
+  no parent column; no disposable test resources remain.
+- **Project review:** A now is recommended; literal Workspace-owned B
+  conflicts with the accepted cross-month Project boundary. Optional future
+  B′ retains Profile/Client ownership and Task.workspace. Owner decision and
+  separately scoped implementation approval are required.
+- **Gate:** the separate controlled rollout is now complete as HT-DB-P1-10.
+  Stop at Owner review; Project scope remains a separate Owner decision.
+  No further tasks.0003 apply or automatic next-task implementation.
+
 ### HT-DATA-P2-01 - Chốt tenancy và schema gaps — COMPLETE / ACCEPTED
 
 - **Mục tiêu:** quyết định Profile/Workspace ownership, public link scope và retention trước migration mới.
@@ -552,12 +854,39 @@ inventory/test counts in this narrative are historical snapshots.
 - **Review gate:** dừng để Owner review/chọn task tiếp theo. **REAL EMAIL
   DELIVERY NOT VERIFIED** và process-local throttle limitation vẫn còn.
 
-Các module Review/Guest/Client Portal, CRM/Finance/Payroll, Notification/Automation và frontend chỉ được xếp lịch sau các nền tảng trên theo thứ tự dependency trong `ORIGINAL_REQUIREMENTS.md`.
+HT-COM-P2-06 now authorizes only the bounded in-app Notification foundation
+above. Review/Guest/Client Portal, CRM/Finance/Payroll, broader automation and
+frontend business screens remain separately scheduled by approved scope and
+dependencies. HT-FE-P3-01 below separately authorizes the web foundation only.
 
 ## P3 - Quality, delivery và mở rộng
+
+### HT-FE-P3-01 - Frontend Architecture, Authentication & UI Foundation — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE
+
+- **Scope:** a single strict TypeScript React SPA, shared design system/components,
+  responsive shell/routes, SessionAuthentication/CSRF and read-only tenant pages.
+- **Source:** frontend app/API/auth/layout/pages/tests, documented design master,
+  and separate isolated integration helpers; existing backend files are preserved.
+- **Current evidence:** strict typecheck, Biome lint24 files, build6.67s and
+  mocked API47/primitive15/AuthProvider16/App18 (96/96 total,8.60s) PASS.
+  Real isolated Django/PostgreSQL/Chrome6/6 PASS40.7s, actual launcher/Playwright/
+  backend exits0 and owned cleanup PASS. Responsive/keyboard/native-dialog and
+  axe0-violation checks PASS;13 screenshots/visual PNG review retained.
+- **Safety/limits:** development inventory and143 protected assets unchanged;
+  backend415 baseline is historical, not rerun. No authenticated persistent test,
+  interactive manual browser verification or production deployment claim.
+- **Gate:** stop for Owner review. No Task/Review write UI, Project/AI, production
+  action or persistent database mutation is included; no blocker remains.
+
+### HT-FE-P3-02 - Workspace & Task Management UI — NOT STARTED / PENDING OWNER SCOPE
+
+Proposed next frontend task only. Reuse the existing design master and verified
+Session/CSRF client after Owner review of HT-FE-P3-01; do not start automatically.
 
 - OpenAPI/schema publishing sau khi API contract ổn định.
 - Backend CI baseline được triển khai qua HT-TEST-P1-01; remote GitHub run
   chưa được xác minh. Deployment/monitoring vẫn là task riêng.
 - Backend container/deployment hardening, logging/monitoring và backup strategy.
-- Frontend chỉ bắt đầu sau khi chủ dự án chốt React SPA hay Next.js và API/auth contract đã ổn định.
+- Frontend foundation is now separately authorized by HT-FE-P3-01 and uses the
+  existing React SPA/API contract; later business UI and deployment retain their
+  own review gates. No Next.js/Prisma backend is introduced.

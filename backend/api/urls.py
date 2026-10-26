@@ -24,4 +24,8 @@ urlpatterns = [
         "v1/",
         include("apps.tasks.urls"),
     ),
+    path(
+        "v1/",
+        include("apps.notifications.urls"),
+    ),
 ]

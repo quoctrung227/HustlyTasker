@@ -77,3 +77,31 @@ When pausing or completing any task, leave `HANDOVER.md` sufficient for a new
 developer or a new Codex session to continue without relying on chat history.
 Keep historical notes clearly labeled so they cannot be mistaken for current
 instructions.
+
+## Required UI/UX skill for frontend work
+
+- For every task that designs, builds, edits, or reviews frontend UI/UX, read
+  `.agents/skills/ui-ux-pro-max/SKILL.md` in full before making UI changes and
+  apply the relevant `ui-ux-pro-max` guidance. This is the verified local skill
+  path; do not claim skill use based only on its name or description.
+- Follow its scope-appropriate workflow and use its design resources/search
+  tools: `--design-system` for a new visual direction, focused `--domain`
+  searches for specific concerns, and `--stack` for the detected frontend
+  stack when applicable. Verify recommendations fit HustlyTasker's SaaS team
+  task-management product and web platform; native-only guidance is not a web
+  requirement. Check the implemented result using the relevant skill checklist.
+- Read and reuse HustlyTasker's existing design-system documentation and tokens.
+  Apply consistent typography, colors, spacing, border radii, component styles,
+  sidebar/topbar/dashboard layouts, forms, tables, cards, navigation, responsive
+  behavior, and accessibility. Do not arbitrarily change style between screens
+  or tasks. During authorized frontend work, document verified design choices
+  for reuse; preserve an existing design-system master and documented overrides.
+- This skill is not required for tasks limited to backend logic, databases,
+  migrations, or backend testing without UI/UX changes.
+- If the skill is missing, unreadable, or a required search resource/tool cannot
+  run, report the exact limitation and what was actually read or executed.
+  Never claim searches, design application, or verification that did not occur.
+- Skill guidance and generated recommendations remain subordinate to the
+  Owner's current instructions, approved scope, and this agreement's security
+  and architecture rules. Skill use does not authorize backend/database changes,
+  expanded functionality, or replacement of Django SessionAuthentication/CSRF.

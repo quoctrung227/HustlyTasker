@@ -1,3 +1,5 @@
+from datetime import timezone as datetime_timezone
+
 from rest_framework import serializers
 
 from apps.reviews.models import Deliverable, Review
@@ -20,6 +22,7 @@ def _profile_membership_id(*, profile_id, user_id):
 
 class TaskReadSerializer(serializers.ModelSerializer):
     workspace_id = serializers.UUIDField(read_only=True)
+    parent_id = serializers.UUIDField(read_only=True, allow_null=True)
     active_assignment = serializers.SerializerMethodField()
 
     class Meta:
@@ -27,6 +30,7 @@ class TaskReadSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "workspace_id",
+            "parent_id",
             "title",
             "description",
             "status",
@@ -52,12 +56,15 @@ class TaskReadSerializer(serializers.ModelSerializer):
             return None
 
         assignment = assignments[0]
-        return {
-            "id": assignment.id,
-            "profile_membership_id": _profile_membership_id(
+        membership_id = getattr(assignment, "_profile_membership_id", None)
+        if not hasattr(assignment, "_profile_membership_id"):
+            membership_id = _profile_membership_id(
                 profile_id=task.workspace.profile_id,
                 user_id=assignment.user_id,
-            ),
+            )
+        return {
+            "id": assignment.id,
+            "profile_membership_id": membership_id,
             "assigned_at": assignment.assigned_at,
         }
 
@@ -122,7 +129,50 @@ class DeliverableReadSerializer(serializers.ModelSerializer):
         return ReviewReadSerializer(review).data
 
 
+class TaskDeadlineField(serializers.DateTimeField):
+    """Normalize API instants and fail safely at datetime timezone boundaries."""
+
+    default_error_messages = {
+        "out_of_range": "Datetime is outside the supported range.",
+    }
+
+    def to_internal_value(self, value):
+        try:
+            parsed = super().to_internal_value(value)
+            return parsed.astimezone(datetime_timezone.utc)
+        except (OverflowError, ValueError):
+            self.fail("out_of_range")
+
+
+class TaskListQuerySerializer(StrictInputSerializer):
+    status = serializers.ChoiceField(choices=Task.Status.choices, required=False)
+    priority = serializers.ChoiceField(choices=Task.Priority.choices, required=False)
+    parent_id = serializers.UUIDField(required=False)
+    root_only = serializers.BooleanField(required=False)
+    deadline_before = TaskDeadlineField(required=False)
+    deadline_after = TaskDeadlineField(required=False)
+    ordering = serializers.ChoiceField(
+        choices=("created_at", "-created_at", "deadline", "-deadline", "priority", "-priority"),
+        required=False,
+        default="created_at",
+    )
+    def validate(self, data):
+        if data.get("root_only") and "parent_id" in data:
+            raise serializers.ValidationError({
+                "parent_id": "Use either parent_id or root_only=true.",
+            })
+        if (
+            "deadline_before" in data and "deadline_after" in data
+            and data["deadline_after"] > data["deadline_before"]
+        ):
+            raise serializers.ValidationError({
+                "deadline_after": "Must not be later than deadline_before.",
+            })
+        return data
+
+
 class TaskCreateSerializer(StrictInputSerializer):
+    parent_id = serializers.UUIDField(required=False, allow_null=True)
     title = serializers.CharField(
         max_length=255,
         allow_blank=False,
@@ -138,10 +188,11 @@ class TaskCreateSerializer(StrictInputSerializer):
         required=False,
         default=Task.Priority.MEDIUM,
     )
-    deadline = serializers.DateTimeField(required=False, allow_null=True)
+    deadline = TaskDeadlineField(required=False, allow_null=True)
 
 
 class TaskUpdateSerializer(StrictInputSerializer):
+    parent_id = serializers.UUIDField(required=False, allow_null=True)
     title = serializers.CharField(
         required=False,
         max_length=255,
@@ -157,7 +208,7 @@ class TaskUpdateSerializer(StrictInputSerializer):
         choices=Task.Priority.choices,
         required=False,
     )
-    deadline = serializers.DateTimeField(required=False, allow_null=True)
+    deadline = TaskDeadlineField(required=False, allow_null=True)
 
 
 class TaskAssignSerializer(StrictInputSerializer):

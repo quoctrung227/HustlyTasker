@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db.models import Prefetch
+from django.db.models import Case, F, IntegerField, OuterRef, Prefetch, Subquery, Value, When
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework import generics, status
@@ -9,10 +9,11 @@ from rest_framework.response import Response
 from apps.reviews.models import Deliverable, Review
 from apps.workspace.access import TenantAccessNotFound
 from apps.workspace.permissions import HasWorkspaceReadAccess
+from apps.workspace.models import ProfileMembership
 from apps.workspace.views import Conflict, TenantApiViewMixin
 
 from .access import resolve_task_in_scope, tasks_visible_to
-from .models import TaskAssignment
+from .models import Task, TaskAssignment
 from .permissions import (
     CanExecuteWorkspaceTasks,
     CanManageWorkspaceTasks,
@@ -27,6 +28,7 @@ from .serializers import (
     EmptyTaskActionSerializer,
     TaskAssignSerializer,
     TaskCreateSerializer,
+    TaskListQuerySerializer,
     TaskReadSerializer,
     TaskUpdateSerializer,
 )
@@ -49,8 +51,16 @@ def _django_validation_detail(exc):
 
 
 def _task_read_queryset(context):
+    memberships = ProfileMembership.objects.filter(
+        profile_id=context.profile_id,
+        user_id=OuterRef("user_id"),
+        user__is_active=True,
+        is_active=True,
+    ).order_by("joined_at", "id").values("id")[:1]
     active_assignments = TaskAssignment.objects.filter(
         is_active=True,
+    ).annotate(
+        _profile_membership_id=Subquery(memberships),
     ).only(
         "id",
         "task_id",
@@ -66,6 +76,47 @@ def _task_read_queryset(context):
             to_attr="_active_assignments",
         )
     )
+
+
+def _filtered_tasks(view, queryset):
+    # Validate domain filters without changing existing query/pagination/format
+    # behavior (page=last, page_size fallback/cap, and DRF format negotiation).
+    query = {
+        name: view.request.query_params[name]
+        for name in TaskListQuerySerializer().fields
+        if name in view.request.query_params
+    }
+    serializer = TaskListQuerySerializer(data=query)
+    serializer.is_valid(raise_exception=True)
+    filters = serializer.validated_data
+    for name in ("status", "priority"):
+        if name in filters:
+            queryset = queryset.filter(**{name: filters[name]})
+    if "parent_id" in filters:
+        try:
+            parent = resolve_task_in_scope(view.workspace_access_context, filters["parent_id"])
+        except TenantAccessNotFound:
+            raise NotFound() from None
+        queryset = queryset.filter(parent_id=parent.id)
+    elif filters.get("root_only"):
+        queryset = queryset.filter(parent_id__isnull=True)
+    if "deadline_before" in filters:
+        queryset = queryset.filter(deadline__lte=filters["deadline_before"])
+    if "deadline_after" in filters:
+        queryset = queryset.filter(deadline__gte=filters["deadline_after"])
+    ordering = filters["ordering"]
+    descending = ordering.startswith("-")
+    field = ordering.lstrip("-")
+    if field == "priority":
+        queryset = queryset.annotate(_priority_rank=Case(
+            *(When(priority=value, then=Value(rank))
+              for rank, value in enumerate(Task.Priority.values)),
+            output_field=IntegerField(),
+        ))
+        ordering = "-_priority_rank" if descending else "_priority_rank"
+    elif field == "deadline":
+        ordering = F("deadline").desc(nulls_last=True) if descending else F("deadline").asc(nulls_last=True)
+    return queryset.order_by(ordering, "id")
 
 
 def _deliverable_read_queryset(context, task_id):
@@ -110,9 +161,7 @@ class TaskListView(TaskApiViewMixin, generics.ListAPIView):
         return [permission() for permission in permission_classes]
 
     def get_queryset(self):
-        return _task_read_queryset(
-            self.workspace_access_context
-        ).order_by("created_at", "id")
+        return _filtered_tasks(self, _task_read_queryset(self.workspace_access_context))
 
     def post(self, request, *args, **kwargs):
         serializer = TaskCreateSerializer(data=request.data)
@@ -126,6 +175,21 @@ class TaskListView(TaskApiViewMixin, generics.ListAPIView):
         return Response(
             TaskReadSerializer(task).data,
             status=status.HTTP_201_CREATED,
+        )
+
+
+@method_decorator(never_cache, name="dispatch")
+class TaskSubtaskListView(TaskApiViewMixin, generics.ListAPIView):
+    """Bounded, paginated direct children; never recursively expand a tree."""
+
+    serializer_class = TaskReadSerializer
+    permission_classes = (HasTaskReadAccess,)
+    http_method_names = ("get", "head", "options")
+
+    def get_queryset(self):
+        return _filtered_tasks(
+            self,
+            _task_read_queryset(self.workspace_access_context).filter(parent_id=self.task.id),
         )
 
 

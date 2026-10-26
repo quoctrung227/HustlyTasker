@@ -1,7 +1,24 @@
 # HustlyTasker
 
-HustlyTasker uses Django 6.1, Django REST Framework, and PostgreSQL 16. The
-frontend is planned but is not implemented yet.
+HustlyTasker uses Django 6.1, Django REST Framework, and PostgreSQL 16, with a
+React/TypeScript frontend consuming the existing SessionAuthentication API.
+
+## Frontend foundation
+
+With the configured Django backend running at127.0.0.1:8000:
+
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
+
+Open http://127.0.0.1:5173. Profile/Workspace UI is read-only. Same-origin Vite
+proxy preserves Django session cookies and CSRF; no JWT or parallel backend.
+See [Frontend Guide](documentation/FRONTEND_GUIDE.md) for Node/dependencies,
+routes, configuration, unit/build checks and isolated real browser integration.
+See [design system](documentation/design-system/hustlytasker/MASTER.md) before
+UI changes and [HANDOVER](documentation/HANDOVER.md) for actual verification.
 
 ## Backend tests and CI
 
@@ -70,7 +87,7 @@ propagate as nonzero exit codes. In GitHub's Actions tab, open **Backend
 PostgreSQL checks** and inspect the failed step/log; a local run is not proof
 that GitHub accepted or executed the workflow.
 
-HT-TEST-P1-01 is **COMPLETE / OWNER REVIEW GATE — LOCAL TEST HARNESS VERIFIED**.
+Historical HT-TEST-P1-01 checkpoint: **COMPLETE / OWNER REVIEW GATE — LOCAL TEST HARNESS VERIFIED**.
 Actual local results: 14/14 guard tests (0.513s), targeted API 10/10 (0.044s),
 and full PostgreSQL 286/286 (166.382s), with dependency/system/migration-chain
 checks and cleanup PASS. A deliberate nonexistent test label returns exit 1

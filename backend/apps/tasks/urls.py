@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .comment_views import CommentDetailView, CommentListView
 from .views import (
     DeliverableApproveView,
     DeliverableListView,
@@ -8,6 +9,7 @@ from .views import (
     TaskDetailView,
     TaskListView,
     TaskStartView,
+    TaskSubtaskListView,
 )
 
 
@@ -18,6 +20,16 @@ _workspace_prefix = (
 )
 
 urlpatterns = [
+    path(
+        f"{_workspace_prefix}<str:task_id>/comments/",
+        CommentListView.as_view(),
+        name="task-comment-list",
+    ),
+    path(
+        f"{_workspace_prefix}<str:task_id>/comments/<str:comment_id>/",
+        CommentDetailView.as_view(),
+        name="task-comment-detail",
+    ),
     path(
         _workspace_prefix,
         TaskListView.as_view(),
@@ -32,6 +44,11 @@ urlpatterns = [
         f"{_workspace_prefix}<str:task_id>/assign/",
         TaskAssignView.as_view(),
         name="task-assign",
+    ),
+    path(
+        f"{_workspace_prefix}<str:task_id>/subtasks/",
+        TaskSubtaskListView.as_view(),
+        name="task-subtask-list",
     ),
     path(
         f"{_workspace_prefix}<str:task_id>/start/",

@@ -1,6 +1,182 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-10-24 (HT-TEST-P1-01)
+## Current Snapshot - 2026-10-26 (HT-FE-P3-01)
+
+**IMPLEMENTATION COMPLETE / OWNER REVIEW GATE.** Owner authorized the
+first web UI foundation after the completed backend rollout. The existing empty
+frontend directory now contains a single React19.3.1/TypeScript6/Vite6.4.5 SPA,
+React Router7.18.4, Tailwind4, TanStack Query5 and Biome2.6.3 lint, with npm lock.
+Node20.17/npm10.8.2 are retained; no backend dependency or architecture changed.
+
+Source implements shared typed API transport, in-memory CSRF bootstrap/rotation,
+SessionAuthentication login/logout/me and fail-closed auth initialization/cache
+cleanup. Sidebar/topbar, reusable components, protected routes and read-only
+Profile/Workspace list/detail pages exist with loading/empty/error states.
+ui-ux-pro-max was read and its CLI searches ran; selected tokens/layout/font
+are recorded in design-system/hustlytasker/MASTER.md and frontend/src/styles.css.
+No Task/Review/Project/AI/write UI or fake dashboard metrics are introduced.
+
+Final frozen-source verification: strict TypeScript and Biome lint24 files PASS;
+production build PASS in6.67s (JS388.07kB/gzip116.31kB; CSS31.44kB/gzip9.43kB;
+Vietnamese fonts locally bundled). Full mocked frontend suite96/96 PASS across
+4 files in8.60s: API47, primitives15, AuthProvider16, App18. This includes quiet
+permission403 identity probes, cache cleanup, stale-response guards, finite route
+handling, public tab titles after identity loss and a Router-independent fatal fallback.
+
+Real isolated Django/PostgreSQL integration6/6 PASS in40.7s, run
+86b46affb2724fd9be868fac2955c63d. Actual native launcher/Playwright/backend exits
+are0; owned database/containers/two networks cleanup PASS. Real Session/CSRF
+rotation, invalid login/logout/me, scoped Profile/Workspace, IDOR, return redirect,
+session expiry and revoked access verify. Automated Chrome responsive/keyboard/
+native-dialog checks and axe WCAG2/2.1 AA return0 violations at375/768/1440 and
+812×375 landscape;13 ignored screenshots retained, with visual PNG review.
+Interactive manual-browser testing was not run. Earlier launcher attempts are
+historical; the first did not reach browser tests, and owned cleanup was verified.
+
+Final read-only development: PostgreSQL16.14,35 migrations,3 Users/2 Sessions,
+0 checked business rows unchanged.143 protected backend/config/shared-harness
+hashes match; no owned test resources or5173/8001 listeners remain. Backend
+415/415 is the historical completed rollout baseline, not rerun because no
+backend implementation changed. Authenticated success was tested only in isolated
+fixtures, never persistent development. No production deployment or real email/
+remote CI verification is claimed. Documentation/HANDOVER refreshed; no blocker.
+Stop at OWNER REVIEW GATE; HT-FE-P3-02 is proposed only, with no automatic work.
+
+## Historical Snapshot - 2026-10-26 (HT-DB-P1-11)
+
+**COMPLETE / OWNER REVIEW GATE.** Resume verified both migrations absent and
+preserved existing source; original stopped container restarted after identity/
+volume/loopback checks. Fresh104,092-byte custom backup/size/SHA256/240-line TOC/
+fullread and exact-data isolated restore/rehearsal PASS. Applied only tasks.0004
+then notifications.0002 once each, with stage1 integrity before stage2.
+Development now35 records,8 Comment/12 Notification columns and44 valid FKs
+without orphans; CHECKs/partial UNIQUE/indexes/nullability/defaults valid.
+Exact legacy values preserved:3 Users/2 Sessions,0 business/token/Audit rows,
+metadata23/92/7 unchanged. System/drift/graph/history/migrate-check/empty plan PASS.
+
+Development READ ONLY smoke67 requests +28 serializer checks PASS; authenticated
+success/mutations remain isolated-only. Current Comment40/40 (13.140s),
+Notification34/34 (8.431s),Task128/128 (41.694s),security253/253 (224.745s),
+full PostgreSQL415/415 (259.978s) PASS. All actual launcher/Python exits0,
+shared dependency/system/model-drift/graph/full-chain and owned cleanup PASS.
+Final legacy/schema comparison after tests PASS; owned rehearsal/temp dump
+removed, host backup hash/size retained, no test resources remain.143 protected
+assets unchanged; documentation/handover updated, no backend/harness edits.
+No rollout TODO/blocker. Project remains PENDING OWNER DECISION; proposed next
+step is Owner Project scope review, no automatic task. Do not reapply migrations.
+
+## Historical Snapshot - 2026-10-25 (HT-COM-P2-06)
+
+Status **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL**.
+Stop at OWNER REVIEW GATE. Preserved partial Comment/Notification source on
+resume, completed missing Notification API/migration/tests, hardened persisted
+event proof and Unicode input, and verified the integrated foundation.
+
+Comments reuse TaskComment: manager/Editor create, current author edits own,
+author/manager soft-delete with body hidden as tombstone. Notification has five
+audit-backed atomic event types, scoped relevant recipients and live own-feed/
+count/read authorization. No Task/Review/parent workflow, User schema, auth
+mechanism, Client/Project/AI/frontend change. Full rules/limits are in HANDOVER.
+
+Current isolated results: Comment **40/40 PASS (6.919s)**, Notification
+**34/34 PASS (5.401s)**, Task/Comment/hierarchy/Review **128/128 PASS (22.637s)**,
+security/RBAC **253/253 PASS (165.756s)**, full PostgreSQL **415/415 PASS
+(191.226s)**. All five successful runs: launcher0/Python0, Django OK, dependency/
+system/drift/graph/full-chain/owned cleanup PASS. Initial Notification attempt
+failed on an inverted intermediate Workspace guard; corrected frozen source
+passed rerun and full regression, without loosening permissions. attempt1 and
+current paired logs/exit JSON remain ignored under .local_backups/HT-COM-P2-06/.
+
+Final development READ ONLY: PG16.14,33 migrations,3 Users/2 Sessions and
+zero checked Comment/Notification/business/token/Audit rows. New tasks.0004/
+notifications.0002 records/columns are absent; no persistent writes/migration.
+No test resources remain.83 protected assets unchanged; the sole expected
+shared validator change safely rejects malformed Unicode field names.
+Docs refreshed and current gate explicit. Next proposed task is controlled
+development rollout only after separate approval. Project remains pending.
+
+## Historical Snapshot - 2026-10-25 (HT-DB-P1-10)
+
+Status: **COMPLETE / OWNER REVIEW GATE**. Owner conditionally authorized controlled tasks.0003
+development rollout only. Preflight identity/schema/history rechecked read-only:
+correct repository PostgreSQL16.14/loopback/volume,32 migration records,
+tasks.0003 and parent_id absent, existing Task constraints/indexes valid.
+That preflight state is superseded by the applied state below. No source blocker.
+Fresh inventory confirms3 Users/2 Sessions and0 business/token/Audit rows;
+all39 FKs have no orphans. New102,780-byte custom backup verified by matching
+size/SHA256,237-line TOC/fullread and owned isolated restore. Exact legacy-row
+comparison and rehearsal tasks.0003 PASS; plan contains only that migration.
+Standard development apply and post-check PASS:33 migrations,11 Task columns,
+nullable parent/selfCHECK/FK/index valid,40 FKs no orphans. Exact legacy rows
+preserved (only one new migration record),3 Users/2 Sessions and0 business rows.
+Fixture-free READ ONLY development smoke51 requests and16 serializer-only
+checks PASS, no login/fixture/PII/email/write. Current isolated Task88/88
+PASS11.780s; Auth/security/Invitation/Workspace/API253/253 PASS162.615s.
+Launcher/Python exit 0 confirmed by native Process handle and Docker die event,
+with Django OK and owned cleanup. Current full suite **341/341 PASS in 170.987s**
+with both exits 0; dependency/system/drift/graph/history/full-chain checks PASS.
+Final exact legacy-row comparison with rehearsal and backup size/hash PASS.
+Owned rehearsal DB/container dump copy removed; host backup retained. No test
+DB/container/network remains; only original development PostgreSQL/volume.
+129 business/config/harness assets unchanged by SHA-256; documentation only.
+Backup details are in HANDOVER. Do not reapply migration.
+Preserve all existing dirty code/docs; Project remains pending Owner decision.
+
+## Historical Snapshot - 2026-10-25 (HT-TASK-P2-05)
+
+Status: **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL**.
+Stop at **OWNER REVIEW GATE**; Project architecture is **PENDING OWNER DECISION**.
+
+- Reused existing deadline/priority and added nullable protected Task.parent,
+  max depth3 (root0), cycle/self/cross-Workspace/moved-subtree validation under
+  existing tenant locks. Nodes retain independent workflows/reviews/deadlines;
+  no status inheritance or completion aggregation. Existing managers alone
+  create/reparent/change planning fields. No new role/authentication scheme.
+- Existing POST/PATCH accepts parent_id. New paginated direct-child GET and
+  optional root/parent/status/priority/deadline filters/order are additive;
+  old fields, flat-list default, pagination and CSRF remain compatible. List
+  assignment membership lookup is batched rather than per-row.
+- New tasks.0003 is additive, with no guessed legacy mapping. Migration tests
+  **2/2 PASS** (1.465s), Task API **42/42 PASS** (4.990s), hierarchy/workflow
+  **43/43 PASS** (4.770s, including two concurrency races), Workspace/RBAC
+  **122/122 PASS** (60.495s), full PostgreSQL **341/341 PASS** (174.058s).
+  All use shared isolated harness; dependency/system/drift/graph/history/
+  full-chain/owned cleanup checks pass. Full paired logs are retained ignored
+  under `.local_backups/HT-TASK-P2-05/`; no unrecorded child exit code is claimed.
+- Final development read-only inventory: PG16.14, original Compose/loopback/
+  volume, 32 migrations, 3 Users/2 Sessions, zero verified Users/tokens/checked
+  business/AuditLog rows. tasks.0003 and parent column remain absent; no
+  persistent migration/write occurred. No test container/network/DB remains.
+- All affected docs refreshed, including A/B Project analysis and independent
+  node behavior. Literal Workspace-owned Project conflicts with accepted
+  cross-month Profile/Client Project scope; propose A now/B′ later. Project,
+  estimated duration, AI/Notification and frontend are not implemented.
+- No implementation blocker. Next step is Owner review, then a separately
+  authorized controlled tasks.0003 development rollout; no automatic new task.
+  Preserve current dirty code/docs and the pre-existing two checkpoint edits.
+
+## Revalidation - 2026-10-25 (HT-TEST-P1-01)
+
+Status remains **COMPLETE / OWNER REVIEW GATE — LOCAL TEST HARNESS VERIFIED**.
+
+- Re-read the repeated request and checked the actual tracked harness/CI,
+  relevant settings/migrations/tests and documentation. Branch `main`, HEAD
+  `3a736f0`, clean worktree before this checkpoint update. No incomplete
+  implementation was found; no business/tooling code was changed or recreated.
+- Read-only development inventory confirms PostgreSQL 16.14, the original
+  repository Compose/loopback/volume identity, 32 migrations with
+  `accounts.0002` and `workspace.0004`, 3 Users, 2 Sessions, zero security
+  tokens and zero checked business/AuditLog rows. No test DB or labelled test
+  container/network remains. No persistent migration or data write occurred.
+- Current PowerShell syntax, test Compose configuration and diff checks pass.
+  The guard 14/14, targeted 10/10 and full PostgreSQL 286/286 results below are
+  the completed 2026-10-24 run, not a new run today. The unchanged
+  implementation does not require repeating completed regression work.
+- Only HANDOVER and this progress checkpoint changed. **CI WORKFLOW
+  IMPLEMENTED — REMOTE RUN NOT VERIFIED.** Stop for Owner review; do not start
+  `HT-PROJ-P2-05` automatically. No implementation blocker remains.
+
+## Historical Snapshot - 2026-10-24 (HT-TEST-P1-01)
 
 Status: **COMPLETE / OWNER REVIEW GATE — LOCAL TEST HARNESS VERIFIED**
 

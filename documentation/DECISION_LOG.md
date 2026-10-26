@@ -1340,3 +1340,167 @@ Consequences:
   DRF throttles currently use the default process-local cache and therefore do
   not provide distributed multi-worker enforcement. These deployment limits
   must not be described as production-verified.
+
+---
+
+# HT-TASK-P2-05 scope and implementation choices — 2026-10-25
+
+Authorization: the Owner explicitly authorized Task hierarchy/deadline/priority
+foundation and Project analysis only. This supersedes the proposed bundled
+`HT-PROJ-P2-05` task scope; it does **not** approve a Project implementation.
+The choices below implement the authorized minimal foundation and are exposed
+for the current Owner review gate; they do not amend the 11 accepted tenant/
+business decisions or claim a separate Owner approval of each default.
+
+- Reuse Task as both root and subtask. Add only nullable protected self-FK;
+  preserve required Task.workspace and existing references. Legacy Tasks remain
+  roots with NULL parent; no inferred grouping/backfill. Maximum depth is three
+  parent edges (root0, four levels), a small bounded planning hierarchy suitable
+  for the thesis/AI proposal target. Same Workspace, acyclicity, self-parent and
+  moved-subtree limits are validated under existing Profile→Workspace locks.
+- Each node has its own unchanged assignment/execution/Deliverable/internal
+  Review lifecycle. Parent may be approved with unfinished children; those
+  children remain unfinished. Child request changes/completion never changes
+  parent state; finishing all children never auto-completes parent. Reviewers,
+  self-review restrictions, stale-revision checks and audit atomicity stay as
+  implemented by HT-TASK-P2-03. There is no aggregate completion policy here.
+- Existing nullable deadline and LOW/MEDIUM/HIGH/URGENT priority (MEDIUM
+  default) are reused. API instants normalize to UTC; timezone-free ISO input
+  retains Django's existing UTC interpretation. Service/model validation
+  requires aware datetimes and supported UTC range. Parent/child deadlines
+  and priorities are independent, with no implicit inheritance/clamping or
+  status/priority change when overdue. This preserves existing legacy values.
+- Existing managers alone create/reparent/update planning fields using current
+  scoped services; an Editor assignment never grants planning/priority rights.
+  Existing Task POST/PATCH remain canonical; direct-child GET is paginated.
+  Flat all-Task list stays the default. Priority order is LOW→MEDIUM→HIGH→URGENT;
+  deadline order places NULL last. No authentication/RBAC role change occurs.
+- New tasks.0003 is additive and tested only on isolated PostgreSQL. No
+  persistent rollout is authorized. Cross-row graph checks rely on validated
+  services/model clean; unrestricted raw SQL/bulk/ORM writes are not an
+  authorized business write surface. DB enforces FK and self-parent CHECK.
+
+## PROJECT ARCHITECTURE REVIEW — PENDING OWNER DECISION
+
+The accepted 2026-10-16 group6 already allows Profile/Client Projects spanning
+monthly Workspaces while every Task retains one Workspace. Literal option B
+(canonical Workspace-owned Project) conflicts with that boundary. No newer
+repository SRS/HLD or accepted decision was found that overrides it.
+
+Proposal: A for current delivery (Workspace→Task→Subtask), then optionally B′
+(Profile/Client-scoped Project linked to Tasks across months) in a separately
+authorized task. Choosing literal B requires an explicit amendment first;
+do not silently rewrite the accepted decision. Full A/B comparison, future
+migration checklist, SRS/HLD implications and Owner question are in
+`PROJECT_ARCHITECTURE_REVIEW.md`. Project model/API/migration and
+`estimated_duration` remain unimplemented; the latter is a future AI design
+proposal with units/acceptance semantics still open. No LLM/provider/key or
+autonomous database writer is introduced.
+
+Verification for this implementation: isolated migration2/2, Task API42/42,
+hierarchy/workflow43/43, Workspace/RBAC122/122 and full PostgreSQL341/341
+(174.058s) PASS, including tenant/security/review regression and dependency/
+system/drift/full-chain checks. Persistent development remains 32 migrations,
+3 Users/2 Sessions and zero checked business rows; tasks.0003 is unapplied.
+Status: **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL**;
+stop at Owner review. These test results do not resolve the Project decision.
+
+Operational update — 2026-10-25, HT-DB-P1-10 (no business-decision change): the
+Owner subsequently conditionally authorized exact tasks.0003 development
+rollout. Fresh backup/inventory/restore rehearsal passed; standard Django apply
+succeeded at 03:43:19.588793 UTC. Development is now 33 migration records with
+parent column/CHECK/FK/index, unchanged 3 Users/2 Sessions and all legacy rows.
+Current smoke, Task 88/88, regression 253/253 and full 341/341 (170.987s) PASS;
+launcher/Python exits 0 and owned cleanup verified. HT-DB-P1-10 is COMPLETE /
+OWNER REVIEW GATE; evidence is in HANDOVER.md. The prior unapplied-development
+status above is historical.
+No Project, RBAC, workflow or production approval follows from this rollout.
+
+---
+
+# HT-COM-P2-06 implementation choices — 2026-10-25
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.**
+
+Historical implementation gate: the later HT-DB-P1-11 operational approval
+and applied state below supersede only the pending-development statements.
+
+Owner scope: Task Comments and In-App Notification Foundation only. Existing
+TaskComment and Notification models are extended rather than duplicated;
+SessionAuthentication/CSRF, tenant boundaries, Task hierarchy and independent
+review workflows remain unchanged. Project remains PENDING OWNER DECISION.
+
+Reviewable implementation choices within that scope:
+
+1. Comment text limit 4000 for new/edited bodies; author edits own text while
+   still permitted, author or current manager soft-deletes. No manager rewrite
+   of another author's body; Viewer stays read-only. Deletion retains internal
+   body with redacted API tombstone and audit metadata IDs, no hard-delete API.
+   Nullable edit/delete timestamps and Task FK PROTECT preserve history;
+   existing oversized comments are not trimmed by migration or moderation.
+2. Notification is atomic database state, not best-effort delivery. Insert
+   failure rolls back business mutation/audit/notification. Persisted AuditLog
+   is the event key; unique(event,recipient) preserves dedup and read state.
+   No signals/on_commit/email/worker/outbox or distributed delivery is added.
+3. Assignment→current Editor; review submitted→current manager reviewers;
+   approved/changes→uploader; new Comment→creator+current assignee. Exclude
+   actor, duplicates and users without current target access. No Profile-wide
+   broadcast or parent cascade. Recipient/target proof uses persisted rows.
+4. Existing is_read is sufficient; no duplicate read-state field. Nullable
+   tenant/type/target/event context keeps old Notification rows unchanged and
+   hidden until a future safe mapping exists. All personal operations repeat
+   live tenant/target access; read-state updates also work on readable archives.
+   Static messages/UUID target references do not copy private feedback or PII.
+5. AI Feedback Analyzer remains a design target. Authorized Task/Comment/
+   Review/Deliverable-revision data can support future citations; full comment
+   text revisions, authorized aggregate retrieval and human acceptance/provenance
+   contracts remain gaps. No AI model/API/key or autonomous writes are added.
+
+New tasks.0004/notifications.0002 are isolated-test-only, never authorized for
+persistent development here. Current isolated verification: Comment40/40,
+Notification34/34, Task128/128, security253/253 and full PostgreSQL415/415
+(191.226s) PASS with launcher/Python exits0 and required checks/owned cleanup.
+Development remains33 migrations/3 Users/2 Sessions/0 business rows; new
+migrations/columns absent. Prior341/341 was not reused as new-feature proof.
+Comment edits are last-writer-wins without immutable text revisions; event/
+recipient dedup is not HTTP POST idempotency. Hidden Notification rows may
+reappear when target access is restored, preserving is_read. Deleted Comment
+text stays out of authorized API/AI projections. Stop at Owner Review Gate;
+existing accepted decisions are not rewritten by these implementation choices.
+
+---
+
+# HT-DB-P1-11 controlled development rollout — 2026-10-26
+
+Owner approved tasks.0004_task_comments and notifications.0002_notification_context
+conditionally after development identity/inventory, fresh backup and isolated
+restore rehearsal. All pre-apply gates passed; graph required tasks then
+notifications, with no other pending migration. Applied separately once at
+2026-10-25T17:54:39.849628Z and 2026-10-25T17:55:08.420459Z (October26 local).
+Development now has35 migration records; exact legacy rows are preserved.
+Post schema and fixture-free read-only smoke PASS; current full415/415
+(259.978s) and targeted40/34/128/253 regression PASS, all launcher/Python exits0.
+Final data/backup integrity and owned cleanup PASS; HT-DB-P1-11 COMPLETE /
+OWNER REVIEW GATE. Backup/evidence are maintained in HANDOVER. No business/RBAC decision or
+production action follows from this operational approval. Project remains
+PENDING OWNER DECISION; stop at Owner review after rollout verification.
+
+---
+
+# HT-FE-P3-01 frontend implementation choices — 2026-10-26
+
+Owner approved the first frontend foundation while preserving Django/DRF/PG,
+SessionAuthentication/CSRF and read-only tenant UI scope. Chosen within that
+scope for review: one React/TypeScript/Vite SPA, ReactRouter,Tailwind,TanStack
+Query, self-hosted fonts and shared ui-ux-pro-max-informed design master.
+Next.js/Prisma is not introduced. Biome supplies maintained Node20-compatible
+lint instead of retaining incompatible/deprecated initial ESLint tooling.
+Same-origin proxy avoids CORS/trusted-origin/security-settings expansion.
+
+Mock contracts and real isolated HTTP/browser proof are recorded separately.
+Test-only owned PG tmpfs/internal network plus backend-only HTTP bridge permits
+loopback browser access without development credentials or database writes.
+Frontend state/caching never grants tenant authority; existing backend checks
+remain final. No Project/AI/workflow/role decision is reopened or approved.
+HT-FE-P3-01 implementation complete, pending Owner review; HT-FE-P3-02 is a
+proposal only. See FRONTEND_GUIDE/design master/HANDOVER for actual evidence.

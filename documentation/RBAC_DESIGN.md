@@ -6,7 +6,7 @@ Status: `COMPLETE — APPROVED BY OWNER DELEGATION`
 
 Date: 2026-10-18
 
-Last implementation reconciliation: 2026-10-24
+Last implementation reconciliation: 2026-10-26
 
 The owner delegated the remaining RBAC decisions to the Technical Advisor on
 2026-10-17. That approval first authorized `HT-RBAC-P1-03` Tenant Access
@@ -37,6 +37,16 @@ three legacy Users and two Sessions are preserved and no User is auto-verified.
 This operational status reconciliation changes no RBAC or Invitation decision.
 Current rollout verification is recorded in `HANDOVER.md`; every other
 persistent target remains separately gated.
+
+The authorized `HT-TASK-P2-05` source extension adds Task hierarchy and
+planning filters using the same capabilities; it introduces no role or public
+principal. See section 10.9 and `API_DOCUMENTATION.md`. Its additive
+`tasks.0003_task_hierarchy` was separately authorized and applied to development
+by HT-DB-P1-10 on2026-10-25 after verified backup/restore rehearsal. Nullable
+parent/selfCHECK/FK/index and exact legacy-row preservation were verified;
+no capability, workflow or other-environment authorization changed. Current
+rollout regression evidence is in HANDOVER.md. Project remains behind
+the explicit Owner design gate in `PROJECT_ARCHITECTURE_REVIEW.md`.
 
 ## 1. Evidence and decision labels
 
@@ -302,7 +312,7 @@ Profile and does not automatically make that manager a contributor/assignee.
 | Create/assign/edit Task metadata | A | A | A: assigned Workspace | DENY | DENY | DENY |
 | Claim/return eligible Task | P: only as contributor | P: only as contributor | P: only as contributor | R/P | DENY | DENY |
 | Start assigned Task / submit Deliverable revision | DENY unless separately an eligible assigned Editor | DENY unless separately an eligible assigned Editor | DENY unless separately an eligible assigned Editor | A: current active assignee only | DENY | DENY |
-| Comment on Task | DEFER | DEFER | DEFER | DEFER | DENY | DENY |
+| Comment on Task | CURRENT: create/own edit/moderate delete | CURRENT: create/own edit/moderate delete | CURRENT: assigned Workspace, create/own edit/moderate delete | CURRENT: create/own edit/delete | DENY: read-only | DENY |
 | Internal approve/request changes | A: not own submission | A: not own submission | A: assigned Workspace, not own submission | DENY | DENY | DENY |
 | Send to Client / Client or Guest approval | DEFER | DEFER | DEFER | DEFER | DENY | DENY |
 | Manage Profile Client/Project | R/P | R/P | DENY | DENY | DENY | DENY |
@@ -1353,6 +1363,115 @@ Status: `IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL`
   values, duplicate Reviews and legacy assignments, back up the target and
   stop rather than inventing a cleanup/mapping.
 
+### 10.9 HT-TASK-P2-05 hierarchy/planning source evidence — 2026-10-25
+
+- **[CURRENT]** The Owner authorized Task/Subtask, deadline and priority
+  foundation independently from the Project architecture gate. The existing
+  Task model is reused; nullable `parent` identifies the same-Workspace parent.
+  Root depth is 0, maximum depth is 3 parent edges. Self-parent, cycles,
+  cross-Workspace parent relationships and excessive moved-subtree depth are
+  validated. The database adds self-parent protection and a protected parent
+  FK; cross-row graph invariants require the validated mutation services.
+- **[CURRENT]** Reads repeat the existing verified Profile/Workspace scope.
+  The new paginated `GET .../tasks/{task_id}/subtasks/` returns direct children
+  only. Existing collection POST creates roots/children via optional
+  `parent_id`; existing detail PATCH changes parent/deadline/priority. No new
+  write route, authentication mechanism, `AllowAny`, role or capability exists.
+  Flat lists remain compatible and scoped filters/orderings cannot widen access.
+- **[CURRENT]** Profile Owner/Admin and the current Workspace Admin retain
+  Task-management capability. An Editor, even when assigned to that Task, and
+  a Viewer cannot alter planning metadata. Staff without actual tenant
+  membership receive no exception. Archived Profile/Workspace writes and
+  inactive membership remain denied. Generic `404` hides foreign or missing
+  valid-UUID parents; malformed serializer values and invalid graphs are
+  `400`; known in-scope insufficient capability is `403`.
+- **[CURRENT IMPLEMENTATION CHOICE]** Each Task/Subtask has an independent
+  workflow, assignment, Deliverable/Review history and nullable deadline.
+  Parent approval may leave children unfinished; it grants no child approval.
+  Child completion does not complete the parent; child request-changes does
+  not reopen it. Deadlines do not propagate or constrain each other. These
+  simple choices implement the authorized foundation without inventing
+  aggregate completion/approval rules or claiming separate new Owner approval.
+  Reviewer authority, self-review prohibition, latest-revision validation,
+  active-assignee execution and audit atomicity remain unchanged per Task.
+- **[CURRENT]** Hierarchy mutations reuse the common Profile -> Workspace ->
+  membership locks before Task/parent locks. Shared Workspace serialization
+  prevents competing supported reparent operations from creating a cycle or
+  exceeding the depth cap. Direct queryset/bulk/raw mutations are outside that
+  validated boundary and must not be used to modify the hierarchy. Admin
+  remains inspection-only; no hierarchy bypass was exposed there.
+- **[CURRENT]** Deadline input is normalized to aware UTC; bad or overflowing
+  datetime input is rejected. Existing priority choices/default and manager
+  ceiling are reused; status never automatically changes with priority or
+  deadline. Material changes are audited in the same transaction.
+- **[HISTORICAL IMPLEMENTATION VERIFICATION]** Isolated new/existing Task API **42/42 PASS**
+  (4.990s), model/service/workflow **43/43 PASS** (4.770s), and hierarchy
+  migration **2/2 PASS** (1.465s). Workspace/RBAC regression **122/122 PASS**
+  (60.495s), full PostgreSQL **341/341 PASS** (174.058s), required checks and
+  owned-resource cleanup PASS. Status: **IMPLEMENTATION COMPLETE — PENDING
+  DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW GATE**.
+  At that gate development had tasks.0002 with no parent column,32 migrations,
+  3 Users/2 Sessions and zero token/business rows. HT-DB-P1-10 supersedes this
+  operational state with the separately approved exact development apply
+  described above. No production write is authorized.
+- **[OPEN PROJECT GATE]** Project remains design-only. The literal
+  Workspace-owned Project alternative conflicts with the previously accepted
+  cross-month Project target. The A/B comparison and reconciled optional
+  Profile/Client-scoped alternative are in `PROJECT_ARCHITECTURE_REVIEW.md`;
+  no Project model/API/migration or change to the accepted history was made.
+
+### 10.10 HT-COM-P2-06 communication foundation — 2026-10-25
+
+The Owner authorized Comment/Notification implementation, not a new role or
+public principal. These are current implementation choices for Owner review,
+not retroactive claims of approval for previously deferred numeric/policy
+details. All earlier tenancy, Viewer read-only and Task review rules remain.
+
+- Task readers may read comments, including tombstones and archived history.
+  Active Profile Owner/Admin, Workspace Admin and Editor may create; only
+  the author with current comment capability may edit. The author or a
+  current manager may soft-delete. Managers cannot rewrite another author.
+  Viewer/staff flags/client identity alone grant no mutation. Revocation and
+  inactive membership remove access; archived Profile/Workspace blocks writes.
+- New content is plain text, nonblank, valid Unicode without NUL, at most4000
+  characters. The author and Task are immutable through API. Soft-delete
+  retains internal content and emits a redacted tombstone; repeated delete
+  is idempotent. IDs/timestamps in audit preserve action history without
+  copying full text. Full text edit revisions are not implemented.
+- Comment mutations reuse Profile→Workspace→Task→Comment locks and atomic
+  audit. Task/parent/Deliverable/Review state does not change from a comment.
+- Notifications are personal database projections of successful audit-backed
+  Task events. They are atomic with mutation/audit: persistence failure rolls
+  back all three. No signal, post-commit delivery, worker, email or new event
+  broker exists. `(event,user)` prevents repeated fanout to the same recipient.
+- Assignment targets its Editor; submitted review targets current managers;
+  review results target the uploader; new comments target creator and active
+  assignee. Actor, duplicate, inactive and unreadable recipients are excluded.
+  Event/Task/Deliverable/Review/uploader proofs come from persisted records.
+- Own feed/count/mark-read repeat live User/Profile/Workspace and canonical
+  target predicates. Revoked access hides the row and unread count, never
+  grants access via notification UUID. Staff has no bypass. Mark-read uses
+  Profile→Workspace→Notification locks and permits still-readable archives.
+  Legacy unscoped notifications remain unmapped/hidden. Display text is
+  constant, with no comment body, task title or User PII.
+- **[HISTORICAL HT-COM-P2-06 verification]** Only tasks.0004 and notifications.0002 were pending; development remained
+  at33 migrations/tasks.0003/notifications.0001. Comment40/40 tests pass;
+  Notification34/34 and Task/Review128/128 tests pass after correcting an
+  inverted Workspace existence guard; no scope/permission relaxation occurred.
+  Security253/253 and full PostgreSQL415/415 (191.226s) PASS, both runner
+  exits0, required checks and owned cleanup PASS. Status: IMPLEMENTATION
+  COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW GATE.
+  See HANDOVER for the authoritative current verification checkpoint.
+
+Operational reconciliation — HT-DB-P1-11, 2026-10-26: Owner conditionally
+authorized exactly those two development migrations. Both applied once after
+verified backup/restore rehearsal; development has35 migration records,44
+orphan-free valid FKs and unchanged legacy data. Read-only smoke, current
+Comment40/Notification34/Task128/security253/full415 regression and final
+integrity/owned cleanup PASS, all launcher/Python exits0 (see HANDOVER).
+HT-DB-P1-11 COMPLETE / OWNER REVIEW GATE. No capability, recipient, consistency
+or Task/Review rule changed. Project remains PENDING OWNER DECISION.
+
 ## 11. Delegated decisions resolved and downstream review gates
 
 The former seven-group RBAC owner-review blocker is resolved by the decisions
@@ -1386,7 +1505,8 @@ delegation. In particular, no later review may silently reopen these rules:
 The following are separate downstream review gates, not stale questions that
 block `HT-RBAC-P1-03`:
 
-1. Task soft delete/retention, cancellation, comments, Marketplace/claim,
+1. Task soft delete/retention, cancellation, full Comment text revision history,
+   Marketplace/claim,
    media upload/storage, Client/Guest review, and Payroll pricing/eligibility/
    business trigger. The internal visibility, assignee attribution, state
    transitions and reviewer authority implemented by HT-TASK-P2-03 are no
