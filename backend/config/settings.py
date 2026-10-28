@@ -118,6 +118,7 @@ ENVIRONMENT = _env_choice(
     {"development", "production"},
 )
 IS_PRODUCTION = ENVIRONMENT == "production"
+AI_FIXTURE_ENABLED = _env_bool("DJANGO_AI_FIXTURE_ENABLED", default=False)
 
 SECRET_KEY = _env_secret("DJANGO_SECRET_KEY")
 DEBUG = _env_bool("DJANGO_DEBUG")
@@ -153,6 +154,7 @@ INSTALLED_APPS = [
     'apps.finance',
     'apps.notifications',
     'apps.audit',
+    'apps.ai.apps.AIConfig',
     'rest_framework',
 ]
 

@@ -1,7 +1,143 @@
 # HT-AI-P4-01 — AI Architecture, Provider Selection & Security Design
 
-Ngày: **2026-10-28**. Trạng thái: **DESIGN COMPLETE — PENDING OWNER APPROVAL**.
-Đây là thiết kế đề xuất, không phải API/schema/runtime đã triển khai.
+Ngày: **2026-10-28**. AI01 design complete; Owner đã duyệt v1 fixture-only cho
+P4-02B. Live/provider/private-data decisions ngoài phạm vi vẫn pending.
+
+## Current checkpoint — HT-AI-P4-02B — IMPLEMENTATION COMPLETE
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL / OWNER
+REVIEW.** This closes only the approved fixture-only Generator backend slice.
+The overall Smart Task Generator remains **PARTIAL**: React AI preview/confirm
+and live provider integration are not implemented or authorized by this slice.
+
+Owner hiện cho phép backend Generator với durable proposal và atomic human
+confirmation, bằng fixture test/development בלבד. Concrete manager gate tái sử
+dụng current tenant helpers: active Profile Owner/Admin hoặc Profile Member có
+Workspace Admin capability. Chỉ original actor còn quyền hiện tại được đọc/
+confirm/recover; archived Profile/Workspace, revoked/inactive và cross-tenant
+không được bypass bằng UUID hoặc is_staff. Không proposal sharing v1.
+
+Source hiện có installed apps.ai, AiProposal/AiOperation và additive
+ai.0001_initial. Migration **chưa được apply development**; chỉ isolated test
+apply được phép. Review trước model ở [AI02B_SCHEMA_REVIEW.md](AI02B_SCHEMA_REVIEW.md).
+Current source có durable_services/API wiring. Targeted isolated PostgreSQL AI
+suite **158/158 PASS trong 11.208s**, run
+`bf34f0b7fd384c7a9958b4513cea18ac`; actual launcher/Python-container exits0 và
+owned DB/container/network cleanup đã xác minh. Suite gồm 3 migration tests
+empty/related-data/forward/reverse và durable concurrency/rollback/security.
+Targeted Task/Review/Workspace/RBAC regression **378/378 PASS trong 165.639s**,
+run `d41c6561e93f4b6489e0a858d87a75de`; full isolated PostgreSQL backend
+**643/643 PASS trong 215.115s**, run `6bdba3440f8d46edb28df73a9b30fe03`.
+Các launcher và Python PID1 container die events đều xác nhận exit0; pip check,
+Django checks, model drift, migration graph/full chain và owned DB/container/
+network cleanup PASS. Final 210 test-source hashes không thay đổi sau khi test.
+Docker Engine đã phục hồi và được kiểm tra trước các runs; không restart Docker,
+WSL hoặc PostgreSQL. AI02A77/full562 bên dưới chỉ là bằng chứng lịch sử.
+
+Development đã được kiểm tra read-only: PostgreSQL 16.14, 35 applied migrations,
+3 Users/2 Sessions, 0 business rows và chưa có bảng AI. Không apply migration,
+không tạo fixture hoặc sửa dữ liệu trên development.
+
+AiProposal giữ normalized payload, stable server UUID, actor/Profile/Workspace,
+revision/scenario/schema version, preview expiry, consumed state và immutable
+created_tasks mapping. AiOperation giữ full key scope, SHA-256 idempotency-key
+digest và namespace-HMAC canonical-body digest; unique scope/key/operation và
+partial unique một CONFIRM/proposal. Body HMAC dùng purpose-derived Django key,
+hỗ trợ SECRET_KEY_FALLBACKS; không đọc/in .env hoặc lưu secret vào rows.
+
+Generate chỉ nhận server-controlled scenario IDs subtitle-check-v1/task-tree-v1;
+không nhận raw customer brief/provider/model override. Fixture nằm ngoài business
+transaction, sau đó lock/revalidate tenant trước lưu proposal/operation. Generate
+không tạo Task hoặc AuditLog. Confirm không gọi
+fixture; outer transaction khóa tenant→proposal→operation, validate lại full plan
+và gọi unchanged create_task theo topological order. Task audits và safe
+ai.proposal.confirmed metadata chỉ được ghi trong confirmation; Task/audit/outcome
+cùng commit hoặc rollback. Replay same key/body chỉ trả stored mapping khi actor
+còn quyền và recovery còn hạn; different body/key không tạo batch lần hai.
+
+Owner chốt preview30 phút, unconfirmed payload tối đa7 ngày và recovery metadata
+tối đa30 ngày cho synthetic v1. Payload được clear khi confirm; logical projection
+không trả expired payload/result. **Chưa có automatic physical purge** nên không
+tuyên bố physical retention7/30 ngày đã enforce. Consumed marker không reset khi
+payload/result scrub. API live budget0, no network/key/SDK/provider fallback;
+production fixture disabled, opt-in DJANGO_AI_FIXTURE_ENABLED mặc định false.
+
+Fixture endpoint limits3 generation/minute/user và20/day được cấu hình theo đề
+xuất v1, nhưng process-local throttling không bảo đảm quota xuyên multi-worker.
+Shared live budget ledger, private data, Analyzer runtime và frontend AI không
+được triển khai trong slice này. AI-D01–AI-D10 được duyệt có giới hạn ở mục18;
+những thông số live ở mục6 ngoài approval mới vẫn là đề xuất.
+
+## Historical checkpoint — HT-AI-P4-02A — IMPLEMENTATION COMPLETE
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW PENDING**, chỉ contracts/fixture slice.
+
+Owner cho phép một slice kỹ thuật giới hạn sau design gate: typed contracts,
+strict validation, offline fixture adapter và review persistence. Đây không phải
+approval toàn bộ AI-D01–AI-D10. Hiện có internal package backend/apps/ai, chưa
+đăng ký Django app và không có models/migrations/routes/settings hoặc live SDK.
+Live provider/confirmation/frontend AI/persistence vẫn NOT STARTED.
+
+Fixture chỉ chạy khi explicit test/development construction và opt-in. DTO scope
+không phải authorization proof; AccessPort mặc định deny, chưa có AI role grant.
+Output synthetic cố định, ghi rõ generated_by_ai=false, persisted=false, usage0;
+không phải kết quả phân tích input bằng model. Có strict parsers dùng chung cho
+fixtures và adapter tương lai; source/citation scope và post-call drift được kiểm
+tra qua port, không tự viết permission engine hoặc business data resolver.
+
+Contract choices: frozen dataclasses/tuples và Python stdlib; không thêm dependency.
+Task flat DAG/root0/max3 child edges, four existing priorities, aware UTC deadlines;
+Feedback source whitelist và typed issues/actions. Static errors có field-name
+allowlist, không echo confidential payload. Technical fixture caps không phê duyệt
+live quotas/limits. [AI_PERSISTENCE_REVIEW.md](AI_PERSISTENCE_REVIEW.md) phân tích
+stores/retention/idempotency/locking đề xuất; không model hoặc DB proof ở slice này.
+Targeted final contracts/fixture/boundary77/77 PASS0.046s; full isolated PostgreSQL
+562/562 PASS201.889s. Launcher/Python exits0 và owned cleanup đã xác minh. Pip/
+Django/model-drift/graph/full existing migration chain PASS. All209 original runtime
+hashes giữ nguyên, tám file AI mới khớp snapshot đã test. Không đổi dependency,
+frontend, settings, routes, models hoặc migrations; không kết nối development.
+Các kết quả documentation-only AI01 ở mục20 là lịch sử, không thay current tests.
+
+Các module thực tế: [contracts](../backend/apps/ai/contracts.py),
+[validation](../backend/apps/ai/validation.py), [errors](../backend/apps/ai/errors.py),
+[providers](../backend/apps/ai/providers.py), [services](../backend/apps/ai/services.py).
+Provider port dùng DTO độc lập SDK; chỉ FixtureAdapter được implement. Fixture
+service nhận adapter/scenario để test lỗi mà không đổi domain validation; guard
+không cho inject live/subclass adapter vào slice offline. Đây là harness nội bộ,
+chưa phải production AI service hoặc permission integration đã được cấp quyền.
+
+Generator input gồm brief và optional target_deadline/reference_time/timezone;
+không nhận actor/provider/mode/tenant/status/assignment từ body. Feedback input
+chỉ source_refs và optional focus; nguồn do AccessPort cung cấp, không input source
+text/URL từ client. Scoped DTO IDs không thay backend authorization. Fixture text
+cố định, chỉ citation labels map tới selected validated source; không phân tích
+brief/feedback và không gọi network. Outcome không bịa proposal_id/expiry/durable
+replay vì chưa có persistence; không có confirm method.
+
+Internal error codes: AI_DISABLED, VALIDATION_ERROR, PROVIDER_UNAVAILABLE,
+PROVIDER_TIMEOUT, INVALID_PROVIDER_RESPONSE, RATE_LIMITED, BUDGET_EXCEEDED,
+PERMISSION_DENIED, STALE_CONTEXT, CANCELLED, AI_REFUSED. as_public_error chỉ trả
+code/static message/allowlisted fields; chưa là HTTP response/endpoint. Rate-limit/
+budget errors được test contract serialization, **chưa có enforcement**. Timeout/
+cancellation là cooperative monotonic control cho fixture, chưa kiểm chứng live
+network timeout, refund hoặc hủy provider request.
+
+| Future UI state | Contract support hiện tại / phần còn pending |
+|---|---|
+| Generating | Explicit request control; không fake progress hoặc AI success |
+| Preview | Typed validated payload + fixture provenance; chưa có React preview |
+| Editing | Có thể validate edited JSON lại; không gọi mutation/confirmation |
+| Validation error | Static field hints hỗ trợ inline errors + linked focusable summary |
+| Confirmation | Chưa implement; cần human boundary/durable store theo review |
+| Provider unavailable/refusal/timeout | Safe codes, no retries/fallback; fixture scenarios |
+| Rate/budget exceeded | Error contract only, no live limiter/accounting |
+| Cancellation | Explicit CANCELLED, không publish result sau cancel; no persistence |
+
+Đã đọc lại UI UX Pro Max/master; chạy focused search `error summary validation
+--domain ux` bằng Python image sẵn có, read-only/network none, exit0. Kết quả Web
+Forms/Accessibility phù hợp: field hints phải nối inline errors và focusable summary,
+không chỉ toast hoặc màu. Không sửa React/theme/design tokens; không claim browser
+hoặc accessibility tests cho AI UI chưa tồn tại.
 
 ## 1. Executive summary và thẩm quyền
 
@@ -16,15 +152,21 @@ chọn. Mặc định disabled. Fixture demo không gọi model; live synthetic 
 Gemini Free. Live customer data cần provider/data-policy/budget approval riêng.
 Không tự fallback sang provider trả phí hoặc model khác.
 
-**Đã được Owner chốt:** task này documentation only; không gọi AI/tạo key/billing;
+**Đã được Owner chốt ở AI01:** design task documentation only; không gọi AI/tạo key/billing;
 human confirmation; giữ workflow và kiến trúc; Project và onboarding vẫn gated.
-**Chưa chốt:** model/provider cụ thể, quyền dùng AI, numeric caps, lưu proposal/
-usage/idempotency, TTL/retention và live smoke. Mọi thông số và API dưới đây mang
-nhãn **PROPOSED — PENDING OWNER APPROVAL**, không tạo quyền mới hôm nay.
+**P4-02B đã chốt có giới hạn:** fixture-only, current manager/original actor,
+durable proposal/operation, atomic confirmation, 30-minute preview và 7/30-day
+logical bounds ở checkpoint trên/mục18. Physical purge chưa enforce.
+**Chưa chốt ngoài slice:** live provider/model/private-data policy, shared live
+usage/budget controls, Analyzer/frontend và live smoke. Các lựa chọn tương lai
+dưới đây vẫn **PROPOSED — PENDING OWNER APPROVAL**, trừ phần đã được mục18 và
+DECISION_LOG cập nhật rõ; không suy approval fixture thành quyền live/production.
 
 ## 2. Existing architecture và source evidence
 
-Branch `main`, HEAD `e083060`; dirty FE02/API02A/FE03/API03A/FE04 được bảo toàn.
+Historical AI01 preflight: branch `main`, HEAD `e083060`; dirty FE02/API02A/FE03/
+API03A/FE04 được bảo toàn. Khi bắt đầu AI02A, Owner đã commit checkpoint thành
+`main`/`502a444`, workspace sạch; AI02A chỉ thêm stateless package và docs.
 Checkpoint FE04395 frontend/22 browser/13 launcher và backend485 là lịch sử,
 không phải tests mới của lượt thiết kế. Không truy cập database hoặc đọc `.env`.
 
@@ -42,7 +184,9 @@ không phải tests mới của lượt thiết kế. Không truy cập database
 | [Task pages](../frontend/src/pages/tasks.tsx), [Task forms](../frontend/src/features/tasks/TaskForms.tsx) | Reuse Create/Task Detail, aware local→UTC deadline forms và depth validation |
 | [API client](../frontend/src/services/api/client.ts), [AuthProvider](../frontend/src/features/auth/AuthProvider.tsx) | Same-origin cookies/memory-CSRF; no automatic unsafe retry; logout/expiry cancel+clear private caches |
 
-Chưa có AI app, endpoint, proposal store, usage ledger hoặc durable AI idempotency.
+P4-02B source hiện có installed AI app và dedicated proposal/operation state;
+isolated verification đã hoàn tất, development migration chưa apply. Stateless
+contracts/fixture từ02A được tái sử dụng; live usage/budget ledger vẫn chưa có.
 Không có Project model, duration/dependency schema. Legacy CANCELLED không phải
 transition mới. Workflow vẫn PENDING→ASSIGNED→WORKING→REVIEW→COMPLETED; request
 changes về WORKING; Task/Subtask độc lập, không cascade.
@@ -145,7 +289,10 @@ Generator và một Analyzer là hai requests; regenerate lại tính riêng. Fi
 không gọi provider: phí AI0. Gemini Free chỉ0 trong quota đủ điều kiện, không
 bảo đảm đáp ứng100/1.000/10.000 requests và không tự chuyển Paid khi hết quota.
 
-Tất cả số dưới đây là **giá trị khởi đầu đề xuất**, cần Owner duyệt:
+Các live controls dưới đây là **giá trị khởi đầu đề xuất**, cần Owner duyệt.
+P4-02B chỉ áp dụng fixture budget0, node/request bounds và generation throttle
+3/minute,20/day/user; không có shared live reservation/ledger. Preview30 phút
+đã được duyệt riêng, không còn là quyết định mở của fixture slice.
 
 | Control | Proposed default |
 |---|---|
@@ -159,7 +306,7 @@ Tất cả số dưới đây là **giá trị khởi đầu đề xuất**, c�
 | Retry/fallback | Một generation attempt; SDK retries0; không auto JSON-repair call hoặc automatic provider/model fallback |
 | Budget | Global1USD/day,5USD/month; per-Profile0.50USD/day,2USD/month; smallest applicable remaining budget wins |
 | Alerts | Metadata warning tại80%; app từ chối tại100%; operator kill switch trước dispatch |
-| Preview expiry | 30 phút đề xuất; expiry không phải retention hoặc tự purge |
+| Preview expiry | Fixture30 phút đã duyệt; expiry không phải physical retention hoặc tự purge |
 
 Token count phải tính cả instructions/schema. Không dùng “số từ tiếng Việt” làm
 bảo đảm token cap. Adapter cần counter chính thức/verified tokenizer; nếu chưa
@@ -181,8 +328,10 @@ transaction ngắn riêng; confirmation không lấy budget locks và không g�
 business hiện hữu Profile→Workspace→membership→Task/source→proposal/invocation;
 không có đường lấy ngược. Reserve chỉ đụng budget state; nếu foreign key hoặc
 shared invocation row gây implicit business lock thì phải xét vào cùng thứ tự.
-P4-02A phải chứng minh chi tiết schema/lock graph bằng concurrency/deadlock tests;
-đây là yêu cầu thiết kế, chưa phải cơ chế locking đã triển khai.
+P4-02A chỉ review chi tiết schema/lock graph. P4-02B đã được duyệt và implement
+tenant→proposal→operation locking với targeted PostgreSQL race/rollback tests.
+Điều này không chứng minh shared live budget lock families đã tồn tại hoặc mọi
+đường lifecycle đều deadlock-free; live ledger/concurrency vẫn deferred.
 
 DRF LocMem throttle chỉ là lớp phụ; không gọi nó production-grade budget guard.
 Kill switch chặn dispatch mới, không hứa dừng request đang chạy. Env flip cần
@@ -218,11 +367,14 @@ flowchart TD
   Commit --> Tasks[Existing create_task services]
 ```
 
-Đề xuất **một future Django app apps/ai** cho cả hai features vì durable proposals,
-usage reservation và idempotency cần migrations/ownership chung. Đây vẫn là
-modular monolith, không đổi stack hoặc tạo hai AI systems. App/schema cần Owner
-duyệt trước code. Nếu chỉ viết pure contracts/fixture helpers ở slice đầu, có thể
-giữ module stateless, nhưng không tạo song song một hệ apps/common/ai thứ hai.
+AI01 đề xuất **một Django app apps/ai** cho cả hai features vì durable proposals,
+usage reservation và idempotency cần migrations/ownership chung. P4-02B đã được
+duyệt và đăng ký app cho Generator fixture-only; shared live usage vẫn deferred.
+Đây vẫn là
+modular monolith, không đổi stack hoặc tạo hai AI systems. App/schema fixture
+đã qua Owner scope approval và review trước code; schema live/analysis mới vẫn
+cần duyệt riêng. Slice02A stateless được tái sử dụng, không tạo song song một hệ
+apps/common/ai thứ hai.
 
 | Proposed module | Responsibility |
 |---|---|
@@ -249,7 +401,9 @@ transaction/row locks trong lúc đợi provider. Nếu sau benchmark vẫn vư�
 
 ## 8. Proposed persistence và human confirmation
 
-**NOT IMPLEMENTED; additive schema proposal cần approval.** Hai logical stores:
+**Original AI01 persistence proposal.** P4-02B hiện thực phần Generator bằng
+AiProposal/AiOperation theo review mới; live usage/analysis stores trong mô tả
+kiến trúc đích này vẫn chưa implement/approve. Hai logical responsibilities gốc:
 
 - AiProposal: actor + Profile/Workspace/(Task nếu analysis), purpose, contract/
   prompt/model versions, normalized bounded JSON, revision/content hash, source
@@ -299,7 +453,8 @@ Confirmation protocol đề xuất:
    key/body khác hoặc revision stale→409. Unique idempotency(scope,actor,operation,
    key_hash) **và một lần confirm/proposal** ngăn dùng key khác để tạo lần2.
 
-Generate/analyze cũng dedup cùng request key/fingerprint; in-flight duplicate
+**Future live/analyze protocol, chưa implement:** Generate/analyze dedup cùng
+request key/fingerprint; in-flight duplicate
 trả409 IN_PROGRESS, không dispatch lần2. Completed same-key/same-body trả artifact
 cũ với200, không gọi provider; khác body trả409 IDEMPOTENCY_CONFLICT. Mất response
 thì gửi lại cùng POST/key/body để tìm artifact dù chưa biết proposal_id.
@@ -307,19 +462,24 @@ Outcome unknown không auto-generate lần nữa. Chỉ bảo đảm
 dedup trong cùng request/proposal, không hứa phát hiện mọi semantic duplicate
 giữa các brief khác nhau. Expired preview cần review/generate mới; không tự xóa
 Task hoặc purge proposal. TTL30 phút không quyết định thời hạn retention vật lý,
-backup/audit hay purge job; các quyết định này vẫn pending Owner.
+backup/audit hay purge job. Fixture7/30-day policy đã duyệt ở checkpoint hiện tại,
+nhưng chưa có automatic physical purge; private/live retention vẫn pending.
 Generate/analyze replay khi unconfirmed preview đã expired trả409 EXPIRED và
 không redispatch. Retention của committed confirmation ledger phải bao phủ cửa sổ
 recovery được Owner duyệt; không hứa replay vô hạn sau khi ledger bị xóa hợp lệ.
 
-## 9. Proposed API contracts — NOT IMPLEMENTED
+## 9. Original proposed API contracts — current P4-02B contract documented separately
 
-Không endpoint nào dưới đây hiện tồn tại trong routes. Giữ API v1 nesting;
+Các route Generator fixture P4-02B hiện có trong source và phải đối chiếu
+[API_DOCUMENTATION.md](API_DOCUMENTATION.md) để dùng đúng response/body hiện hành.
+Analyzer và các phần live ở bảng thiết kế gốc dưới đây chưa implement. Giữ API v1 nesting;
 không AllowAny, client-supplied actor/provider/model/key/mode hoặc CSRF bypass.
-Đề xuất tất cả AI actions trước mắt dùng current active manager/reviewer gate:
+Generator fixture đã dùng current active manager gate được duyệt. Đề xuất các
+AI actions tương lai dùng current active manager/reviewer gate:
 can_manage_workspace_tasks /can_review_workspace_deliverables + scoped read.
-Đây là **quyền feature mới đề xuất**, không tự suy từ quyền đọc của Editor/Viewer,
-is_staff hoặc existing can_submit/can_approve. Owner duyệt trước implementation.
+Analyzer/live authority vẫn là **quyền feature đề xuất**, không tự suy từ quyền
+đọc của Editor/Viewer, is_staff hoặc existing can_submit/can_approve. Owner duyệt
+riêng trước implementation; không yêu cầu quyết định lại Generator fixture gate.
 
 Base: `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/`.
 
@@ -650,6 +810,11 @@ là ranh giới chính. Redaction tự động không chứng minh brief chứa 
 
 ## 15. Audit, usage và observability
 
+Current fixture Generator không ghi AuditLog khi generate/read/replay. Chỉ
+confirmation thành công mới commit existing task.created audits cùng
+ai.proposal.confirmed metadata (scope/mode/node_count), proposal outcome và
+Tasks. Không ghi title/brief/feedback/edited payload vào AI audit.
+
 Giữ existing Task audits; wrapper có thể ghi proposed AI metadata events với actor,
 scope/request/proposal IDs, feature, mode/provider/model/prompt/schema/price versions,
 latency, input/output/thinking/cached usage, reserve/actualcost, safe outcome code.
@@ -659,13 +824,18 @@ Notification business event; policy hiện tại không đổi.
 
 Operational counters/error metrics chỉ metadata; không bật SDK debug/tracing/APM
 capture body mặc định. Usage actual có thể incomplete; không ghi0 thay unknown.
-Alerts tại80% cần operator xem, không tự nâng budget. Audit/usage/proposal retention,
-hard delete/purge và quyền operator chưa duyệt; không tự đặt retention bắt buộc,
-cron hoặc background job. Không claim encryption-at-rest đã có khi chưa verify.
+Alerts tại80% thuộc live proposal, cần operator xem, không tự nâng budget.
+Audit/usage/private-data retention, hard delete/purge và quyền live operator
+chưa duyệt. Fixture30-minute/7-day/30-day windows đã duyệt, chỉ có logical gates
+và confirmation payload clearing; chưa có physical purge/cron/background job.
+Không claim encryption-at-rest đã có khi chưa verify.
 
 ## 16. Test strategy cho implementation sau
 
-Không rerun full395/485/22 suite cho thay đổi docs-only này. Các test sau là
+Ở design-only AI01 không rerun full395/485/22. AI02A có historical77/562; current
+P4-02B targeted AI158, Task/Review/Workspace/RBAC378 và full backend643 đã PASS
+trên source cuối với exit0 và owned cleanup ở checkpoint đầu tài liệu.
+Các test sau cho full/live/frontend AI implementation vẫn là
 **plan cần thực thi khi có code**, không phải PASS hôm nay:
 
 | Layer | Coverage bắt buộc |
@@ -692,8 +862,8 @@ CI không có secret/live key hoặc khả năng tự gọi model khi feature to
 | Task/slice | Scope | Gate trước bước kế |
 |---|---|---|
 | HT-AI-P4-01 | Architecture/provider/API/security/UX design hiện tại | DESIGN COMPLETE rồi Owner review; không runtime |
-| P4-02A, proposed | Strict contracts, shared app/module boundary, deterministic adapter, detailed durable proposal/usage/idempotency schema + isolated tests | Owner duyệt app/additive schema, TTL/retention và atomic batch trước migration; không live key |
-| P4-02B, proposed | Smart Generator service/disabled live adapter, budgets/usage and confirmation backend qua existing Task service | Mocked adapter tests, PostgreSQL concurrency/security; persistent rollout approval riêng, live smoke riêng |
+| HT-AI-P4-02A, historical IMPLEMENTATION COMPLETE checkpoint | Strict contracts, stateless module, deterministic adapter, validation/boundary tests; persistence review chỉ pseudocode | Original gate was Owner review before app/schema/confirmation; Owner subsequently approved bounded fixture02B, not live key/provider |
+| HT-AI-P4-02B, IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL | Fixture-only Generator backend, AiProposal/AiOperation và atomic confirmation qua existing Task service; không live adapter/shared budget ledger | Current AI158/Task-RBAC378/full643 PASS; dừng Owner review, persistent rollout/frontend/live smoke cần approval riêng |
 | P4-02C, proposed | React brief/preview/edit/confirm UI và real isolated fixture E2E | Current regression/CSRF/tenant/a11y PASS; UI không bypass backend |
 | HT-AI-P4-03, proposed | Feedback source resolver, minimized context, structured analysis/citations panel dùng chung abstraction | No decision/Task mutation, source/revoke tests; separate Owner approval |
 | HT-AI-P4-04, proposed | AI acceptance/cost/security/provider failure hardening, Vietnamese eval | Review evidence/cost envelope trước live enable/deployment |
@@ -705,20 +875,20 @@ estimated_duration, Project hoặc background infrastructure trong các slices n
 nếu chưa có approval tương ứng. Fixture generate-only có thể test trước schema,
 nhưng confirmation/live không được giả durable guarantee khi ledger chưa có.
 
-## 18. Pending Owner decisions — không ghi APPROVED
+## 18. Owner decisions — APPROVED FOR FIXTURE-ONLY V1; future/live pending
 
-| ID | Đề xuất cần review | Vì sao cần chốt |
+| ID | Owner đã duyệt trong P4-02B | Phần còn ngoài approval |
 |---|---|---|
-| AI-D01 | Fixture first; Gemini3.5 Free chỉ curated synthetic; GPT6Luna hoặc Gemini Standard Paid cho private mode sau review | Provider/model/account/data egress decision, không tự bật billing |
-| AI-D02 | Manager/reviewer-only cho cả hai AI ở v1 | Không tự cấp AI-cost authority từ read access; Editor access cần quyết định riêng |
-| AI-D03 | Một future apps/ai với proposal +invocation/usage/idempotency persistence | Current schema không có durable store; detailed additive migration/counters cần review |
-| AI-D04 | Preview expiry30 phút; physical retention/encryption/access/purge policy riêng | Expiry không xóa dữ liệu; proposal-derived content có thể confidential |
-| AI-D05 | Numeric caps/budgets/concurrency/timeouts ở mục6 | Cân bằng demo/chi phí; phải đo/kiểm chứng trước live |
-| AI-D06 | Strict plan schema, local DAG, ≤20 nodes, atomic confirmation; no assignment/status/duration persistence | Scope/API compatibility và no partial batch; requests bigger phải reject hoặc user giảm plan |
-| AI-D07 | Ambiguous dates→null/warning; reference_time/timezone explicit, no parent/month deadline constraint | Giữ existing business rules, không đoán weekday/hour |
-| AI-D08 | Analyzer selected one-Task text scope, categories/citations và no create-from-suggestion v1 | Quyền/cost/data minimization/feedback coverage |
-| AI-D09 | Operator model/price/kill-switch governance và shared ledger mechanism trước multi-worker live | Tránh local-cache guarantees và config changes không kiểm soát |
-| AI-D10 | Paid provider DPA/region/retention/data-sharing configuration, live smoke budget và Vietnamese eval thresholds | Không thể xác minh bằng tài liệu công khai/tác vụ docs-only |
+| AI-D01 | Deterministic fixture test/development, explicit simulation, zero cost/egress; production off | Gemini/OpenAI SDK/model/key/account/billing/live enable |
+| AI-D02 | Current active Profile Owner/Admin hoặc Profile Member+Workspace Admin; original actor còn quyền mới được đọc/confirm; archived generate/confirm bị chặn | Editor AI authority, sharing, production/live authority |
+| AI-D03 | Dedicated minimal durable Generator state; reviewed additive AI migration và isolated apply; không raw prompts/provider responses | Persistent development/production rollout; live budget ledger |
+| AI-D04 | Synthetic preview30 phút; unconfirmed payload tối đa7 ngày; confirmation/recovery metadata tối đa30 ngày; existing audit policy | Automatic physical purge chưa implement/enforce; private-data retention/encryption policy |
+| AI-D05 | Live budget0, fixture usage0, brief≤6000, request≤32KiB, plan≤20; bounded retry/no paid fallback | Shared live quotas/budget/concurrency; fixture3/min+20/day chỉ process-local nếu cache local |
+| AI-D06 | Explicit human confirmation, whole-batch atomic existing services, scope/body-bound idempotency và single confirmation/proposal; no assign/status injection | Frontend AI/live provider; không suy approval module mới |
+| AI-D07 | Không đoán ngày mơ hồ; null/warning khi thiếu căn cứ; aware normalization; no invented Workspace-month deadline constraint | AI live recommendation quality và provider evaluation |
+| AI-D08 | V1 direction: selected authorized nondeleted text một Task, read-only, không fetch URL/media, ephemeral analysis | Analyzer runtime không thuộc P4-02B; implementation task riêng |
+| AI-D09 | Backend controls provider/model; no client override/fallback/live budget/billing | Shared budget ledger/live multi-worker operator controls |
+| AI-D10 | Synthetic fixtures only, no customer private data/egress; live smoke cần approval riêng | DPA/region/private retention/sharing, live quality/cost evaluation |
 
 Những Owner decisions cũ về Profile/multi-owner/Workspace tháng/internal Review/
 soft-delete/migration safety vẫn hiệu lực; không hỏi lại hoặc âm thầm sửa chúng.
@@ -750,11 +920,14 @@ Profile/Workspace tự động.
 | Authority/requirement | Mapping |
 |---|---|
 | Owner HT-AI-P4-01 ngày2026-10-28 | Hai AI use cases, provider/security/cost design; đây là nguồn scope AI mới, không giả chúng đã có trong Fxx cũ |
+| Owner HT-AI-P4-02B và resume ngày2026-10-28 | Fixture-only durable Generator, original-actor/current-manager access, separate atomic confirmation, scoped idempotency và isolated-only additive migration; không generate AuditLog hoặc Task |
 | ORIGINAL_REQUIREMENTS F04/F06/F07/F11/F12 | Task planning và feedback context; current services/Review/Comments/Notifications giữ nguyên |
 | DECISION_LOG approved tenant/internal-review/migration decisions | Source facts mục2, role/scoped IO và confirmation mục8/13; không client approval/finance trigger |
 | FRONTEND_MVP_ACCEPTANCE readiness | Chi tiết JSON/data/confirmation/AI risk được phát triển trong tài liệu này; frontend MVP không bị xây lại |
 | PROJECT_ARCHITECTURE_REVIEW | Profile→Workspace→Task→Subtask giữ nguyên; optional Project vẫn pending |
 | SRS/HLD | Chưa tìm thấy artifact hiện hành riêng trong inventory tên; không claim giảng viên duyệt. Owner/giảng viên cần xác nhận AI scope/eval/privacy và reconciliation khi có SRS/HLD mới |
+
+### Historical verification — HT-AI-P4-01
 
 Public official-source review dùng ngày2026-10-28; cited URLs thuộc tài liệu
 provider, không mở key/billing/account setup. Không benchmark/live provider call,
@@ -769,5 +942,7 @@ Phép tính 100/1.000/10.000 requests và 20 local Markdown links hợp lệ. Ha
 git diff --check exit0. HANDOVER ghi phạm vi và giới hạn kiểm chứng. Các395/22/13
 và485 tests chỉ là baseline lịch sử; không rerun vì chỉ đổi documentation.
 
-**AI implementation: NOT STARTED.** Owner review các AI-D01–AI-D10 trước khi cho
-phép code/app/schema/provider activation; không tự bắt đầu P4-02.
+Historical AI01 gate: AI implementation chưa bắt đầu tại thời điểm đó. Sau đó
+Owner phê duyệt riêng contracts/fixture02A rồi bounded backend/schema02B theo
+checkpoint hiện tại. Không quyết định nào ở đây cho phép persistent migration,
+live provider activation, Analyzer hoặc frontend AI tự động.

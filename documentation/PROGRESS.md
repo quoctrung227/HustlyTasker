@@ -1,6 +1,195 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-10-28 (HT-AI-P4-01)
+## Current Snapshot - 2026-10-29 (HT-AI-P4-02B-R1)
+
+**MIGRATION READINESS VERIFIED — OWNER REVIEW / DEVELOPMENT APPLY NOT AUTHORIZED.**
+R1 verified the existing migration against a newly backed-up/restored isolated
+PostgreSQL database. It did not perform the persistent development rollout.
+**Passing rehearsal does not authorize development apply of ai.0001_initial.**
+
+The backup/restore/migration and 72/158-test evidence below was executed on
+2026-10-28. The 2026-10-29 resume finalizes documentation and rechecks retained
+artifacts, Docker and development read-only state; it does not rerun those tests,
+create another backup or repeat the completed restore.
+
+- DONE at checkpoint level: recovered AGENTS/HANDOVER/current documentation and
+  Git evidence; main/502a444 and all pre-existing modified/untracked AI work are
+  preserved. Prior HT-AI-P4-02B remains implementation complete within its scope.
+- DONE: fresh read-only development identity/inventory: PostgreSQL16.14,
+  hustlytasker_db, container49ef93152944/hustlytasker_postgres,
+  docker_postgres_data and127.0.0.1:5432; UTF8/en_US.utf8. There are35 migrations,
+  no AI tables,27 tables,122 indexes,121 constraints including44 FKs; checked
+  indexes/constraints are valid/ready.3 Users/2 Sessions/7 Admin logs/23
+  ContentTypes/92 permissions,0 inventoried business rows and0 other active
+  connections at inspection. No development mutation or private row output.
+- DONE: timestamped Git-ignored custom backup under
+  `.local_backups/HT-AI-P4-02B-R1/20261028T125103Z_c7060a0b55c94f41b44d5c440325d89c/development.dump`,
+  110161 bytes, SHA-256
+  `306e3c49d11b03da3a5e46f7ea6cf5acde2035cd418a44bfb3c09c1bb1144585`.
+  Dump/copy/TOC251-line/full-read/restore exits0 and matching archive hashes. Backup
+  ACL excludes broad group grants. Workspace-context readability is verified;
+  restricted escalated-worker FILE_READ_DATA remains unavailable, so binary
+  transfer used the exact matching development-container temporary archive.
+  Normal manual Owner readability is not claimed; host backup remains retained.
+- DONE: owned isolated restore with internal network/tmpfs/no public DB port.
+  All27 legacy table/schema/sequence/row fingerprints matched before migration
+  after logical catalog normalization: two physical dropped-column slots and15
+  CHECK array-cast reparses were normalized through PostgreSQL, not weakened.
+- DONE: exact ai.0001 applied only to the restored isolated database. Two new
+  AI tables have15/9 columns,7 FKs,18 constraints and14 indexes, all checked
+  valid/ready. Only expected metadata was added:1 migration,2 ContentTypes and8
+  permissions. Existing legacy row hashes,3 Users and2 Sessions were preserved.
+- DONE:72/72 selected TestCase tests ran directly on that restored database,
+  PASS7.337s with0 failures/errors/skips. No DiscoverRunner or new Django test DB
+  substituted for the restored target. Atomic test rollback preserved all legacy
+  records and left both AI tables empty. Final rehearsal Python helper PID1
+  exit0 and command were verified. Earlier helper attempts exited1 on ACL/catalog
+  format checks before migration; these were resolved without DDL/source edits.
+- DONE: fresh separate AI158/158 PASS12.242s,
+  run `edc9c2a3ee964c9c9843abb7aa141ad8`, launcher/Python exits0 and owned cleanup.
+  This includes concurrency proofs separately from the direct restored-DB tests.
+  Full643 was NOT rerun in R1; its earlier result below remains historical.
+- DONE: rehearsal DB ownership/comment/system identity and inactivity verified
+  before owned DROP; shared cleanup exit0 removed owned containers/network.
+  At the end of R1 execution on 2026-10-28, read-only development comparison found
+  all 27 table fingerprints/schema/
+  sequences unchanged,35 migrations/0AI migrations/3 Users/2 Sessions/business0.
+  Original container49ef93152944 remains running and210 runtime hashes unchanged.
+- Existing virtualenv was checked through the escalated worker: Python3.12.5 and
+  pip check exit0. The default agent's AST103 result was a sandbox path limitation;
+  no virtualenv repair/recreation was performed. No .env read or credential change.
+
+Resume verification on 2026-10-29: Docker 29.8.2 is responsive, the original
+container/volume remains, and no isolated test container/network is left. The
+retained 110161-byte archive still matches the recorded SHA-256 and is Git-ignored.
+Development schema/history/sequences remain identical: 35 migrations/0 AI, 27 tables,
+122 indexes, 3 Users/2 Sessions and 0 business rows. However, one User-row and one
+Session-row fingerprint differ from the prior R1 final snapshot while counts
+remain unchanged. The cause/actor is not verified; no User/Session write, repair
+or rollback was performed in this resume. The earlier exact before/after R1
+preservation proof remains valid for its execution window; it is not a claim
+that every current row still matches the 28 October backup. A new inventory and
+verified backup during a quiet window are required before any later approved
+development apply, preserving the newer state.
+
+Current readiness evidence and the concrete rollout plan are in
+[AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md).
+The overall Generator is still fixture backend only; frontend/live provider and
+Analyzer are absent. Physical purge is not enforced and fixture quotas remain
+process-local. Exact next step: **STOP AT OWNER REVIEW GATE**. Request separate
+approval for controlled development rollout of exact ai.0001 with a fresh target/
+inventory/backup/plan check. Do not start that rollout or another task automatically.
+
+## Historical completed Snapshot - 2026-10-28 (HT-AI-P4-02B)
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW.**
+The Owner approved the fixture-only
+Smart Task Generator backend and reviewed additive durable schema. The source
+contains an installed AI app, `AiProposal`/`AiOperation`, `ai.0001_initial`,
+tenant-scoped generate/read/confirm APIs and current-access result recovery.
+The migration has been verified only on isolated PostgreSQL and has not been
+applied to persistent development. Docker Engine recovery was independently
+verified; the interrupted earlier build is not treated as a successful test run.
+
+- DONE: [schema/transaction review](AI02B_SCHEMA_REVIEW.md),
+  two server-owned synthetic scenarios, strict existing plan validation,
+  default-off `DJANGO_AI_FIXTURE_ENABLED` and production refusal. No raw brief,
+  provider SDK/key, live call, external data transfer or API cost.
+- DONE: generation and proposal lifecycle, original-actor-only
+  read/confirm/replay, existing active Profile Owner/Admin or Workspace Admin
+  authorization, tenant-safe errors, SessionAuthentication and CSRF. Every
+  operation revalidates current membership and Workspace access; staff alone
+  grants no tenant authority. Generation stores only proposal/operation rows;
+  it creates no Task or AuditLog.
+- DONE: separate human confirmation validates the edited plan,
+  uses existing `create_task` in one atomic batch and records a stable result.
+  Tenant→proposal→operation locks, scoped canonical-body idempotency and DB
+  uniqueness are verified by PostgreSQL concurrency/rollback/security tests;
+  no automatic assignment/status change. Task audits, safe confirmation metadata
+  and outcome commit together, with rollback on failure.
+- Lifecycle policy: confirmation eligibility 30 minutes; unconfirmed payload
+  retention bound 7 days; confirmation/recovery window 30 days. Expired payload
+  is hidden on reads and confirmation clears it. Physical 7/30-day purge is NOT
+  implemented/enforced; consumed state must remain independent of payload.
+- Generation throttle is 3/minute and 20/day per user through the existing cache;
+  this process-local, non-atomic mechanism is not a shared multi-worker quota.
+- DONE: pip check, Django system check, no model drift, migration graph/full
+  chain, isolated empty/related/reverse migration tests, current-source targeted
+  AI/Task/Review/Workspace/RBAC tests and full PostgreSQL regression.
+
+| Current verification | Result | Run |
+|---|---|---|
+| Targeted AI, including 3 migration tests | 158/158 PASS — 11.208s | bf34f0b7fd384c7a9958b4513cea18ac |
+| Task/Review/Workspace/RBAC | 378/378 PASS — 165.639s | d41c6561e93f4b6489e0a858d87a75de |
+| Full isolated PostgreSQL backend | 643/643 PASS — 215.115s | 6bdba3440f8d46edb28df73a9b30fe03 |
+
+All actual launcher exits and Python PID1 container-die exits are 0. Owned test
+database/container/network cleanup passed. PostgreSQL container exit 137 was
+intentional cleanup, not a test-process failure. The 210 protected runtime hashes
+remained unchanged across final targeted/full runs. Development read-only
+verification found PostgreSQL 16.14, 35 migrations, 3 Users, 2 Sessions, 0 business
+rows and no AI tables. No private .env was read and no development write occurred.
+
+Historical AI02A 77/77 and full 562/562 below are not proof for these changes.
+The overall Generator remains PARTIAL: only fixture backend is complete, with no
+AI frontend/live provider/Analyzer runtime. Physical purge and shared quotas are
+explicit limitations above. Stop at OWNER REVIEW GATE. Proposed next work is a
+separately approved controlled ai.0001 development rollout with fresh inventory,
+backup/rehearsal/plan, before any separately authorized 02C fixture UI. No task
+starts automatically; Project and onboarding retain their own gates.
+
+## Historical Snapshot - 2026-10-28 (HT-AI-P4-02A)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW PENDING.** Owner authorizes only the
+offline technical slice: typed contracts, validation, provider interface,
+deterministic fixture adapter, service boundary and persistence review. This
+does not approve all AI-D01–AI-D10 or P4-02B, live providers, public endpoints,
+AI-created Tasks, frontend AI, models, migrations or database persistence.
+
+New code is an uninstalled stateless package under `backend/apps/ai/`:
+`contracts.py`, `validation.py`, `providers.py`, `services.py`, `errors.py`,
+`__init__.py` and tests. Existing runtime, settings/routes, Task/Review/Comment/
+Notification services and database schema remain unchanged. No new dependency,
+live SDK, key, network call, cost, .env read or development database write.
+
+Implemented immutable DTOs, strict JSON/type/Unicode/date/enum validation,
+local Task DAG/count/depth checks and authorized-source citation validation.
+Fixture results pass the same validation pipeline intended for future provider
+responses and identify `fixture_demo`, `generated_by_ai=false`, `persisted=false`
+with zero usage/cost. Fixture construction is limited to trusted test/development
+configuration; service use is explicit opt-in. Live adapters cannot be selected.
+The AccessPort defaults to denial because AI-D02 feature authority is pending;
+pre/post authorization and feedback-source revalidation are explicit boundaries,
+not a second permission engine or a claim that UUIDs prove access.
+
+The technical fixture envelopes (20 nodes, bounded brief/source/response sizes)
+are not approved live quotas or business storage policy. Production rate limits,
+budget reservations, shared usage/idempotency, retention and confirmation remain
+design only in [AI_PERSISTENCE_REVIEW.md](AI_PERSISTENCE_REVIEW.md) and
+[AI_ARCHITECTURE_DESIGN.md](AI_ARCHITECTURE_DESIGN.md). No actual PostgreSQL
+persistence/deadlock guarantee is claimed by stateless fixture tests.
+
+Final-source verification: new AI contracts/boundary tests **77/77 PASS**, 0.046s,
+run `98c2aecfd05649b0b12c34bc6c617352`; full isolated PostgreSQL backend suite
+**562/562 PASS**, 201.889s, run `28724dd1667a4fb59dd4932567b9ca3f`. Actual
+launcher/Python exit codes are 0 in both runs. Required pip/Django/model-drift/
+graph/full migration-chain checks and owned test DB/container/network cleanup
+passed. Selected-source citation and strict limit/control/finite-clock review
+findings were fixed before these final runs. Earlier 45/73/558 counts are interim
+snapshots, not final-source evidence.
+
+All 209 original runtime hashes remain unchanged. Exactly 8 new AI package files
+were added, and their tested hashes match the source after the full run. Normal
+git diff --check passes. No frontend code changed, so frontend 395/browser 22 are
+historical baselines and were not rerun for this backend-only slice. No live
+provider, database persistence, endpoints or user-facing AI feature was tested
+or implemented; production/provider integration is not claimed.
+
+Stop at OWNER REVIEW GATE. AI-D01–AI-D10 retain
+their unapproved portions; Project, onboarding and live/provider activation
+require separate approval. Do not start HT-AI-P4-02B automatically.
+
+## Historical Snapshot - 2026-10-28 (HT-AI-P4-01)
 
 **DESIGN COMPLETE — PENDING OWNER APPROVAL.** Owner authorizes Phase4 AI architecture,
 provider comparison, proposed API/JSON/security and frontend interaction design

@@ -1,6 +1,6 @@
 # HUSTLYTASKER REQUIREMENT STATUS
 
-Last updated: 2026-10-28
+Last updated: 2026-10-29
 
 ## Quy ước đánh giá
 
@@ -17,7 +17,125 @@ Last updated: 2026-10-28
 
 Source of truth cho trạng thái là source code, migration đã áp dụng và kết quả kiểm thử. `documentation/` mô tả định hướng hiện hành. `reference/original_document/` là audit của hệ Next.js/Prisma cũ và chỉ được dùng để kế thừa business rules, không phải yêu cầu đổi Django sang Spring Boot hoặc công nghệ khác.
 
-Current checkpoint: **HT-AI-P4-01 — DESIGN COMPLETE / PENDING OWNER APPROVAL**.
+Current checkpoint: **HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED — OWNER
+REVIEW / DEVELOPMENT APPLY NOT AUTHORIZED**.
+
+R1 execution evidence below is from 2026-10-28. The 2026-10-29 resume verifies
+retained artifacts and read-only state and completes documentation; no backup,
+restore, migration or 72/158 tests were rerun in this resume.
+
+Operational readiness is verified, not persistent rollout completion. Fresh
+development backup110161 bytes/SHA-256/251-line TOC/full read and isolated restore
+passed. All27 legacy tables/schema/sequences/row fingerprints compared correctly
+after documented logical catalog normalization. Exact ai.0001 applied only on
+the restored isolated target:2 tables,7 FKs,18 constraints,14 indexes valid/ready;
+only1 migration/2 ContentTypes/8 permissions were added. Legacy rows and3 Users/
+2 Sessions were preserved; no development identity was used for AI test mutations.
+
+Current R1 evidence: direct restored-DB72/72 TestCase tests PASS7.337s with0
+failures/errors/skips and no substituted test DB; fresh separate AI158/158
+PASS12.242s (`edc9c2a3ee964c9c9843abb7aa141ad8`) covers concurrency. Final
+rehearsal Python PID1 and fresh launcher/Python exits0; owned resources cleaned.
+Full643 was NOT rerun in R1. At the end of execution on 2026-10-28, development
+read-only schema/sequence/all27
+table fingerprints were unchanged,35 applied migrations/0AI/3 Users/2 Sessions/
+business0; original container/volume and210 runtime file hashes are preserved.
+
+Current resume read-only verification still shows PostgreSQL 16.14, 35 migrations/
+0 AI, 27 tables/122 indexes, 3 Users/2 Sessions and 0 business rows; schema/history/
+sequences remain identical and no test container/network remains. Backup size/
+SHA-256 still match. One User-row and one Session-row fingerprint differ from
+the prior R1 final snapshot, with unchanged counts. Cause/actor is not verified;
+no User/Session write, repair or rollback occurred in this resume. The prior
+R1 preservation result applies to its own execution window. Fresh inventory,
+verified backup and a quiet window must protect the newer data before any
+separately approved development rollout.
+
+Archive transfer/readability limitations, normalization details and the future
+rollout plan are in [AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md).
+No runtime/model/migration change, .env read, live provider, frontend or Analyzer
+was introduced. Overall Generator remains PARTIAL; physical purge and shared
+multi-worker limits remain unimplemented. Stop at OWNER REVIEW GATE for separate
+approval to apply exact ai.0001 to development; do not auto-start that rollout.
+
+### Historical completed AI02B checkpoint
+
+Historical checkpoint: **HT-AI-P4-02B — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT
+MIGRATION APPROVAL / OWNER REVIEW**.
+The Owner approved fixture-only Generator backend, dedicated durable proposals,
+current tenant/RBAC integration and atomic human confirmation. Source contains
+three generate/read/confirm routes (read also recovers committed results),
+`AiProposal`/`AiOperation` and reviewed additive `ai.0001_initial`. The approved
+fixture backend is now verified; the overall Generator requirement remains
+PARTIAL without frontend/live integration. Development rollout is explicitly
+pending separate approval; no AI migration is applied there.
+
+Current active Profile Owner/Admin or Workspace Admin authority is required for
+each access; only the originating actor may read/confirm/replay a proposal.
+Revocation, archived context, cross-tenant IDs and staff-only authority do not
+permit saved content/result access. Existing SessionAuthentication/CSRF and Task
+creation services remain the source of truth; confirmation creates an atomic
+PENDING batch without assignment or automatic workflow transitions. Generate
+creates only proposal/operation state, no Task or AuditLog; Task audits and safe
+AI confirmation metadata commit atomically with confirmation outcome.
+
+Thirty-minute confirmation eligibility, 7-day unconfirmed payload bound and
+30-day result recovery are approved for this slice. Logical expiry/read masking
+and confirmation payload clearing are implemented; physical 7/30-day purge is NOT
+implemented/enforced. Scoped idempotency/uniqueness/locks and migration,
+security, concurrency and rollback tests passed on isolated PostgreSQL. Generation
+throttles 3/minute and 20/day/user are process-local/non-atomic, not shared quotas.
+
+Default-disabled development/test fixture mode uses server-owned synthetic
+scenarios only, no live provider, SDK/key, egress or cost. Frontend AI, Analyzer,
+live budgets/providers and production remain outside this approval. Docker Engine
+recovery was independently verified. Current AI 158/158 PASS 11.208s
+(bf34f0b7fd384c7a9958b4513cea18ac), Task/Review/Workspace/RBAC 378/378 PASS 165.639s
+(d41c6561e93f4b6489e0a858d87a75de), and full backend 643/643 PASS 215.115s
+(6bdba3440f8d46edb28df73a9b30fe03); actual launcher/Python PID1 container exits 0.
+Pip/Django/model-drift/graph/full-chain checks and owned cleanup pass. PostgreSQL
+container 137 was intentional cleanup, not test failure. 210 protected runtime
+hashes remained stable across final runs. Read-only development remains 35 applied
+migrations/3 Users/2 Sessions/0 business rows with no AI tables; no .env read or
+development write. Historical AI 77/full 562 below are not current evidence.
+
+Stop at OWNER REVIEW GATE. Proposed next task: separately approved controlled
+ai.0001 development rollout with fresh inventory/backup/rehearsal/plan, before
+separately authorized 02C fixture UI. No automatic task transition or live enable.
+
+### Historical completed AI02A checkpoint
+
+Historical checkpoint: **HT-AI-P4-02A — IMPLEMENTATION COMPLETE / OWNER REVIEW PENDING**.
+Owner authorizes only typed contracts, validation, provider abstraction and
+offline deterministic fixtures plus persistence review. This is limited technical
+implementation, not approval of live AI, UI/endpoints, Task creation or durable
+storage. Unapproved AI-D01–AI-D10 portions remain PENDING OWNER REVIEW.
+
+Stateless `backend/apps/ai/` is not registered as a Django app. It defines strict
+Task/Feedback DTOs, JSON/date/enum/DAG/citation validators, normalized safe errors,
+cooperative timeout/cancellation and fixture provenance with zero usage/cost.
+Service enablement is opt-in for trusted test/development construction; access
+defaults to denial, with pre/post authorization and selected-source revalidation.
+No role, model, route, migration, database persistence, Task status or notification
+consistency rule changes. No .env read, key, network/provider call or spend.
+
+Final new AI contracts/boundary tests: 77/77 PASS in 0.046s, run
+`98c2aecfd05649b0b12c34bc6c617352`. Full isolated PostgreSQL backend: 562/562
+PASS in 201.889s, run `28724dd1667a4fb59dd4932567b9ca3f`. Both actual launcher/
+Python exit codes are 0. Required pip/Django/drift/graph/full migration-chain
+checks and owned DB/container/network cleanup passed. All 209 original runtime
+hashes are unchanged and the 8 new AI code hashes match the final tested source;
+normal git diff --check passes. Earlier 45/73/558 are interim snapshots. Historical
+frontend 395/browser 22 were not rerun because frontend is unchanged; backend 485
+is a prior baseline, not this task's final result.
+Technical fixture envelope limits do not approve production quotas or retention.
+[AI_PERSISTENCE_REVIEW.md](AI_PERSISTENCE_REVIEW.md) is a proposal; no durable
+replay/locking/budget behavior exists yet. Stop at OWNER REVIEW GATE before
+HT-AI-P4-02B.
+
+### Historical completed AI01 design checkpoint
+
+Historical checkpoint: **HT-AI-P4-01 — DESIGN COMPLETE / PENDING OWNER APPROVAL**.
 Owner newly requests two AI capabilities: Smart Task Generator and Feedback
 Analyzer. This is an architecture/security/provider/contract design task only;
 it does not make either feature implemented or retroactively complete an Fxx
@@ -421,9 +539,9 @@ claims that the original F01–F16 already contain implemented AI runtime.
 
 | Capability | Design status | Implementation status | Required gate |
 |---|---|---|---|
-| AI Smart Task Generator | DESIGN COMPLETE — PENDING OWNER APPROVAL | NOT STARTED | Approve authority/provider/data policy, strict proposal contract, durable confirmation/budget schema and P4-02 scope; no direct model mutation |
-| AI Feedback Analyzer | DESIGN COMPLETE — PENDING OWNER APPROVAL | NOT STARTED | Approve feature authority/source coverage and P4-03 scope; selected-source citations, no automatic Review or Task action |
-| Shared AI provider/cost/security foundation | DESIGN COMPLETE — PENDING OWNER APPROVAL | NOT STARTED | Approve numeric limits, persistence/retention, configuration and adapter choice; default disabled, no unapproved egress/paid fallback |
+| AI Smart Task Generator | FIXTURE BACKEND SCOPE APPROVED; LIVE/UI GATES RETAINED | PARTIAL OVERALL — P4-02B IMPLEMENTATION COMPLETE; R1 MIGRATION READINESS VERIFIED, development apply not authorized | Current R1 direct restored-DB72/freshAI158 PASS; full643 remains historical. Separately approve exact ai.0001 development rollout before fixture UI; frontend/live integration still absent |
+| AI Feedback Analyzer | DESIGN COMPLETE — REMAINING DECISIONS PENDING | PRODUCT FEATURE NOT STARTED; typed analysis/citation fixture foundation in P4-02A | Separate approval for feature authority/live sources and P4-03 UI/service integration; no automatic Review or Task action |
+| Shared AI provider/cost/security foundation | FIXTURE CONTRACT/DURABLE GENERATOR SCOPE APPROVED | PARTIAL OVERALL —02B fixture backend verified, no live infrastructure | Current manager-only access, actor scope and durable confirmation passed PostgreSQL tests; physical purge, shared live budgets, provider SDKs and production controls remain absent/gated |
 
 Current task does not change the F04/F06/F07/F11/F12 implementation or workflow
 statuses. Project, Invitation UI/Profile Creation/onboarding, production, real

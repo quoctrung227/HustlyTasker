@@ -2,7 +2,139 @@
 
 # HustlyTasker Database Design
 
-Version: 0.11 source and approved development schema.
+Version: 0.12 source; persistent development remains the approved0.11 schema
+until a separately authorized AI rollout.
+
+## HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED / OWNER REVIEW — finalized2026-10-29
+
+Execution evidence below is from2026-10-28; resume2026-10-29 did not rerun
+backup/restore/tests. Read-only resume confirms unchanged development schema,
+sequences and35-migration history,0 AI migrations/tables,3 Users/2 Sessions and
+business rows0. One User and one Session row fingerprint changed since the R1
+final snapshot; actor/cause is unverified. No data was corrected or rolled back.
+The exact R1 before/after preservation proof is scoped to28 October; a fresh
+backup/inventory is required before future rollout to preserve newer state.
+
+This operational task verifies backup/restore and migration readiness; it does
+**not authorize or perform ai.0001_initial on persistent development**. No model,
+migration, runtime setting, workflow or AI-D business decision changed. Source
+version0.12 is tested in isolation; persistent development remains0.11.
+
+Fresh read-only source identity: PostgreSQL16.14, hustlytasker_db, original
+hustlytasker_postgres/container49ef93152944, docker_postgres_data and loopback
+127.0.0.1:5432; UTF8/en_US.utf8. Development has35 migration records,27 tables,
+122 indexes and121 constraints including44 FKs; checked objects are valid/ready.
+Users3/Sessions2 and all inventoried business rows0 were confirmed without
+printing private values. There is no applied AI migration or AI table.
+
+The new retained PostgreSQL custom archive is110161 bytes, SHA-256
+`306e3c49d11b03da3a5e46f7ea6cf5acde2035cd418a44bfb3c09c1bb1144585`.
+TOC251 lines, full archive read and actual isolated restore exited0. Backup path,
+protected-file access limitation and the concrete future rollout plan are in
+[AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md)
+and [HANDOVER.md](HANDOVER.md). No backup was uploaded, overwritten or removed.
+
+Only owned restore database
+`ht_ai_r1_c7060a0b55c94f41b44d5c440325d89c` received standard Django
+ai.0001_initial. Before apply, all legacy row SHA-256 values, migration history,
+sequences and logical schema matched the development backup. Comparison accounts
+for physical attribute-number gaps left by a historically dropped column:
+logical column order/names/types/nullability/defaults remain exact. Fifteen CHECK
+definitions were reparsed by PostgreSQL itself on disposable temporary tables to
+normalize equivalent array-cast rendering; no regex relaxation, source DDL change
+or omitted constraint was used. Old restored schema is then compared exactly
+before/after the AI migration.
+
+| Restored target result | Verified outcome |
+|---|---|
+| AI tables |AiProposal15 columns; AiOperation9 columns;29 total tables|
+| AI constraints / FKs |18 constraints including7 FKs, valid; SQL FKs are deferrable NO ACTION; Django policy remains PROTECT|
+| AI indexes |14 indexes, all valid/ready;136 total indexes|
+| Migration history |Only ai.0001_initial added:35→36 records|
+| Framework metadata |Only2 AI ContentTypes and8 default permissions added; existing rows preserved|
+| Legacy data |Every old row hash retained; Users3/Sessions2 and existing business schema/data unchanged|
+| Direct restored-database smoke |72/72 PASS7.337s; Python PID1/container exit0; TestCase rollback leaves both AI tables empty|
+
+Separate fresh-cluster AI regression158/158 PASS12.242s, run
+`edc9c2a3ee964c9c9843abb7aa141ad8`, verifies migration/concurrency/security on
+the unchanged source; launcher/Python exits0 and owned cleanup passed. It is
+distinct from the72 tests on the actual restored backup. The prior full643
+suite below is historical, not rerun or claimed as a new R1 result.
+
+Owned restore database/container/network cleanup completed with exit0. R1's
+2026-10-28 final read-only development comparison preserved every row hash, schema object and
+sequence;35 migrations/0 AI migrations and original container/volume remain.
+All210 frozen runtime file hashes are unchanged; no .env was read or edited.
+Physical AI retention purge and shared multi-worker quotas remain unimplemented;
+readiness does not approve them or enable live/production/frontend/Analyzer AI.
+
+**STOP AT OWNER REVIEW GATE.** Any persistent-development apply needs separate
+explicit Owner authorization, fresh identity/inventory/backup and exact plan
+verification. The normal development startup launcher has no migration mode;
+future reviewed command guidance is documented separately, not executed here.
+
+## Historical HT-AI-P4-02B source schema — IMPLEMENTATION COMPLETE / DEVELOPMENT APPLY NOT AUTHORIZED
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL / OWNER
+REVIEW.** This status covers the fixture-only backend, not the overall Generator
+feature: frontend AI and live provider integration remain unimplemented.
+
+Owner approved dedicated synthetic Generator persistence only after the reviewed
+design in [AI02B_SCHEMA_REVIEW.md](AI02B_SCHEMA_REVIEW.md). New source migration
+[ai.0001_initial](../backend/apps/ai/migrations/0001_initial.py) creates two tables;
+dependencies are the swappable User model and workspace.0004_profileinvitation.
+No existing migration is edited, no Task/User/business model is changed and no
+legacy tenant backfill is required. Current targeted isolated PostgreSQL AI suite
+**158/158 PASS in 11.208s**, run `bf34f0b7fd384c7a9958b4513cea18ac`, includes 3
+migration tests for empty/related-data forward/reverse and database constraints.
+Actual launcher/Python-container exits0 and owned DB/container/network cleanup
+are verified. Targeted Task/Review/Workspace/RBAC **378/378 PASS in 165.639s**,
+run `d41c6561e93f4b6489e0a858d87a75de`; full isolated PostgreSQL backend
+**643/643 PASS in 215.115s**, run `6bdba3440f8d46edb28df73a9b30fe03`.
+Launcher exits and Python PID1 container die events independently confirm exit0;
+pip check, Django checks, model drift, migration graph/full chain and owned
+database/container/network cleanup PASS. Final 210 test-source hashes are stable.
+
+Fresh development read-only inventory: PostgreSQL 16.14, 35 applied migration
+records, 3 Users, 2 Sessions, 0 business rows; AI tables absent. The new migration
+has not been applied on persistent development and no business fixture was made.
+
+| Model | Fields / relationships |
+|---|---|
+| AiProposal | UUID PK; actor/User, Profile, Workspace FKs PROTECT; status AVAILABLE/CONFIRMED; contract_version, positive revision, scenario_id; nullable payload and created_tasks JSON; created_at/expires_at/payload_expires_at/confirmed_at/recovery_expires_at |
+| AiOperation | UUID PK; actor/User, Profile, Workspace and proposal FKs PROTECT; operation GENERATE/CONFIRM; 64-char key_digest/body_digest; created_at |
+
+AiProposal CHECKs: valid status, revision≥1, expiry after creation, payload deadline
+not before preview expiry, lifecycle pairing and confirmation/recovery ordering.
+AVAILABLE cannot have committed result/confirmation timestamps; CONFIRMED requires
+confirmation/recovery timestamps and null payload, but permits null created_tasks
+for future scrubbed tombstones. These do not replace JSON/DAG/tenant validators.
+
+AiOperation CHECK restricts operation; UNIQUE(actor,profile,workspace,operation,
+key_digest) scopes replay, and partial UNIQUE(proposal) WHERE operation=CONFIRM
+prevents a second committed confirmation under a different key. Cross-record
+scope matching is model/service validation, not a cross-table CHECK claim.
+PROTECT describes the Django ORM deletion policy, not a SQL FK action named
+PROTECT. SQL constraints do not establish the JSON shape, DAG or current RBAC.
+
+Proposal indexes support actor/Profile/Workspace ordered history, status/payload
+expiry and status/recovery expiry. Result mapping stores server Task UUIDs in JSON,
+not Task FKs; deleting AI records cannot cascade into business data.
+
+Owner synthetic limits: preview30 minutes, unconfirmed payload maximum7 days,
+confirmation/recovery metadata maximum30 days. Services clear payload on confirm
+and gate expired reads/recovery; no automatic physical purge exists. Physical
+retention maxima are not enforced yet and must be reported as a limitation.
+Minimal CONFIRMED identity/guard must never become AVAILABLE after scrub.
+Generate persists only proposal/operation state and creates no Task or AuditLog.
+Confirmation audits contain safe metadata only, not proposal contents, and
+commit atomically with existing Task audits, created nodes and confirmation.
+
+**Migration is not applied on persistent development or production.** Only
+isolated PostgreSQL apply/reverse/schema/concurrency tests are authorized here.
+The targeted and full isolated results above are current-source evidence.
+Persistent rollout requires a
+separate approval, fresh inventory, backup/restore rehearsal and migration plan.
 
 ## HT-DB-P1-11 development rollout — 2026-10-26 — COMPLETE / OWNER REVIEW GATE
 

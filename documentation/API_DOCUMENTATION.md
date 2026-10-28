@@ -1,6 +1,204 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-10-27
+Last updated: 2026-10-28
+
+## HT-AI-P4-02B — IMPLEMENTATION COMPLETE / PENDING DEVELOPMENT MIGRATION APPROVAL
+
+The bounded fixture-only API below is verified on isolated PostgreSQL. Stop at
+OWNER REVIEW GATE; this completion does not authorize development rollout or a
+new task. No live AI provider, SDK, API key, provider network call, Analyzer
+endpoint or React AI UI is implemented by this slice.
+
+Final-source evidence on 2026-10-28: AI **158/158 PASS** in11.208s
+(`bf34f0b7fd384c7a9958b4513cea18ac`); Task/Review/Workspace/RBAC **378/378 PASS**
+in165.639s (`d41c6561e93f4b6489e0a858d87a75de`); full isolated backend
+**643/643 PASS** in215.115s (`6bdba3440f8d46edb28df73a9b30fe03`). Actual launcher
+and Python PID1/container exit codes are0; owned test database/container/network
+cleanup, pip/Django/model-drift/migration graph and full-chain checks pass.
+Read-only development verification remains35 migrations,3 Users,2 Sessions and
+0 business rows; AI tables are absent and ai.0001 is not applied there. No private
+.env was read. See [HANDOVER.md](HANDOVER.md) for the continuation checkpoint.
+Historical FE04/API03A results below remain separate from this new verification.
+
+### Access, configuration and methods
+
+- The installed AI app adds `ai.0001_initial` for `AiProposal` and `AiOperation`.
+  Apply/test only in isolated PostgreSQL for this task. Persistent-development
+  rollout needs separate Owner approval; do not enable these routes against an
+  unmigrated development schema.
+- `DJANGO_AI_FIXTURE_ENABLED` defaults to `false`. Explicit opt-in only works
+  when `DJANGO_ENVIRONMENT=development` and production mode is false. Production
+  always refuses fixture execution; disabled processing returns `503
+  AI_DISABLED` after authentication/tenant permission checks.
+- All three routes use existing Django `SessionAuthentication`; authenticated
+  unsafe requests require a valid CSRF token. No `AllowAny`, JWT, frontend key
+  or alternate tenant permission engine is introduced.
+- Every generate/read/confirm/recovery requires a currently active User,
+  current same-Profile membership and the existing
+  `can_manage_workspace_tasks` capability: Profile Owner/Admin, or Profile Member
+  with an active Workspace Admin membership. Editor/Viewer and staff/superuser
+  flags alone grant no authority. Archived Profile/Workspace is refused.
+- Read, confirm and replay additionally require the original proposal actor.
+  Another manager cannot view or confirm that actor's proposal. Revoked or
+  cross-tenant callers cannot recover payloads or created Task IDs; unknown,
+  malformed or unscoped proposal IDs use tenant-safe `404` behavior.
+- Responses are `never_cache`. JSON request bodies are capped at **32 KiB**
+  before parsing; duplicate JSON keys, non-finite numbers, invalid UTF-8, unknown
+  fields and invalid types are rejected. Unsupported content types return
+  `415`; unsupported methods return `405` after applicable access checks.
+
+Base path: `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/ai/task-proposals/`.
+
+| Method | Suffix | Purpose | Success |
+|---|---|---|---|
+| `POST` | base path | Generate/store a deterministic synthetic proposal; creates no Task | `201` first result; `200` same-key/body replay |
+| `GET` | `{proposal_id}/` | Read current actor's proposal or recover committed confirmation result | `200` |
+| `POST` | `{proposal_id}/confirm/` | Explicitly confirm an edited plan through existing Task services | `201` first commit; `200` same-key/body replay |
+
+Detail also permits `HEAD`; all routes permit permission-checked `OPTIONS`.
+There is no proposal list/edit/delete API or separate recovery endpoint: recovery
+uses the scoped detail `GET` or the identical successful confirmation replay.
+
+### Generate request
+
+Both POST routes require `Content-Type: application/json`, existing session/CSRF
+handling and a valid UUID in the `Idempotency-Key` header. Clients should retain
+the key for retries of the same operation. Generate accepts exactly:
+
+```json
+{"scenario_id": "task-tree-v1"}
+```
+
+Allowed server-owned scenarios are `subtitle-check-v1` (one root suggestion) and
+`task-tree-v1` (a root plus child suggestion). Arbitrary briefs, source text,
+provider/model names, foreign tenant IDs and client-defined scenario content are
+not accepted. The underlying brief contract remains bounded at 6,000 characters;
+this HTTP slice uses fixed synthetic server briefs rather than taking customer
+briefs. Fixture output is predetermined test/demo data, not AI analysis.
+
+Generate attempts use DRF UserRateThrottle limits of **3 per rolling minute**
+and **20 per rolling day** per User, shared across that User's scopes in the same
+cache. Attempts, including replays that reach throttling, count toward those
+limits. The current cache is process-local and throttle updates are non-atomic:
+these are approximate single-process protections, not shared multi-worker quotas
+or a production-grade budget ledger. Detail/confirm have no new dedicated AI
+throttle. Live API budget and fixture provider cost are both zero; no paid
+fallback is possible.
+
+### Proposal response and confirmation body
+
+The same response shape is returned from generate, detail and confirm:
+
+- `contract_version`: `ai.v1`; `proposal_id`: server UUID; `revision`: positive
+  proposal revision; `scenario_id`: allowed scenario.
+- `status`: `AVAILABLE`, derived `EXPIRED`, or durable `CONFIRMED`.
+- `mode`: `fixture_demo`; `generated_by_ai`: `false`; `persisted`: `true`.
+- UTC-aware `created_at`, `expires_at`, `payload_expires_at`, nullable
+  `confirmed_at` and nullable `recovery_expires_at`.
+- `payload`: the validated Task-plan object while available, otherwise `null`.
+- `created_tasks`: `null` before confirmation; after commit a stable object
+  mapping proposal-local references such as `item_1` to backend-created Task UUIDs.
+- `usage`: `input_tokens=0`, `billable_output_tokens=0`,
+  `cost_usd="0.000000"`, `status="fixture_zero"`.
+
+No global User ID, email, membership ID, raw brief, idempotency-key digest or
+request-body fingerprint is returned. The explicit fixture provenance must be
+shown as demo/not live AI by a future frontend consumer.
+
+Confirmation accepts exactly `proposal_revision`, literal JSON `confirmed: true`
+and the complete edited `payload`. Example synthetic plan:
+
+```json
+{
+  "proposal_revision": 1,
+  "confirmed": true,
+  "payload": {
+    "contract_version": "ai.task-plan.v1",
+    "tasks": [{
+      "local_ref": "item_1",
+      "parent_ref": null,
+      "title": "Synthetic subtitle check",
+      "description": "Review the demo captions before submission.",
+      "priority": "MEDIUM",
+      "proposed_deadline": null,
+      "notes": "Demo suggestion requiring human confirmation."
+    }],
+    "assumptions": [],
+    "warnings": ["Synthetic fixture; not generated by a live AI provider."]
+  }
+}
+```
+
+The existing strict Task-plan parser validates **1–20 nodes**, unique local
+references (`item_1` etc.), no missing parent/cycle/self-parent, root depth0 and
+at most3 child edges. Priority is `LOW|MEDIUM|HIGH|URGENT`. Each node requires
+exactly the shown fields; title is nonblank and at most255 characters,
+description at most2,000 and notes at most500. Deadline is nullable or an explicit
+timezone-aware RFC3339-style datetime normalized to UTC; no guessed deadline.
+Unknown fields, NUL/invalid Unicode, assignment, status, tenant IDs, foreign Task
+parents and `estimated_duration` are rejected. `notes`, `assumptions` and warnings
+support preview; they are not invented Task model fields.
+
+Human edits stay within this same validated contract. Confirm reauthorizes under
+existing tenant locks, validates revision/expiry and creates topologically through
+unchanged `create_task`. All accepted Tasks begin `PENDING` with the current actor
+as creator and no automatic assignment. Task/Subtask/Deliverable/Review behavior
+and hierarchy rules remain unchanged. All nodes, existing task-created audits,
+safe AI metadata audit, consumed proposal state, result mapping and confirmation
+operation commit in one transaction; any failure rolls back the whole batch.
+Generate stores only proposal/operation rows, never Tasks or AuditLog rows before
+human confirmation. The fixture adapter is invoked outside the service's database
+transactions and is not called during confirmation. Neither flow logs content.
+
+### Expiry, replay and retention
+
+- Preview confirmation eligibility ends **30 minutes after generation**.
+  An expired unconfirmed detail returns `status=EXPIRED`, `payload=null` and no
+  created IDs; it cannot be confirmed. Replaying expired unconfirmed generation
+  is refused rather than generating new state under the old key.
+- Unconfirmed payload has a **7-day logical retention bound**; it is already
+  hidden on reads after preview expiry. Confirmation immediately clears stored
+  proposal payload; accepted content lives in the created Tasks.
+- Committed result recovery lasts **30 days after confirmation**, requires
+  current authorization and returns the immutable mapping, even after the
+  original preview expires. After that bound or result scrubbing, recovery is
+  refused with `410 RECOVERY_EXPIRED`.
+- Scoped key uniqueness is actor/Profile/Workspace/operation/key. Same key with
+  the same canonical body replays; a different body or proposal under that key
+  conflicts. Another key cannot reconfirm a consumed proposal. Confirmation
+  canonicalization includes target proposal, revision, scenario and edited plan;
+  body fingerprints are keyed server-side and never exposed as permission tokens.
+- Durable `CONFIRMED` is independent of payload/result scrubbing, so scrubbing
+  does not reopen creation. There is **no automatic physical purge** in this
+  slice: 7/30-day physical retention maxima are **not automatically enforced**.
+  Logical masking/expiry is not a claim that database bytes have been deleted.
+
+### Errors and downstream UI states
+
+AI-domain errors use `{detail, code, fields}`, where `fields` contains only
+documented safe field names mapped to static messages. Existing DRF serializer,
+parse, permission, CSRF and throttle errors keep their standard response shapes;
+consumers must not assume every error carries an AI `code`.
+
+| HTTP | Behavior |
+|---|---|
+| `400` | Invalid/missing header, request shape/type, malformed/oversized JSON or invalid edited plan; AI validation may use `VALIDATION_ERROR` |
+| `403` | Anonymous/session/CSRF or insufficient current management authority according to existing conventions |
+| `404` | Missing/unreadable tenant chain, proposal or another actor's proposal; no existence disclosure |
+| `409` | `IDEMPOTENCY_CONFLICT`, `ALREADY_CONFIRMED`, `STALE_PROPOSAL` (or supported `STALE_CONTEXT`) |
+| `410` | `EXPIRED` confirmation/generate replay; `RECOVERY_EXPIRED` committed recovery |
+| `429` | Generation attempt throttle; no claim of a shared budget ledger |
+| `503` | `AI_DISABLED`; future-safe `PROVIDER_UNAVAILABLE` mapping does not mean a live adapter exists |
+
+The transport also reserves `502 INVALID_PROVIDER_RESPONSE` and
+`504 PROVIDER_TIMEOUT` for safe adapter failures. Current fixtures use no live
+provider. Contract states support a later accessible loading/preview/edit/confirm,
+expired/conflict/already-confirmed/denied UI; no fake AI controls are added now.
+
+Schema/locking rationale: [AI02B_SCHEMA_REVIEW.md](AI02B_SCHEMA_REVIEW.md).
+Fixture-only approval and future gates: [DECISION_LOG.md](DECISION_LOG.md) and
+[AI_PERSISTENCE_REVIEW.md](AI_PERSISTENCE_REVIEW.md). Development migration, live
+providers, Analyzer runtime and frontend AI each remain separately gated.
 
 ## HT-FE-P3-04 account lifecycle consumer — COMPLETE / OWNER REVIEW GATE
 

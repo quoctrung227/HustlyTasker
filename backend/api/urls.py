@@ -28,4 +28,8 @@ urlpatterns = [
         "v1/",
         include("apps.notifications.urls"),
     ),
+    path(
+        "v1/",
+        include("apps.ai.urls"),
+    ),
 ]

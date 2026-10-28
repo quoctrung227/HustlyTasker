@@ -1,12 +1,126 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-10-28
+Last updated: 2026-10-29
 
 ## Giai đoạn hiện tại
 
-`PHASE 4 - AI Architecture and Design`
+`PHASE 4 - Fixture-only Smart Task Generator Backend`
 
-Current task: **HT-AI-P4-01 — DESIGN COMPLETE / PENDING OWNER APPROVAL**. Owner authorizes
+Current task: **HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED — OWNER REVIEW /
+DEVELOPMENT APPLY NOT AUTHORIZED**.
+
+R1 execution evidence from 2026-10-28: a fresh 110161-byte custom development backup, 251-line TOC,
+full archive read and isolated restore passed, with matching SHA-256 recorded in
+[AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md).
+The restored27-table legacy schema/data/sequence comparison passed after explicit
+logical catalog normalization; only exact ai.0001 was then applied in isolation.
+Its two tables/7FK/18constraints/14indexes are valid/ready; original rows remain
+intact, with only1 migration/2 ContentTypes/8 permissions added as expected.
+
+Direct restored-database synthetic security checks:72/72 PASS7.337s,0 failure/
+error/skip, no substituted Django test database. Fresh separate AI158/158
+PASS12.242s (`edc9c2a3ee964c9c9843abb7aa141ad8`) covers concurrency/regression;
+actual rehearsal Python PID1 and fresh launcher/Python exits0. Owned DB/container/
+network cleanup passed. Full643 was not rerun for R1 and remains historical.
+
+At the end of R1 execution on 2026-10-28, development read-only fingerprints/schema/sequences were unchanged:
+35 migrations/0AI migrations,3 Users/2 Sessions/business0; original container/
+volume preserved.210 runtime file hashes are unchanged. Backup stays protected
+and retained; worker ACL limitations and the safe binary-transfer workaround are
+documented without claiming manual Owner readability. No .env read or live call.
+
+The 2026-10-29 resume rechecked the retained backup checksum and responsive
+Docker 29.8.2/original container, with no isolated resources left; it did not
+rerun backup/restore/tests. Current schema/history/sequences and counts still
+match 35 migrations/0 AI, 27 tables/122 indexes, 3 Users/2 Sessions/business 0.
+One User-row and one Session-row fingerprint changed since the prior R1 final
+snapshot. Cause/actor is unverified; this resume performed no User/Session
+mutation, repair or rollback. Do not describe all current rows as unchanged
+since 28 October. Require fresh inventory/backup and a quiet window before any
+later approved apply, preserving the newer data.
+
+Next gate is separate explicit Owner approval for controlled development rollout
+of exact ai.0001 after fresh identity/inventory/backup/plan verification and a
+reviewed quiet window. Do not
+perform apply, frontend AI, Analyzer or another task automatically. Overall
+Generator remains PARTIAL, fixture backend only; physical purge and shared quotas
+are not implemented.
+
+### Historical completed AI02B checkpoint
+
+Historical task: **HT-AI-P4-02B — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT
+MIGRATION APPROVAL / OWNER REVIEW**.
+Owner-approved scope is durable fixture proposals, current manager authorization,
+generate/read/confirm/recovery APIs and atomic confirmation through unchanged
+Task services. `AiProposal`/`AiOperation` and additive `ai.0001_initial` exist in
+source following [schema review](AI02B_SCHEMA_REVIEW.md); no development apply.
+
+Every access requires the original actor and current active Profile Owner/Admin
+or Workspace Admin authority in the same tenant. SessionAuthentication/CSRF,
+existing Task validation/hierarchy and PENDING creation remain unchanged. No
+automatic assignment, staff shortcut or permission grant comes from a proposal.
+Generation creates only proposal/operation rows, no Task or AuditLog. Scoped
+idempotency, one-confirmation guards and locks passed current PostgreSQL
+race/rollback/security verification. Confirmation commits Task audits, safe AI
+confirmation metadata and outcome atomically through existing services.
+
+Approved fixture lifecycle: 30-minute confirmation, 7-day unconfirmed payload and
+30-day recovery bounds. Logical expiry/read masking and confirmation scrub do
+not implement physical retention purge. Fixture generation throttles 3/minute
+and 20/day/user are process-local/non-atomic, not multi-worker enforcement.
+Default-off flag, production refusal, fixed synthetic scenarios and zero live
+budget/cost preserve the bounded demo scope. Live SDK/provider, Analyzer runtime
+and frontend AI remain separate approvals. Docker Engine recovery and isolated
+resource ownership were independently verified before running new tests.
+
+Current AI 158/158 PASS 11.208s (bf34f0b7fd384c7a9958b4513cea18ac), targeted
+Task/Review/Workspace/RBAC 378/378 PASS 165.639s
+(d41c6561e93f4b6489e0a858d87a75de), and full isolated backend 643/643 PASS 215.115s
+(6bdba3440f8d46edb28df73a9b30fe03). Actual launcher and Python PID1 container-die
+exits 0, pip/Django/no-drift/graph/full-chain checks and owned cleanup all pass;
+PostgreSQL 137 was intentional cleanup. 210 protected runtime hashes did not drift.
+Fresh read-only development: PostgreSQL 16.14, 35 migrations/3 Users/2 Sessions/
+0 business rows, AI tables absent; no .env read or development write.
+
+Stop at OWNER REVIEW GATE. Proposed next task is separately approved controlled
+ai.0001 development rollout (fresh inventory, backup/restore rehearsal and plan),
+before separately authorized 02C fixture UI. Overall Generator remains PARTIAL
+without frontend/live integration. AI02A 77/full 562 below are historical only;
+do not start rollout, frontend, live AI or another implementation automatically.
+
+### Historical completed AI02A checkpoint
+
+Current task: **HT-AI-P4-02A — IMPLEMENTATION COMPLETE / OWNER REVIEW PENDING**.
+Owner approves
+stateless typed contracts, strict validation, one provider interface and an
+offline deterministic fixture adapter only. Code is in an uninstalled
+`backend/apps/ai/` package, with explicit test/development construction and
+fixture-service opt-in. No public AI route, live SDK/provider, key, model call,
+Task mutation, database model/migration or frontend AI is authorized.
+
+The default-deny AccessPort preserves the undecided AI feature permission gate;
+future integration must delegate to current tenant/RBAC helpers. Service pre/
+post checks and current-source citation validation do not grant authority from
+client IDs. Fixture output has clear synthetic provenance and zero cost/usage.
+Fixture contract bounds are technical safety limits, not approval of live
+rate/token/budget policies. Other AI-D01–AI-D10 decisions remain pending.
+
+Final new AI contracts/boundary tests: 77/77 PASS, 0.046s, run
+`98c2aecfd05649b0b12c34bc6c617352`. Full isolated PostgreSQL backend: 562/562
+PASS, 201.889s, run `28724dd1667a4fb59dd4932567b9ca3f`. Actual launcher/Python
+exit codes 0; required pip/Django/drift/graph/full migration-chain checks and owned
+DB/container/network cleanup passed. All 209 original runtime hashes remain
+unchanged; the 8 new AI code hashes match the final tested source. Normal git
+diff --check passes. Earlier 45/73/558 counts are interim, not final evidence.
+Frontend is unchanged and its historical suites were not rerun. No live provider
+integration is claimed. Persistence/retention/locking review is
+[AI_PERSISTENCE_REVIEW.md](AI_PERSISTENCE_REVIEW.md), proposal only; no durable
+confirmation or budget guarantee is implemented. Stop at OWNER REVIEW GATE
+before HT-AI-P4-02B or any schema/live-provider work.
+
+### Historical completed AI01 design checkpoint
+
+Historical task: **HT-AI-P4-01 — DESIGN COMPLETE / PENDING OWNER APPROVAL**. Owner authorizes
 architecture/provider/API/JSON/security/UX documentation only. See
 [AI_ARCHITECTURE_DESIGN.md](AI_ARCHITECTURE_DESIGN.md) for the source-backed
 shared adapter proposal, official provider snapshot, cost calculations, tenant
@@ -1145,16 +1259,21 @@ dependencies. HT-FE-P3-01 below separately authorizes the web foundation only.
   remain unverified. Project remains PENDING OWNER DECISION. AI readiness is
   design only; no AI, onboarding or another task starts automatically.
 
-### Phase4 AI tasks — proposals, no implementation authorized
+### Phase4 AI tasks — limited fixture slice authorized; later gates retained
 
 | Task | Status | Proposed deliverable / gate |
 |---|---|---|
-| HT-AI-P4-01 — Architecture & Provider Design | DESIGN COMPLETE — PENDING OWNER APPROVAL | Shared design and documentation checks complete; Owner review before any runtime/provider/schema implementation |
-| HT-AI-P4-02 — Smart Task Generator | NOT STARTED — PENDING SEPARATE APPROVAL | Suggested slices:02A strict contracts/fixture adapter and reviewed durable ledger/schema;02B Generator service, disabled live adapter, budgets and atomic confirmation backend with mocked/concurrency tests;02C scoped preview/edit/confirm UI and isolated E2E |
+| HT-AI-P4-01 — Architecture & Provider Design | DESIGN COMPLETE — REMAINING DECISIONS PENDING | Architecture is the design baseline, not blanket approval of AI-D01–AI-D10 |
+| HT-AI-P4-02A — Contracts, Fixture Adapter & Persistence Review | IMPLEMENTATION COMPLETE — HISTORICAL BASELINE | Stateless DTOs/validators/provider port/fixture/service boundary; historical AI77/full562 passed and are not current02B results |
+| HT-AI-P4-02B — Fixture Generator Backend & Durable Confirmation | IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW | 3 routes/2 models/ai.0001; implementation-stage AI158/Task-RBAC378/full643 results are historical; R1 readiness evidence below does not authorize development apply |
+| HT-AI-P4-02B-R1 — Development Migration Readiness, Backup & Restore Rehearsal | MIGRATION READINESS VERIFIED — OWNER REVIEW / DEVELOPMENT APPLY NOT AUTHORIZED | 2026-10-28 backup/restore, exact isolated ai.0001, preservation and 72/158 PASS; exits/cleanup verified. Resume 2026-10-29 rechecked artifacts/state without rerunning tests; newer User/Session fingerprints require fresh rollout backup. Full643 remains historical |
+| HT-AI-P4-02 — Smart Task Generator | PARTIAL — FIXTURE BACKEND COMPLETE | Frontend preview/edit/confirm and live-provider/budget integration remain absent and require separate scope/approval; controlled development migration rollout is the proposed next gate |
 | HT-AI-P4-03 — Feedback Analyzer | NOT STARTED — PENDING SEPARATE APPROVAL | Reuse shared adapter/guards; bounded authorized source resolution, citations and read-only analysis UI |
 | HT-AI-P4-04 — AI Acceptance & Cost/Security Hardening | NOT STARTED — PENDING SEPARATE APPROVAL | Deterministic isolated E2E, prompt abuse/provider failure/budget races and tenant/security regression |
 
-Any additive AI proposal/usage/idempotency schema needs review before migrations.
+The bounded 02B proposal/operation schema review is recorded in
+AI02B_SCHEMA_REVIEW.md. Further additive AI/usage schema still needs review before
+migrations; current ai.0001 may only be tested on isolated PostgreSQL.
 Live provider smoke requires separate Owner approval with an explicit data/cost
 limit, even after an adapter is implemented. No task above starts automatically;
 no automatic paid-provider fallback, Project module or estimated-duration field.
