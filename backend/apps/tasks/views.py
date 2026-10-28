@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError
-from django.db.models import Case, F, IntegerField, OuterRef, Prefetch, Subquery, Value, When
+from django.db.models import Case, Exists, F, IntegerField, OuterRef, Prefetch, Subquery, Value, When
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from rest_framework import generics, status
@@ -67,7 +67,13 @@ def _task_read_queryset(context):
         "user_id",
         "assigned_at",
     )
-    return tasks_visible_to(context).select_related(
+    unresolved_deliverables = Deliverable.objects.filter(
+        task_id=OuterRef("pk"),
+        status__in=(Deliverable.Status.PENDING, Deliverable.Status.SUBMITTED),
+    )
+    return tasks_visible_to(context).annotate(
+        _has_unresolved_deliverable=Exists(unresolved_deliverables),
+    ).select_related(
         "workspace",
     ).prefetch_related(
         Prefetch(
@@ -123,11 +129,28 @@ def _deliverable_read_queryset(context, task_id):
     scoped_task_ids = tasks_visible_to(context).filter(
         id=task_id,
     ).values("id")
-    reviews = Review.objects.select_related(
+    current_memberships = ProfileMembership.objects.filter(
+        profile_id=context.profile_id,
+        user__is_active=True,
+        is_active=True,
+    ).order_by("joined_at", "id")
+    reviews = Review.objects.annotate(
+        _reviewer_profile_membership_id=Subquery(
+            current_memberships.filter(user_id=OuterRef("reviewer_id")).values("id")[:1],
+        ),
+    ).select_related(
         "deliverable__task__workspace",
     ).order_by("created_at", "id")
+    latest_deliverable = Deliverable.objects.filter(
+        task_id=OuterRef("task_id"),
+    ).order_by("-created_at", "-id").values("id")[:1]
     return Deliverable.objects.filter(
         task_id__in=scoped_task_ids,
+    ).annotate(
+        _latest_deliverable_id=Subquery(latest_deliverable),
+        _uploaded_by_profile_membership_id=Subquery(
+            current_memberships.filter(user_id=OuterRef("uploaded_by_id")).values("id")[:1],
+        ),
     ).select_related(
         "task__workspace",
     ).prefetch_related(
@@ -141,6 +164,13 @@ def _deliverable_read_queryset(context, task_id):
 
 class TaskApiViewMixin(TenantApiViewMixin):
     """Translate workflow conflicts while retaining tenant API conventions."""
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["workspace_access_context"] = getattr(
+            self, "workspace_access_context", None,
+        )
+        return context
 
     def handle_exception(self, exc):
         if isinstance(exc, TaskWorkflowConflict):
@@ -173,7 +203,7 @@ class TaskListView(TaskApiViewMixin, generics.ListAPIView):
             **serializer.validated_data,
         )
         return Response(
-            TaskReadSerializer(task).data,
+            TaskReadSerializer(task, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -215,7 +245,9 @@ class TaskDetailView(TaskApiViewMixin, generics.GenericAPIView):
             raise NotFound() from None
 
     def get(self, request, *args, **kwargs):
-        return Response(TaskReadSerializer(self._get_task()).data)
+        return Response(TaskReadSerializer(
+            self._get_task(), context=self.get_serializer_context(),
+        ).data)
 
     def patch(self, request, *args, **kwargs):
         task = self._get_task()
@@ -228,7 +260,9 @@ class TaskDetailView(TaskApiViewMixin, generics.GenericAPIView):
             task_id=task.id,
             **serializer.validated_data,
         )
-        return Response(TaskReadSerializer(task).data)
+        return Response(TaskReadSerializer(
+            task, context=self.get_serializer_context(),
+        ).data)
 
 
 class TaskActionView(TaskApiViewMixin, generics.GenericAPIView):
@@ -250,7 +284,9 @@ class TaskAssignView(TaskActionView):
             task_id=self.task.id,
             **serializer.validated_data,
         )
-        return Response(TaskReadSerializer(assignment.task).data)
+        return Response(TaskReadSerializer(
+            assignment.task, context=self.get_serializer_context(),
+        ).data)
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -267,7 +303,9 @@ class TaskStartView(TaskActionView):
             workspace_id=self.workspace_access_context.workspace_id,
             task_id=self.task.id,
         )
-        return Response(TaskReadSerializer(task).data)
+        return Response(TaskReadSerializer(
+            task, context=self.get_serializer_context(),
+        ).data)
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -299,7 +337,7 @@ class DeliverableListView(TaskApiViewMixin, generics.ListAPIView):
             **serializer.validated_data,
         )
         return Response(
-            DeliverableReadSerializer(deliverable).data,
+            DeliverableReadSerializer(deliverable, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -335,7 +373,9 @@ class DeliverableReviewView(TaskActionView):
             deliverable_id=deliverable.id,
             **serializer.validated_data,
         )
-        return Response(DeliverableReadSerializer(review.deliverable).data)
+        return Response(DeliverableReadSerializer(
+            review.deliverable, context=self.get_serializer_context(),
+        ).data)
 
 
 @method_decorator(never_cache, name="dispatch")

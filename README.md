@@ -3,7 +3,17 @@
 HustlyTasker uses Django 6.1, Django REST Framework, and PostgreSQL 16, with a
 React/TypeScript frontend consuming the existing SessionAuthentication API.
 
-## Frontend foundation
+## Frontend MVP
+
+HT-FE-P3-04 is **COMPLETE / OWNER REVIEW GATE**. The approved MVP includes account
+lifecycle and the existing Workspace/Task/Review/Comment/Notification flows.
+Invitation UI, Profile Creation and broader membership onboarding remain
+OUT OF CURRENT TASK SCOPE / PENDING OWNER REVIEW, not removed product goals.
+
+Current frontend395/395 and all five real isolated browser suites22/22 PASS;
+typecheck/lint/build, responsive/axe and local non-mutating startup/connectivity
+checks pass. Manual Owner browser, real email delivery, remote CI and production
+remain unverified. No backend/schema change or automatic next task is included.
 
 With the configured Django backend running at127.0.0.1:8000:
 
@@ -13,7 +23,17 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. Profile/Workspace UI is read-only. Same-origin Vite
+Open http://127.0.0.1:5173. Authorized Workspace/Task management, assignment and
+current-assignee Start are implemented; Profile metadata remains read-only.
+Task detail shows revision/Review history, capability-based Deliverable Submit
+and Review decisions, and authorized existing Comment edit/soft-delete actions;
+personal Notifications support feed/count/mark-read. The approved API extension
+keeps mutation services authoritative. Registration, password recovery and the
+protected current-account email-verification page consume existing APIs without
+automatic login or new backend/schema/authentication changes. Historical
+HT-API-FE-P3-03A and HT-FE-P3-03 are complete; current FE04 evidence and its final
+Owner review gate are in HANDOVER. No AI or next task starts automatically.
+Same-origin Vite
 proxy preserves Django session cookies and CSRF; no JWT or parallel backend.
 See [Frontend Guide](documentation/FRONTEND_GUIDE.md) for Node/dependencies,
 routes, configuration, unit/build checks and isolated real browser integration.
@@ -100,76 +120,44 @@ development stays at 32 migrations, 3 Users, 2 Sessions, and zero token rows.
 
 ## Local setup
 
-Prerequisites: Docker Desktop and Python 3.12 with the Windows Python Launcher
-(`py`). Run the commands below from the repository root.
+Use the existing PostgreSQL development service and backend/venv. From
+D:\da\HustlyTasker, terminal1:
 
-1. Create a private environment file:
+```powershell
+.\scripts\start-backend-dev.ps1 -ValidateOnly
+.\scripts\start-backend-dev.ps1 -Check
+.\scripts\start-backend-dev.ps1
+```
 
-   ```powershell
-   Copy-Item .env.example .env
-   ```
+The launcher reads the Git-ignored root .env as literal KEY=value data and
+passes it only to the Python child. It validates all nine required variable
+names without displaying values, refuses production/remote DB, and never
+generates credentials, applies migrations or seeds fixtures. It uses
+backend/venv/Scripts/python.exe and serves loopback8000 with --noreload;
+restart manually after code changes. No repeated27-variable shell setup.
 
-   Fill `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD` in `.env`. Generate two
-   different URL-safe values without storing them in source control:
+The Owner's private .env is now configured. Keep its SECRET_KEY stable and
+retain the existing PostgreSQL credentials. Do not overwrite it, recreate the
+venv/database or change a Docker volume to start development. For a genuinely
+new checkout without a private file, copy .env.example to .env once and fill
+existing local values privately; provisioning a new database is a separate
+explicit setup action. Never put secrets into .env.example or terminal logs.
 
-   ```powershell
-   py -3.12 -c "import secrets; print(secrets.token_urlsafe(64))"
-   py -3.12 -c "import secrets; print(secrets.token_urlsafe(32))"
-   ```
+Terminal2:
 
-   Paste the first output as `DJANGO_SECRET_KEY` and the second as
-   `POSTGRES_PASSWORD`. Keep `.env` as plain, unquoted `KEY=value` lines. Do
-   not add inline comments or whitespace to values; this keeps PowerShell and
-   Docker Compose parsing identical.
+```powershell
+cd D:\da\HustlyTasker\frontend
+npm ci
+npm run dev
+```
 
-   If an existing `postgres_data` Docker volume is in use, keep its current
-   database name, user, and password. Changing Compose variables does not
-   change credentials already initialized inside that volume.
-
-2. Load `.env` into the current PowerShell process before invoking either
-   Docker Compose or Django. This also replaces stale variables inherited by
-   the shell with the values from the selected file.
-
-   ```powershell
-   Get-Content .env | ForEach-Object {
-       $line = $_
-       if (-not [string]::IsNullOrWhiteSpace($line) -and -not $line.TrimStart().StartsWith('#')) {
-           if ($line -notmatch '^([A-Za-z_][A-Za-z0-9_]*)=(\S*)$') {
-               throw 'Use plain, unquoted KEY=value lines without whitespace.'
-           }
-           $value = $matches[2]
-           if ($value.Contains('"') -or $value.Contains("'") -or $value.Contains('#')) {
-               throw 'Do not quote values or add inline comments in .env.'
-           }
-           [Environment]::SetEnvironmentVariable($matches[1], $value, 'Process')
-       }
-   }
-   ```
-
-3. Validate and start PostgreSQL:
-
-   ```powershell
-   docker compose --env-file .env -f docker/docker-compose.yml config --quiet
-   docker compose --env-file .env -f docker/docker-compose.yml up -d postgres
-   ```
-
-4. Create and activate a Python 3.12 virtual environment, then install the
-   pinned dependencies:
-
-   ```powershell
-   py -3.12 -m venv backend/venv
-   .\backend\venv\Scripts\Activate.ps1
-   python -m pip install -r backend/requirements.txt
-   ```
-
-5. Check the backend and start the development server:
-
-   ```powershell
-   Set-Location backend
-   python manage.py check
-   python manage.py migrate
-   python manage.py runserver
-   ```
+Open http://127.0.0.1:5173. Use .\scripts\test-backend-dev.ps1 for the isolated
+launcher guard tests; it does not connect to the database. Full two-terminal
+options, literal file grammar and current connectivity evidence are in
+[FRONTEND_GUIDE.md](documentation/FRONTEND_GUIDE.md). The automated local smoke
+used Django8000 and a temporary Vite5174 to avoid integration-test port5173;
+manual Owner browser verification is still pending. Production, real email
+delivery and remote CI remain unverified.
 
 The public API liveness endpoint is
 `http://127.0.0.1:8000/api/health/`. A successful `GET` returns

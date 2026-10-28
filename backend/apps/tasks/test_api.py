@@ -31,6 +31,8 @@ class TaskApiTests(APITestCase):
         "priority",
         "deadline",
         "active_assignment",
+        "can_start",
+        "can_submit",
         "created_at",
         "updated_at",
     }
@@ -42,6 +44,8 @@ class TaskApiTests(APITestCase):
         "status",
         "uploaded_by_profile_membership_id",
         "review",
+        "can_approve",
+        "can_request_changes",
         "created_at",
         "updated_at",
     }

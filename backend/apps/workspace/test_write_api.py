@@ -36,6 +36,8 @@ class WorkspaceWriteApiTests(APITestCase):
     workspace_member_fields = {
         "id",
         "profile_membership_id",
+        "display_label",
+        "is_assignable",
         "role",
         "is_active",
         "joined_at",

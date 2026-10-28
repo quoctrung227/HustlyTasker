@@ -1504,3 +1504,60 @@ Frontend state/caching never grants tenant authority; existing backend checks
 remain final. No Project/AI/workflow/role decision is reopened or approved.
 HT-FE-P3-01 implementation complete, pending Owner review; HT-FE-P3-02 is a
 proposal only. See FRONTEND_GUIDE/design master/HANDOVER for actual evidence.
+
+---
+
+# HT-FE-P3-04 Owner scope and local configuration — ACCEPTED 2026-10-27
+
+The Owner explicitly keeps this MVP slice to account lifecycle and the existing
+Workspace/Task/Deliverable/internal Review/Comment/Notification journeys.
+Invitation UI, Profile Creation UI, a Workspace membership candidate API and
+remaining membership onboarding/management are OUT OF CURRENT TASK SCOPE /
+PENDING OWNER REVIEW. This sequences future work; it does not remove those
+features from the target product or original requirements. No new backend API,
+role, model, migration or change to existing workflow is authorized by FE04.
+
+Development configuration is supplied privately once with a stable SECRET_KEY
+and existing PostgreSQL credentials. The PowerShell launcher loads a Git-ignored
+repository-local file into the existing Python child process; it never generates
+credentials, changes security settings or runs migrations/fixtures at startup.
+On resume, the provided values were found in .env.example rather than .env.
+The exact configuration was preserved into a new ignored .env and example
+secret fields blanked, without printing or changing those values. Do not
+overwrite/recreate the resulting private file on future sessions.
+
+Real persistent-development checks are non-mutating. Business/UI mutations and
+test email delivery remain inside owned isolated PostgreSQL/browser resources.
+AI readiness is design only; Project remains PENDING OWNER DECISION. Stop at
+OWNER REVIEW GATE after the accepted FE04 checks; no automatic next task.
+
+---
+
+# HT-AI-P4-01 scope authorization and pending design — 2026-10-28
+
+**ACCEPTED scope from the Owner's current instruction:** design/documentation
+only for Smart Task Generator and Feedback Analyzer. Retain Django/DRF/PostgreSQL,
+React, SessionAuthentication/CSRF, Profile→Workspace→Task→Subtask, existing RBAC
+and Task/Deliverable/internal Review/Comment/Notification services. AI proposes;
+human review and a separate confirmation precede any Task creation. Analyzer
+does not decide Review or mutate business records. No runtime edits, SDK, key,
+model API call, billing, .env read, database access or migration in this task.
+The scope does not approve P4-02 implementation, Project or deferred onboarding.
+
+**PROPOSED — PENDING OWNER APPROVAL, not accepted product/security rules:**
+[AI_ARCHITECTURE_DESIGN.md](AI_ARCHITECTURE_DESIGN.md) records one shared future
+AI app/adapter, fixture-first and synthetic-only unpaid demo, private-data provider
+review, versioned strict JSON/API proposals, manager/reviewer feature gates,
+durable proposal/idempotency/usage reservation, atomic confirmation through
+existing create_task, preview expiry and bounded costs/concurrency/timeouts.
+There is no existing durable AI schema; a detailed additive migration/backfill/
+retention/lock design needs approval before implementation or persistent rollout.
+
+AI-D01–AI-D10 in design section18 are the pending decisions: provider/data mode;
+AI authority; app/persistence; expiry/physical retention; numeric limits; strict
+plan/atomic batch; ambiguous dates; Analyzer source/citation scope; operator
+governance; private-data terms/live evaluation. They are not APPROVED by this
+entry. Official pricing/policy snapshot is dated2026-10-28 and must be rechecked
+before live use; no account quota, model quality or provider integration claim.
+Earlier approved tenant/ownership/soft-delete/migration/workflow decisions remain
+effective. Stop at OWNER REVIEW GATE; do not begin the proposed next slices.

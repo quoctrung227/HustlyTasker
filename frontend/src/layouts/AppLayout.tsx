@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
-import { BuildingsIcon, SquaresFourIcon, SignOutIcon, ListIcon, ArrowUpRightIcon, CaretRightIcon } from '@phosphor-icons/react'
+import { BellIcon, BuildingsIcon, SquaresFourIcon, SignOutIcon, ListIcon, ArrowUpRightIcon, CaretRightIcon, UserCircleIcon } from '@phosphor-icons/react'
 import { Brand } from '../components/brand'
 import { Button, Dialog } from '../components/ui'
 import { useAuth } from '../features/auth/AuthProvider'
+import { NotificationMenu } from '../features/notifications/NotificationHub'
 
 function Navigation({ close }: { close?: () => void }) {
   return <nav className="navigation" aria-label="Điều hướng chính">
     <p className="navigation__label">KHÔNG GIAN CỦA BẠN</p>
     <NavLink to="/dashboard" onClick={close}><SquaresFourIcon aria-hidden="true" />Tổng quan</NavLink>
     <NavLink to="/profiles" onClick={close}><BuildingsIcon aria-hidden="true" />Tổ chức</NavLink>
+    <NavLink to="/notifications" onClick={close}><BellIcon aria-hidden="true" />Thông báo</NavLink>
+    <NavLink to="/account" onClick={close}><UserCircleIcon aria-hidden="true" />Tài khoản</NavLink>
   </nav>
 }
 
@@ -19,7 +22,7 @@ export function AppLayout() {
   const location = useLocation()
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || 'Bạn'
   const initials = name.trim().slice(0, 1).toLocaleUpperCase('vi-VN')
-  const section = location.pathname.startsWith('/profiles') ? 'Tổ chức' : 'Tổng quan'
+  const section = location.pathname.startsWith('/profiles') ? 'Tổ chức' : location.pathname === '/notifications' ? 'Thông báo' : location.pathname === '/account' ? 'Tài khoản' : 'Tổng quan'
   return <div className="app-shell">
     <a href="#main-content" className="skip-link">Đến nội dung chính</a>
     <aside className="sidebar" aria-label="Thanh bên">
@@ -38,12 +41,13 @@ export function AppLayout() {
           <span className="topbar__home">Không gian làm việc</span><CaretRightIcon aria-hidden="true" /><span>{section}</span>
         </div>
         <div className="account">
+          {user && <NotificationMenu key={user.id} userId={user.id} />}
           <span className="avatar" aria-hidden="true">{initials}</span>
           <span className="account__name">{name}</span>
           <Button variant="ghost" className="logout-button" onClick={() => void signOut()}><SignOutIcon aria-hidden="true" /><span>Đăng xuất</span></Button>
         </div>
       </div>
-      <main id="main-content" className="content" tabIndex={-1}><Outlet /></main>
+      <main id="main-content" className="content" tabIndex={-1}><Outlet context={{ currentUserId: user?.id || '' }} /></main>
       <footer className="app-footer"><span>HustlyTasker</span><span>Đồng hành cùng nhóm của bạn <ArrowUpRightIcon aria-hidden="true" /></span></footer>
     </div>
     <Dialog open={menuOpen} onClose={() => setMenuOpen(false)} title="Điều hướng" className="mobile-drawer"><Brand /><Navigation close={() => setMenuOpen(false)} /></Dialog>

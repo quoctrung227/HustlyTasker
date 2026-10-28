@@ -8,6 +8,9 @@ import { AppLayout } from '../layouts/AppLayout'
 import { LoginPage, SessionState } from '../pages/auth'
 import { DashboardPage } from '../pages/overview'
 import { ProfileDetailPage, ProfilesPage, WorkspaceDetailPage, WorkspacesPage } from '../pages/tenants'
+import { TaskDetailPage, TasksPage } from '../pages/tasks'
+import { NotificationsPage } from '../pages/notifications'
+import { AccountPage, ForgotPasswordPage, RegisterPage, ResetPasswordPage } from '../pages/account-security'
 
 function ProtectedRoute() {
   const auth = useAuth()
@@ -35,13 +38,20 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, { faile
 export function AppRoutes() {
   return <Routes>
     <Route path="/login" element={<LoginPage />} />
+    <Route path="/register" element={<RegisterPage />} />
+    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+    <Route path="/reset-password" element={<ResetPasswordPage />} />
     <Route element={<ProtectedRoute />}><Route element={<AppLayout />}>
       <Route index element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/account" element={<AccountPage />} />
+      <Route path="/notifications" element={<NotificationsPage />} />
       <Route path="/profiles" element={<ProfilesPage />} />
       <Route path="/profiles/:profileId" element={<ProfileDetailPage />} />
       <Route path="/profiles/:profileId/workspaces" element={<WorkspacesPage />} />
       <Route path="/profiles/:profileId/workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
+      <Route path="/profiles/:profileId/workspaces/:workspaceId/tasks" element={<TasksPage />} />
+      <Route path="/profiles/:profileId/workspaces/:workspaceId/tasks/:taskId" element={<TaskDetailPage />} />
     </Route></Route>
     <Route path="/403" element={<StatusPage forbidden />} />
     <Route path="/404" element={<StatusPage />} />

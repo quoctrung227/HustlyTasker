@@ -1531,3 +1531,20 @@ denied/unimplemented until its own task. An unknown row discovered in a target
 database remains an environment-specific mapping blocker to escalate with
 evidence, never permission to invent a tenant mapping.
 
+## HT-API-FE-P3-02A — Read-only capability/roster contract (2026-10-26)
+
+This Owner-authorized addition exposes existing permissions; it changes no role
+or workflow decision. TaskRead.can_start is bound to authenticated User and the
+resolved tenant context, active Editor membership/current assignment and
+ASSIGNED state. The flag grants no authority: locked Start service remains the
+source of truth for each POST. Platform staff and Profile/Workspace management
+roles do not become executors through this field.
+
+The existing manager-only effective roster adds display_label and is_assignable,
+with full-name or safe membership-prefix label and no email/username fallback.
+Eligibility mirrors active Profile MEMBER + Workspace MEMBER/Editor and active
+User/tenant scopes. Visibility/pagination stay unchanged; Owner/Admin/Viewer
+rows never imply eligibility. No general User directory or cross-tenant identity
+API is opened. Older no-PII attribution contracts remain unchanged elsewhere;
+this specifically approved manager roster exposes only the minimal display label.
+

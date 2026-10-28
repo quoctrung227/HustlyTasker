@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [ValidateRange(1024,65535)]
-    [int]$BackendPort = 8001
+    [int]$BackendPort = 8001,
+    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security')]
+    [string]$Suite = 'foundation'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -26,6 +28,20 @@ $htCreatedHttpNetwork = $false
 $htCreatedPg = $false
 $htCreatedServer = $false
 $htServerReady = $false
+$htSpec = switch ($Suite) {
+    'account-security' {'e2e/account-security.spec.ts'}
+    'acceptance' {'e2e/mvp-acceptance.spec.ts'}
+    'collaboration' {'e2e/collaboration.spec.ts'}
+    'work-management' {'e2e/work-management.spec.ts'}
+    default {'e2e/real-api.spec.ts'}
+}
+$htArtifactTask = switch ($Suite) {
+    'account-security' {'HT-FE-P3-04'}
+    'acceptance' {'HT-FE-P3-04'}
+    'collaboration' {'HT-FE-P3-03'}
+    'work-management' {'HT-FE-P3-02'}
+    default {'HT-FE-P3-01'}
+}
 
 function Invoke-CheckedDocker([string[]]$Arguments) {
     & docker @Arguments
@@ -179,7 +195,7 @@ try {
     $env:HT_FRONTEND_TEST_PASSWORD = [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N') + 'Az!9'
     $env:HT_FRONTEND_TEST_BACKEND_CONTAINER = $htServer
     $env:HT_FRONTEND_TEST_RUN_ID = $htRun
-    $env:HT_FRONTEND_SCREENSHOT_DIR = Join-Path $htRepository ".local_backups/HT-FE-P3-01/screenshots/$htRun"
+    $env:HT_FRONTEND_SCREENSHOT_DIR = Join-Path $htRepository ".local_backups/$htArtifactTask/screenshots/$htRun"
     $null = New-Item -ItemType Directory -Path $env:HT_FRONTEND_SCREENSHOT_DIR
     if (-not $env:PLAYWRIGHT_CHANNEL) {
         if (Test-Path -LiteralPath 'C:\Program Files\Google\Chrome\Application\chrome.exe') {$env:PLAYWRIGHT_CHANNEL='chrome'}
@@ -187,7 +203,7 @@ try {
     }
     $env:DJANGO_API_TARGET = "http://127.0.0.1:$BackendPort"
 
-    Write-Output "HustlyTasker isolated frontend integration run: $htRun"
+    Write-Output "HustlyTasker isolated frontend integration run: $htRun; suite=$Suite"
     Invoke-CheckedDocker @('network','create','--internal','--label',$htLabelRun,'--label',$htLabelRepo,$htNetwork)
     $htCreatedNetwork = $true
     Assert-OwnedNetwork $htNetwork $true
@@ -239,7 +255,9 @@ try {
     $htServerReady = $true
     Push-Location (Join-Path $htRepository 'frontend')
     try {
-        & npm.cmd run test:integration
+        # Separate fresh runtimes preserve the real login throttle and keep
+        # each suite's fixture mutations independent, without changing Django.
+        & npm.cmd run test:integration -- $htSpec
         $htExit = $LASTEXITCODE
         if ($null -eq $htExit) {throw 'Frontend test process exit code unavailable.'}
         Write-Output "FRONTEND_PLAYWRIGHT_EXIT_CODE=$htExit"

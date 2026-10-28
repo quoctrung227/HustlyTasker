@@ -1,5 +1,5 @@
 import { apiClient, invalidResponse } from './client'
-import type { LoginInput, Page, Profile, User, UserEnvelope, Workspace } from './types'
+import type { LoginInput, Page, Profile, RegisterInput, User, UserEnvelope, Workspace } from './types'
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -56,6 +56,10 @@ export const queryKeys = {
 }
 
 export const authApi = {
+  async register(input: RegisterInput, signal?: AbortSignal): Promise<User> {
+    // Registration creates an account only; it neither logs in nor rotates CSRF.
+    return asUser(await apiClient.request<unknown>('auth/register/', { method: 'POST', body: input, signal }))
+  },
   async me(signal?: AbortSignal): Promise<User> {
     return asUser(await apiClient.request<unknown>('auth/me/', { signal }))
   },

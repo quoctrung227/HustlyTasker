@@ -1,6 +1,604 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-10-26 — HT-FE-P3-01 IMPLEMENTATION COMPLETE / OWNER REVIEW GATE
+## Current checkpoint — 2026-10-28 — HT-AI-P4-01 DESIGN COMPLETE
+
+**DESIGN COMPLETE — PENDING OWNER APPROVAL. AI implementation: NOT STARTED.**
+Owner authorized documentation/design only. Branch main, HEAD e083060; all
+pre-existing dirty FE02/API/FE03/API03A/FE04 work is preserved. No runtime,
+settings, model, migration, frontend, private environment or database change.
+No .env read, database connection, SDK installation, model API call, key/account/
+billing setup or cost. No disposable resources were created or need cleanup.
+
+Primary deliverable: [AI_ARCHITECTURE_DESIGN.md](AI_ARCHITECTURE_DESIGN.md),
+20 sections covering both use cases, shared adapter/service, strict JSON/API
+proposals, privacy/provider/cost review, threat matrix, UX, tests and roadmap.
+Source verified LOW/MEDIUM/HIGH/URGENT, nullable aware deadlines, root depth0
+plus at most3 child edges, no estimated_duration, Project or durable AI stores.
+Existing tenant predicates, create_task locks/validation/PENDING/audit and
+independent Deliverable/Review/Comment/Notification workflow are unchanged.
+
+Proposed flow: generate a bounded plan, human preview/edit, separate confirmation,
+fresh tenant/role checks, atomic calls to existing Task services. Analyzer uses
+selected authorized text/citations and has no business mutation. Every stored
+analysis GET/replay must recheck current readable/nondeleted sources; stale data
+must not return its old payload. Confidential fingerprints stay server-side as
+versioned HMAC; public provenance uses opaque revision. Shared API client will
+need a backward-compatible AI error extension in a future approved code slice.
+
+All provider/model choices, feature authority, numeric caps, new app/persistence,
+expiry/physical retention and live-data policies are PROPOSED, not APPROVED.
+Suggested defaults: disabled, labeled deterministic fixtures first; Gemini
+gemini-3.5-flash-lite for server-curated synthetic-only live demo if eligible;
+GPT-6 Luna or Gemini Standard Paid for private data only after contract/privacy/
+account review and quality evaluation. Official public sources accessed2026-10-28
+are linked in the design. No account quota, latency, Vietnamese quality or live
+integration is verified. Unpaid mode cannot accept business text by trusting a
+client checkbox. No automatic model/provider/paid fallback.
+
+Durable proposal/invocation/usage/idempotency requires a separately approved
+additive schema and retention/lock design. Unique request scope+key+body and
+single-confirmed proposal protect replay across keys; no network in DB locks.
+Budget and business lock families/implicit FK locks require concurrency tests.
+Expired unconfirmed preview does not redispatch. Committed same-key confirmation
+can recover existing IDs after fresh authorization within retained-ledger policy;
+it never creates the batch again. LocMemCache is not a cross-worker budget guard.
+
+UI UX Pro Max full skill/master and focused UX/React searches were applied to
+design text: Brief→Preview/Edit→Confirm, inline selected-feedback analysis,
+accessible pending/error/focus states and keyboard Move up/down alternative.
+No React component or new design system was created.
+
+Current documentation verification (not application tests):
+
+- Independent provider and source/security/UX reviews completed; findings above
+  incorporated. Source/requirement traceability and proposed-only labels checked.
+- Five JSON blocks parsed; two schemas and three synthetic examples checked
+  against every keyword used via an in-memory subset validator, plus sample
+  DAG/depth/citations. This is not a full JSON Schema engine or runtime AI test.
+- Cost arithmetic checked: at2000 input/1000 total billable output tokens,
+  Gemini Standard estimates0.31/3.10/31USD and OpenAI Standard0.07/0.70/7USD
+  for100/1000/10000 requests. These exclude taxes/other listed costs, not invoices.
+- 20 local Markdown links checked, no missing targets. Runtime path set and all
+  209 SHA-256 hashes equal the task-start baseline. Only8 documentation files
+  changed. Normal git diff --check exit0; CRLF conversion notices are harmless.
+- Optional Python JSON Schema engine availability probe could not run: the
+  existing Windows venv points at a missing base Python312 executable. Nothing
+  was recreated or repaired; this is outside the design-only scope. The in-memory
+  documentation validation above ran successfully without installing packages.
+- No backend/frontend/Playwright tests rerun. Historical FE04395/22/13 and
+  backend485 remain baseline only. Development35 migrations/3 Users/2 Sessions/
+  0 business rows is historical, not freshly inventoried in this task.
+
+Files changed by THIS task only: AI_ARCHITECTURE_DESIGN.md (new), HANDOVER.md,
+PROGRESS.md, PROJECT_ROADMAP.md, REQUIREMENT_STATUS.md, CHANGELOG.md,
+PROJECT_CONTEXT.md and DECISION_LOG.md. Existing API_DOCUMENTATION, database/
+RBAC docs, design master and every runtime dirty/untracked file are preserved.
+
+Pending: Owner review AI-D01–AI-D10 in design section18 (provider/data mode,
+authority, durable storage, expiry/retention, caps, strict plan/atomic batch,
+dates, Analyzer scope, operator policy and private-data/live evaluation).
+No design blocker remains; live account policy/quality and future schema need
+approval before implementation. Project and onboarding retain separate gates.
+
+Exact next safe step: **STOP AT OWNER REVIEW GATE.** Proposed next work is
+P4-02A contracts/fixture and detailed app/schema/retention/locking review, only
+after explicit code/scope approval. Then separately approved Generator backend/
+UI slices, Analyzer and hardening. Do not infer approval from DESIGN COMPLETE;
+do not call a provider, apply migrations or begin a new task automatically.
+
+---
+
+## Historical checkpoint — 2026-10-27 — HT-FE-P3-04 COMPLETE / OWNER REVIEW GATE
+
+Owner approves MVP completeness audit, bounded missing frontend using existing
+APIs, cohesive real UI acceptance and safe PowerShell local startup. Preserve
+all existing main/e083060 dirty work. No backend/schema/migration/business-rule/
+auth architecture change, persistent business fixtures, AI/Project or next task.
+
+Owner decisions now explicit: MVP is account lifecycle plus current Workspace/
+Task/Review/Comment/Notification. Invitation UI, Profile Creation, member-candidate
+API and remaining membership onboarding/management are OUT OF CURRENT TASK SCOPE
+/ PENDING OWNER REVIEW, retained as future product requirements. Do not add them.
+
+DONE source before resume: new account pages/contracts/tests, registration and
+login links, personal account navigation; safe startup launcher+guard tests;
+completeness/AI design notes; two real browser specs and isolated mailbox bridge.
+No duplicate implementation. Existing Workspace/Task/collaboration and five hints
+remain. Historical485 backend/356 frontend/browser7+7+6 are baseline only.
+DONE during resume: corrected2 unsupported test-only ByRoleOptions in App tests;
+corrected acceptance test login expectation to respect legitimate return route,
+then navigate via real sidebar. Neither change weakens application authorization.
+
+Current frontend395/395 PASS14files15.94s; TypeScript0, Biome52files0,
+productionbuild6.65s0 (JS479.99kB/gzip139.09kB,CSS39.06kB/gzip11.00kB).
+Actual retained native-process exits and paired logs verify. Initial failed
+typecheck/acceptance results are retained, not relabelled PASS.
+Real isolated acceptance1/1 PASS43.6s, run6a1ec11fb62741aabcc330571015c828:
+Task and Subtask creation; parent Task assignment/Start/Submit/changes/resubmit/
+approve, comments/read-notification/logout+different User all through React.
+The child remains PENDING, proving no automatic status cascade. Separately labeled negative
+CSRF/replay/old/self/tenant API probes; axe0 four viewports. Account-security1/1
+PASS22.4s, run77a73580faf34927b8970208eca6f658: real UI register/no auto-login,
+verification through locmem delivery, neutral reset requests, reset, old-session
+expiry/replay/old-password denial and new-password login. All native launcher/
+Playwright/backend exits0 and owned DB/resources cleanup verified. Real email
+delivery NOT VERIFIED. Final real browser verification totals22/22 across5 suites:
+
+| Suite | Result | Run ID |
+|---|---|---|
+| Cohesive MVP UI acceptance | 1/1 PASS43.6s | 6a1ec11fb62741aabcc330571015c828 |
+| Account lifecycle UI | 1/1 PASS22.4s | 77a73580faf34927b8970208eca6f658 |
+| Collaboration | 7/7 PASS1.2m | 8a940dabeedc41ceaf63b8669f461b28 |
+| Workspace/Task/Start | 7/7 PASS1.0m | e1470330e0904f9d92e5254324892455 |
+| Auth/CSRF/tenant | 6/6 PASS36.3s | 5d6f2f14dbbf4829ad54c0d054584d81 |
+
+All actual native launcher/Playwright/backend exits0, Django check/model-drift/
+full migration chain and owned DB/container/network cleanup verified. Successful
+Task and account mutations above are actual React actions; direct negative API
+probes and fixture setup are labeled separately. Missing CSRF, nonassignee,
+Viewer, self-review, old revision, wrong-state/replay, tenant IDOR, revoked access,
+archived contexts and session expiry keep existing behavior. Account tokens are
+issued by unchanged services, delivered to locmem and consumed through a guarded
+container-only mailbox helper into Node memory; no fake API or token logging.
+No real provider delivery is inferred from this adapter.
+
+UI UX Pro Max full skill/master and actual focused authentication/navigation/
+async-error searches were applied to paste/autocomplete, visible labels, linked
+focused safe errors, pending/abort and native focus behavior. Existing teal/
+neutral tokens, typography/layout/components stay unchanged. Axe WCAG2/2.1AA0
+violations, no horizontal overflow and keyboard/focus/dialog checks pass at375/
+768/1440 and812x375 landscape. New acceptance4/account12 screenshots plus current
+regression PNGs retained in ignored run folders. Empty Register375, Reset812 and
+completed Task1440 PNGs visually inspected; populated secrets are never captured.
+No interactive manual browser claim. Final frontend tests include the final
+acceptance-spec fix (source predates final TypeScript/Biome/build verification).
+
+Local configuration update resolved: Owner's two configured values were actually
+in .env.example, with no root .env. Root preserved the exact values into a NEW
+Git-ignored root .env and blanked only example secret fields; no generated or
+changed credential and no value printed. Do not overwrite/recreate this .env.
+ValidateOnly0 and existing venv Python3.12.5 Django check0 PASS. Read-only Django
+connection to PostgreSQL16.14/hustlytasker_db PASS, no pending migration;35 records,
+Users3/Sessions2/all business-token-Notification-Audit0, metadata92/23/7 unchanged.
+Actual Django8000 and Vite5174 startup/proxy smoke PASS helperexit0: direct/proxy
+health and CSRF bootstrap200, anonymous me403, profiles403, register OPTIONS200.
+No persistent login or unsafe request. Token/cookies not printed or stored in
+logs. Controlled child-server stops exit-1 (intentional termination), not a claim
+of graceful server exit0. Backend connection and smoke evidence are ignored in
+.local_backups/HT-FE-P3-04/. Existing venv is not broken; sandbox103 is access.
+No credential blocker remains. Manual Owner browser/real email/remote CI/production
+remain unverified. Final readonly Django inventory again matches before smoke:
+all27 public-table counts identical,35 migration records/no pending migrations,
+3 Users/2 Sessions/all business-token-Notification-Audit0. No persistent business
+or authentication writes occurred. Final launcher guard13/13 PASS/native0;
+configuration validation, actual Django check and read-only DB helper each exit0.
+
+Root owns docs, overall security/connectivity/read-only development verification.
+Agents own scripts/start-backend-dev.ps1+tests, bounded account lifecycle frontend,
+and isolated acceptance spec/launcher selection. All must read AGENTS/current
+source; frontend uses full UI UX Pro Max/master and actual focused searches.
+All144 protected backend/model/service/migration/config/harness/package hashes
+match preflight; no model/schema/migration/backend-application/dependency change.
+Full backend485/485 is historical API03A baseline, NOT rerun/relabelled in FE04.
+No owned frontend test containers/networks or local smoke servers remain.
+Main/HEAD e083060 and earlier dirty code preserved; no commit/push/reset/revert,
+venv rebuild, database/volume reset, production action or automatic migration.
+
+Current task files: NEW frontend/src/pages/account-security.tsx+test and services/
+api/account-security.ts+test; App.tsx/App.test.tsx, AppLayout.tsx, pages/auth.tsx,
+services/api/client.ts/queries.ts/types.ts; NEW e2e/mvp-acceptance.spec.ts and
+account-security.spec.ts; scripts/frontend_integration.py and existing frontend
+launcher; NEW scripts/start-backend-dev.ps1 and test-backend-dev.ps1. Test mailbox,
+fixtures and suite selection are test infrastructure, not application backend.
+Root ignored .env contains only preserved Owner configuration; .env.example has
+blank secret fields. Edit only private .env for local credentials going forward.
+Docs: HANDOVER/PROGRESS/ROADMAP/REQUIREMENT_STATUS/CHANGELOG/PROJECT_CONTEXT/
+FRONTEND_GUIDE/API_DOCUMENTATION/MASTER/README/DECISION_LOG and NEW
+FRONTEND_MVP_ACCEPTANCE.md. AI readiness, JSON/tenant/hierarchy/human-confirmation
+dependencies and SRS/HLD/Project discrepancies are design-only notes there.
+
+DONE: approved MVP audit, account UI, cohesive acceptance/regressions, startup,
+connectivity, privacy/source/data checks and affected documentation. PARTIAL/TODO/
+BLOCKED within approved implementation: none. OUT OF SCOPE: deferred onboarding,
+Project, AI implementation and other business domains. AUTOMATED VERIFIED /
+MANUAL OWNER CHECK PENDING. REAL EMAIL DELIVERY NOT VERIFIED. Remote CI and
+production are unverified; this is not an all-product/production-ready claim.
+
+Source baseline, initial dirty inventory, paired logs/native exit JSON, aggregate
+browser_final_evidence.json, startup/local connectivity/read-only/source safety
+evidence are ignored under .local_backups/HT-FE-P3-04/. Screenshots for the two
+new suites use its screenshots/<run-id>/; regression screenshots retain existing
+FE01/FE02/FE03 runner paths. Exact safe continuation: Owner reviews the completed
+MVP and runs the two-terminal procedure in FRONTEND_GUIDE with the existing .env.
+Do not overwrite credentials or rerun implementation/migrations. Recommended
+next separately approved task: review/design AI provider/API/JSON/permission/cost
+contract using the readiness notes; Project and onboarding keep their own gates.
+STOP at OWNER REVIEW GATE; no AI/onboarding/Project/next task starts automatically.
+
+---
+
+## Historical checkpoint — 2026-10-27 — HT-API-FE-P3-03A COMPLETE / OWNER REVIEW GATE
+
+**HT-FE-P3-03: IMPLEMENTATION COMPLETE.** All three former core API gaps are
+resolved and current acceptance checks pass. No next task is authorized.
+
+Owner now approves resolving the three FE03 gaps through additive read-only
+capabilities and real frontend mutations. Preserve all existing dirty FE02/
+API02A/FE03 work on main/e083060; no reset/commit/schema/migration/auth/RBAC or
+service-workflow change, no persistent development fixtures/writes.
+
+Source verified before code: Task.can_submit uses current active assigned Editor,
+WORKING and no unresolved PENDING/SUBMITTED Deliverable. Deliverable.can_approve/
+can_request_changes use manager authority, Task.REVIEW, SUBMITTED, latest by
+created_at DESC/id DESC (not numeric revision), non-self uploader and no Review
+row. Comment.can_edit/delete require current commenter authority, nondeleted
+row, author for edit and author-or-manager for delete. Tombstone delete hint is
+false even though the unchanged service keeps repeat-delete idempotent.
+All fields bind authenticated request/verified tenant context and fail closed;
+mutation services remain authoritative under existing locks. No new endpoint.
+
+DONE before resume: backend serializers/query context/annotations,37 new security
+tests, frontend required guards/Submit/Approve/RequestChanges forms and server-
+based old-comment controls. These parts were preserved, not rewritten on resume.
+DONE during resume: equivalent-path query-growth test correction, real UI browser
+flows, final runtime verification, independent source review and documentation.
+Five exact field names approved: can_submit/can_approve/can_request_changes/
+can_edit/can_delete. UI forms reuse existing master/native dialogs; no redesign.
+Targeted PostgreSQL95/95 PASS13.020s, runa718df8ac97a4813aa6c2aebfff0ccd8:
+native launcher/Python exits0 and owned DB cleanup verified. Initial94/95 run
+failed a query comparison between all-REJECTED versus eligible-SUBMITTED paths;
+test now compares the same eligible role path, retaining strict +1 query-growth
+bound. No service change; initial failed logs retained separately.
+Frontend356/356 PASS12files41.49s; actual native typecheck/lint46/build6.69s exits0.
+JS465.75kB/gzip135.48kB, CSS39.06kB/gzip11.00kB. No dependency/lock change.
+Full isolated PostgreSQL485/485 PASS231.054s, run3b2abcd913324644b6240bfc49ca1c18.
+Actual native launcher/Python exits0, Django OK and owned DB cleanup verified.
+pip check, Django check, makemigrations --check --dry-run, graph/history/model
+drift and full migration chain all PASS in isolated PostgreSQL. Existing
+Authentication/account security/Invitation/RBAC/Task/hierarchy/Review/Notification
+regressions are included; historical448 is not used as current evidence.
+
+Real isolated Django/PostgreSQL/Chrome browser results on final source:
+
+| Suite | Result | Run ID |
+|---|---|---|
+| Collaboration | 7/7 PASS,1.3m | ff6abc6459954d6d83f47ec94c426a62 |
+| Workspace/Task/Start | 7/7 PASS,1.1m | 3074e74939f84f3b8039665dab7196ba |
+| Auth/CSRF/tenant | 6/6 PASS,43.0s | c125145b536b480badeccfba582f4c90 |
+
+All actual native launcher/Playwright/backend exits0, owned DB/container/two-
+network cleanup verified. Browser collaboration now performs Submit → Request
+Changes → resubmit → Approve through React with a separate reviewer context,
+plus independent first-submission approval. Task state is read from backend,
+never overridden by client. Existing Comment reload/navigation/page2 edit and
+author deletion, manager moderation, Viewer denial, missing CSRF403, stale
+revision409, cross-user Notification404, real events/read count/navigation,
+revoked target and session-expiry cleanup all pass. Negative API assertions and
+fixture setup are labeled separately; they are not substitutes for UI mutations.
+The collaboration spec changed after initial checks, so final TypeScript/Biome
+were repeated on the final E2E source: both native exits0,46 linted files.
+
+UI UX Pro Max full instructions and existing teal/neutral master were reused.
+Actual focused UX error-summary/modal-focus and React async-error searches
+informed linked errors, caught failures, pending/abort, native dialogs and focus.
+No new theme, dependency, upload/storage or component framework. Axe WCAG2/2.1AA
+0 violations, no horizontal overflow, native-dialog keyboard/focus/Escape and
+reduced-motion checks pass at375/768/1440 and812x375 landscape.24 collaboration
+screenshots retained under .local_backups/HT-FE-P3-03/screenshots/<run-id>/;
+Submit375/RequestChanges812/Approve1440 PNGs were visually inspected. No claim of
+interactive manual browser review, production, real email or remote CI testing.
+
+Final readonly development identity verified again: original
+hustlytasker_postgres, loopback127.0.0.1:5432/docker_postgres_data,
+PostgreSQL16.14/hustlytasker_db.35 migrations,3 Users,2 Sessions; all checked
+business/token/Notification/Audit rows0, metadata23 content types/92 permissions/
+7 Admin logs unchanged. No persistent login/fixture/write/migration/restore.
+All137 protected backend/model/service/migration/config/harness hashes unchanged;
+no new migration/model or dependency/lock change. No owned backend/frontend test
+containers/networks remain. Main/e083060 and all previous dirty work preserved;
+no commit/push/reset, venv recreation, production action or infrastructure change.
+
+Current task code files: backend/apps/tasks/{serializers.py,views.py,
+comment_serializers.py,comment_views.py,test_api.py,test_comments.py,
+NEW test_collaboration_capabilities.py}; frontend/src/features/collaboration/
+{TaskCollaboration.tsx,TaskCollaboration.test.tsx,NEW CollaborationActions.tsx,
+NEW CollaborationActions.test.tsx}; services/api/{collaboration.ts+test,
+work-management.ts+test}; TaskForms.test.tsx and pages/tasks.test.tsx typed fixture
+updates; frontend/e2e/collaboration.spec.ts. Other pre-existing dirty source,
+including Workspace/API02A/FE03 shell/Notifications/test infrastructure, is kept.
+Affected docs: HANDOVER,PROGRESS,ROADMAP,REQUIREMENT_STATUS,CHANGELOG,CONTEXT,
+API_DOCUMENTATION,FRONTEND_GUIDE,FE03_CONTRACT_MATRIX,MASTER and README. Schema,
+RBAC and accepted architecture decisions have no new change in this task.
+Paired logs/native exit JSON/source baseline/final readonly inventory/safety
+evidence live ignored under .local_backups/HT-API-FE-P3-03A/.
+
+DONE: all source, security/runtime/UI/browser checks and documentation. PARTIAL/
+TODO/BLOCKED within this approved task: none. Limits: no separate Deliverable
+edit/delete/upload API (new revision uses existing workflow); no real email,
+production, remote CI or AI integration verified or added. Notification/Review
+transaction policy and locked service authorization remain unchanged.
+Exact safe continuation: Owner reviews this completed extension and FE03 closure.
+Do not rerun implementation/migrations or start another task automatically.
+Suggested next work for separate approval is SRS/HLD and Project architecture
+review, reconciling optional cross-month Profile/Client Project ownership; Project
+remains PENDING OWNER DECISION in PROJECT_ARCHITECTURE_REVIEW.md. No Project/AI/
+frontend domain starts before a new approved scope. STOP at OWNER REVIEW GATE.
+
+---
+
+## Historical checkpoint — 2026-10-26 — HT-FE-P3-03 PARTIAL — API GAP / OWNER REVIEW GATE
+
+Owner authorizes frontend Deliverable/Review/Comment/Notification UI only.
+Read AGENTS/HANDOVER/current docs/source; preserve all dirty FE02/API02A work on
+main/e083060. No backend/model/migration/auth/security change or persistent
+development writes. Existing review gate superseded only for this FE03 scope.
+
+Before code, verified matrix is documentation/FE03_CONTRACT_MATRIX.md. Existing
+Deliverable/Review reads, Comment creation/manager moderation and personal
+Notification feed/count/read/navigation are supported. GAP: no can_submit or
+general self-membership mapping in WORKING; Review OPTIONS is role-only and
+cannot prove non-self/latest workflow permission; existing Comment author IDs
+cannot prove current User for old comments. Keep unsupported mutations hidden,
+do not fix backend without separate approval. Only legitimate current-scope
+comment POST response can prove ownership for that exact newly created comment
+while the authenticated component remains mounted; discard proof on remount.
+
+Resume checkpoint: preserved typed collaboration contracts +18k TaskCollaboration
+source from interrupted work; they were not recreated. Contracts/client focused
+106/106 PASS after safe-URL lint/control test fix. TaskCollaboration27/27 PASS:
+bounded Deliverable/review reads, new-comment ownership proof, manager moderation,
+Unicode4000 validation, aborts and stale-GET cancellation before confirmed cache
+redaction. New NotificationHub12/12 PASS covers feed/filter/page/read/errors,
+User-keyed cache/late response isolation, aborts and count/preview behavior.
+Root integrated TaskCollaboration into existing detail using current User passed
+by existing authenticated Layout Outlet; no second AuthProvider. Personal
+/notifications route, navigation, bell/native-dialog preview, unread counter
+and same-origin mark-read are implemented. Query reads hide stale private rows
+on failed revalidation and denied targets are redacted; no extra polling.
+Shared CSS/tokens retained with responsive collaboration/notification patterns.
+
+Final mocked/contract frontend322/322 PASS (11files,21.69s), native npm exit0.
+An intermediate320/321 failure was an old App test assuming only one status
+region; its loading-message selector was corrected. Strict TypeScript, Biome44
+files and production build13.75s PASS (JS460.14kB/gzip134.24kB;
+CSS39.06kB/gzip11.00kB), actual exits0. No dependency/lockfile changes.
+
+Real isolated PostgreSQL/Django/Chrome browser suites, current source:
+- collaboration7/7 PASS1.4m, runca613d41c174462c9375f03c201ac4c8;
+- Workspace/Task/Start7/7 PASS1.6m, runf97f35926ad24bc2abb174f9a4edd83d;
+- Auth/CSRF/tenant6/6 PASS55.6s, runf7f4970fb102434699fcd26c9ef9d8e2.
+All actual native launcher/Playwright/backend exits0, owned DB/container/two-
+network cleanup verified. Collaboration Submit/Review transitions are explicitly
+API-driven, not evidence of blocked UI mutation actions. Backend448 is
+historical, not rerun because all backend source is unchanged at this checkpoint.
+Each isolated startup did Django system/model-drift/full-chain/migrate checks;
+existing migrations run only on disposable test DBs, never persistent development.
+Current axe WCAG2/2.1 AA0violations, viewport-overflow, keyboard/native-dialog/
+focus and reduced-motion checks passed at375/768/1440 and812x375 landscape.
+12 collaboration screenshots retained;4 representative desktop/mobile Task,
+notification feed/preview PNGs visually inspected. No interactive manual browser
+or production/real-email/remote-CI verification claim.
+Root owns routing/layout/styles/notification/docs and cache integration; agents
+own new contracts, Task collaboration component and new collaboration E2E.
+Previous448/224/7/6 results are historical. Final readonly development identity:
+PostgreSQL16.14/hustlytasker_db, original hustlytasker_postgres, loopback5432,
+docker_postgres_data.35migration records/Users3/Sessions2, all checked business/
+token/Notification/Audit rows0. No persistent login/fixture/write/migration.
+All144 protected backend/config/model/migration/harness hashes unchanged, stored
+ignored in .local_backups/HT-FE-P3-03/protected_baseline.json.0 owned frontend
+test containers/networks remain. Existing dirty FE02/API02A work and main/e083060
+are preserved; no commit/push/reset or Owner runtime/venv recreation.
+
+DONE: independent Deliverable/Review reads, bounded Comment UI, personal
+Notifications, Task-detail integration, final checks and affected documentation.
+BLOCKED/API GAP: Submit in WORKING; Approve/Request Changes with verified non-self/
+latest capabilities; general old-comment author edit/delete. No unblocked code
+or test work remains. Safe next step: Owner reviews UI and approves a bounded
+HT-API-FE-P3-03A read-capability proposal (can_submit/per-Deliverable review/
+per-Comment edit/delete), using unchanged service predicates/no schema changes.
+That task is proposed only. Do not infer backend authorization from this handover
+or mark FE03 COMPLETE with these core gaps. No Project/AI/FE04 starts automatically.
+
+FE03 source inventory: NEW services/api/collaboration.ts+test,
+features/collaboration/TaskCollaboration.tsx+test,
+features/notifications/NotificationHub.tsx+test, pages/notifications.tsx,
+e2e/collaboration.spec.ts. Existing frontend files changed minimally: App.tsx+
+App.test.tsx, AppLayout.tsx (authenticated Outlet identity and bell/nav),
+pages/tasks.tsx, styles.css, client.ts (content/file_url/comment safe field text).
+Integration-only scripts/frontend_integration.py and test-frontend-integration.ps1
+add owned fixtures and -Suite collaboration; ownership gates retained.
+Docs refreshed: HANDOVER,PROGRESS,ROADMAP,REQUIREMENT_STATUS,CHANGELOG,CONTEXT,
+FRONTEND_GUIDE,MASTER,API_DOCUMENTATION, NEW FE03_CONTRACT_MATRIX and README.
+Ignored paired logs/exit JSON and screenshots live under .local_backups/HT-FE-P3-03/;
+regression screenshots keep existing FE01/FE02 runner paths. No backend file was
+modified during FE03; prior backend dirty changes belong to completed API02A.
+
+---
+
+## Historical checkpoint — 2026-10-26 — HT-API-FE-P3-02A COMPLETE / OWNER REVIEW GATE
+
+Owner authorizes the bounded API/FE gap-resolution task. Existing FE02 dirty work
+is preserved on main/HEAD e083060; no commit/reset/schema/migration or persistent
+development writes. The previous gate is superseded only for these two gaps.
+
+Verified source: TaskAssignment.user is a User FK, while assignment inputs/read
+identity use ProfileMembership. Start requires active Profile MEMBER + active
+Workspace MEMBER, active tenant lifecycle, active current User assignment and
+ASSIGNED status. Existing transaction-locked Start service stays unchanged.
+Plan approved within task: add TaskRead.can_start from authenticated request and
+verified workspace context; existing manager-only WorkspaceMemberRead adds
+display_label + is_assignable. Full-name label or safe membership-code fallback,
+never email/username fallback. Existing roster visibility/pagination preserved.
+No new endpoint/role or access expansion. Only the approved manager display
+label is exposed; no email/phone/credential/global User ID fields are added.
+
+DONE implementation: four backend modules tasks/serializers.py+views.py,
+workspace/serializers.py+access.py add the three fields and bounded query reads;
+no model/service/auth/rule changes. NEW tasks/test_identity_api.py33tests plus
+two expected-field sets. Frontend typed guards/TaskStart/assignment labels and
+roster integrate both hints; direct Start invokes existing protected service.
+Selector submits ProfileMembership ID and filters backend is_assignable, no
+client-role identity inference. New browser coverage tests actual Start CSRF/
+nonassignee denial/success/replay plus label/eligible roster, not API mocks.
+
+Current targeted PostgreSQL91/91 PASS8.358s, run824d2ba3d4464db5978f8b6ab1895a53,
+actual native launcher/Python runner exits0 and owned DB cleanup verified.
+Frontend targeted107/107 and full224/224 PASS10.20s, typecheck and lint PASS exits0.
+Production build PASS6.42s (JS434.13kB/gzip127.67kB,CSS37.12kB/gzip10.65kB).
+node_modules was empty on preflight; npm ci restored181packages from unchanged
+lockfile, no dependency upgrade. Work browser run0f46f8b31207406c8b073d606b593d36
+7/7 PASS1.1m; actual native/Playwright/backend exits0 and owned cleanup verified.
+Real current-assignee Start, nonassignee denial, missing CSRF403 and replay409
+passed. Friendly roster labels/exact membership ID/backend eligibility and
+no extra email/User fields verified. Four-size axe/overflow/keyboard and existing
+Workspace/Task flows passed;20 screenshots retained in reused FE02 run directory.
+Full PostgreSQL448/448 PASS199.251s, runcb5fc651e02340989ac22c21b64d8857;
+actual native/Python exits0, Django OK and owned test database removal verified.
+Runner also passed pip check, Django system check, model drift, migration
+graph/history/full-chain checks. No historical415 substitution.
+Foundation browser run10f640b6e0e44666874a9cb1a9939186:6/6 PASS36.3s, actual
+native/Playwright/backend exits0 and owned cleanup. Current Auth/CSRF/login/logout/
+expiry/revoked-access checks passed. Typecheck, Biome36files and git diff check
+PASS on final source. Two Start PNGs (375/1440) visually reviewed; current real
+browser axe/keyboard/overflow/reduced-motion checks cover four viewports.
+No interactive manual browser, real-email/provider, remote-CI or production claim.
+
+Both gaps resolved; HT-FE-P3-02 is now IMPLEMENTATION COMPLETE after its earlier
+acceptance criteria were rechecked with the extension. No implementation blocker
+or pending migration. Development readonly identity/counts remain PostgreSQL16.14,
+hustlytasker_db/hustlytasker_postgres, loopback5432/docker_postgres_data,
+35migrations/Users3/Sessions2/all checked business/token/Notification/Audit rows0.
+No persistent login/fixture/write/migration.135 protected backend/model/service/
+migration/config/harness hashes unchanged; package+lock unchanged. node_modules
+restoration did not replace the Owner's Node or Python runtime.
+
+Current task changed backend tasks/serializers.py, views.py, test_api.py,
+NEW test_identity_api.py; workspace/access.py, serializers.py, test_write_api.py.
+Frontend changes on preserved FE02 files: services/api/work-management.ts+test,
+features/tasks/TaskForms.tsx+test, features/workspaces/WorkspaceMembers.tsx,
+pages/tasks.tsx+test, e2e/work-management.spec.ts. Integration fixture only:
+scripts/frontend_integration.py. No new endpoint/model/migration or service edits.
+Docs refreshed: HANDOVER,PROGRESS,ROADMAP,REQUIREMENT_STATUS,CHANGELOG,API,
+FRONTEND_GUIDE,PROJECT_CONTEXT and RBAC_DESIGN; README frontend scope reconciled.
+Previous FE02 dirty files remain
+uncommitted on main/e083060; all earlier change inventories below are historical.
+
+Evidence: ignored .local_backups/HT-API-FE-P3-02A/ contains paired backend/browser
+logs, native/Docker-exit JSON and protected hash baseline. Work20screenshots are
+under reused .local_backups/HT-FE-P3-02/screenshots/0f46f8b31207406c8b073d606b593d36/;
+foundation artifacts retain the FE01 directory by runner convention.
+Safe continuation: stop for Owner review; do not rerun implementation or database
+rollouts. Proposed HT-FE-P3-03 requires separate approval. Project remains PENDING
+OWNER DECISION; no AI/frontend domain expansion is authorized.
+
+---
+
+## Historical checkpoint — 2026-10-26 — HT-FE-P3-02 PARTIAL — API GAP / OWNER REVIEW
+
+Owner authorizes Workspace/Task business UI on the existing frontend, with no
+backend business/schema/auth change or persistent development writes. Initial
+Git is clean, main/HEAD e083060 (Owner committed the preceding foundation).
+Do not reset/recreate frontend, rerun rollout or infer Project/AI approval.
+The prior FE01 gate is superseded only for this explicitly approved FE02 scope.
+
+DONE: read current task, AGENTS/HANDOVER/design master/docs/source. Verified
+Workspace/Task write/read/filter/assignment contracts and permissions. Existing
+foundation/design tokens/AuthProvider/API client are retained. Work is split:
+typed work-management API/contracts/OPTIONS hints; Workspace callback-prop
+components; new isolated fixtures/browser suite; root Task UI/integration/docs.
+Prior96/6/415 are historical baselines. Current FE02 evidence is below.
+
+Important verified constraints/gaps: collection OPTIONS actions.POST rechecks
+POST permission and is a current capability hint, unlike static Allow methods.
+Task manage and Workspace metadata-edit checks are identical; lifecycle action
+OPTIONS enforces Profile-manager capability. Server revalidates every mutation.
+START role metadata does NOT prove the caller is the assigned User. me has a
+global User ID while assignment/member reads expose only ProfileMembership IDs;
+no self-membership mapping is available. Keep Start hidden, document gap; no
+fabricated ID match/new backend endpoint. Member selector uses actual scoped
+active Workspace MEMBER candidates identified by membership code, no invented
+names/global IDs; Profile role eligibility still must be validated by server.
+Task.Status also contains existing legacy CANCELLED; render read-only legacy
+state, never add a cancel transition. Record this source/doc discrepancy.
+
+Checkpoint implementation: typed work-management contracts/OPTIONS hints have
+79/79 focused tests PASS, Workspace forms21/21 PASS. Task list/detail/create/edit,
+assignment selector, bounded ancestor/direct-child navigation, deadline/priority,
+server filters and pagination are implemented and under final verification.
+Workspace create/edit/archive/restore and sanitized member roster are integrated.
+Dialog busy blocks Escape/close and Pagination supports disabled while submitting.
+Final mocked/contract suite201/201 PASS across8files,11.35s, native npm exit0.
+API47+contracts32, primitives15, AuthProvider16, App18, Workspace21, TaskForm31,
+Task pages21. Strict typecheck PASS, Biome36files PASS, production build7.01s
+PASS (JS432.83kB/gzip127.33kB,CSS37.12kB/gzip10.65kB), actual exits0.
+Earlier intermediate failures were fixed; they are not final acceptance evidence.
+
+Development fresh read-only verification: exact Compose container/volume/loopback
+identity, PostgreSQL16.14,35migrations,Users3,Sessions2,all checked business/token/
+notification/Audit rows0. No migration or writes. Protected backend baseline is
+143 source hashes in ignored .local_backups/HT-FE-P3-02/backend_baseline.json.
+First real work suite run87075dd1965d423292fc7ed7bc75cc64:1/7 PASS,6 failures,
+launcher/Playwright exit1, backendexit0 and owned cleanup PASS. Root cause for
+hidden actions: Vite CORS middleware swallowed OPTIONS with204; actual isolated
+Django metadata proved POST hints correct. Fixed frontend vite.server.cors=false
+so same-origin OPTIONS reaches DRF (no Django CORS/CSRF/security edits). Also
+fixed explicit filter accessible labels and ambiguous E2E unavailable heading.
+Second run b69905012f6446cabfb8b0fca2864ed9:5/7 PASS; fixed disabled modal
+triggers losing return focus and a depth test incorrectly POSTing a GET-only
+subtasks route. Native dialogs make background triggers inert without disabling
+them before opener focus is captured. Pending form controls remain disabled.
+Final work run4f85817849a4403eb4c01d7f72fb6fd5:7/7 PASS56.5s, actual native
+launcher/Playwright/backend exits0, owned DB/container/two-network cleanup PASS.
+Real Django/PostgreSQL/Chrome, no API mocks. Workspace CRUD/lifecycle, manager
+metadata role ceiling, Task metadata/assignment/subtask, filters/pagination,
+cross-tenant denial, CSRF, Viewer/Editor and archived-context checks passed.
+Axe WCAG2/2.1 AA0 violations/overflow/keyboard modal-return-focus/reduced motion
+passed at375/768/1440 and812x375 landscape;16 screenshots retained ignored.
+Foundation run72ef3c1c844e40aa8cfe2588d3ff0769:6/6 PASS34.2s with actual
+launcher/Playwright/backend exits0 and owned cleanup PASS. Current Auth/CSRF/
+login/logout/expiry/revoked-Workspace regressions passed, not historical FE01.
+Four representative final FE02 PNGs visually inspected: desktop Task list,
+mobile Task form/detail, landscape Workspace form; wrapping/contrast/layout
+consistent with master. Dialog scrolling handles short landscape height.
+No interactive manual browser verification or production deployment claim.
+Shared integration runner now selects -Suite foundation|work-management; default
+foundation, fresh owned PostgreSQL for each. Both final suites completed.
+Each isolated startup ran Django system check, migration drift/full chain and
+migrate --check successfully; no persistent database selected. The historical
+415/415 full backend suite was not rerun because backend source is unchanged.
+
+Final readonly development confirms the same35 migrations/Users3/Sessions2 and
+all business/token/notification/Audit rows0; task0004/notification0002 remain
+applied. No migration, schema, fixture, login or business write performed there.
+143 protected backend/config/CI/shared-backend-harness hashes unchanged;0 owned
+frontend test containers/networks remain. No dependency/lockfile upgrade.
+
+DONE: all implemented UI, mocked/contract/browser/static/visual verification and
+affected documentation. PARTIAL/BLOCKED: START and friendly/prevalidated assignee
+identity require an approved backend contract; do not claim full FE02 completion.
+No remaining unblocked implementation/testing work. Safe next step: Owner reviews
+UI plus API gaps and approves either a bounded identity/capability API task or
+explicit deferral. HT-FE-P3-03 remains a proposal, never starts automatically.
+
+Changed source inventory (all uncommitted): frontend/src/app/App.tsx,
+components/ui.tsx, pages/tenants.tsx, pages/tasks.tsx+tasks.test.tsx,
+features/workspaces/WorkspaceCreate.tsx, WorkspaceActions.tsx+test,
+WorkspaceMembers.tsx, useWorkContext.ts; features/tasks/TaskForms.tsx+test;
+services/api/client.ts, work-management.ts+test; styles.css; vite.config.ts;
+e2e/work-management.spec.ts. Integration-only helpers scripts/frontend_integration.py
+and scripts/test-frontend-integration.ps1. Docs: HANDOVER,PROGRESS,ROADMAP,
+REQUIREMENT_STATUS,CHANGELOG,PROJECT_CONTEXT,API_DOCUMENTATION,FRONTEND_GUIDE,
+design-system/hustlytasker/MASTER.md. No AGENTS/backend/models/migrations edits.
+Ignored evidence .local_backups/HT-FE-P3-02/ retains paired launcher logs/exit
+JSON, backend hash baseline and16work screenshots; foundation run evidence stays
+under .local_backups/HT-FE-P3-01/. Git branch/HEAD still main/e083060; no commit.
+
+Stop at OWNER REVIEW GATE after verified scope; next proposed HT-FE-P3-03 is
+not authorized. Project remains PENDING OWNER DECISION; no AI/Finance/Payroll.
+
+---
+
+## Historical checkpoint — 2026-10-26 — HT-FE-P3-01 IMPLEMENTATION COMPLETE / OWNER REVIEW GATE
 
 All foundation acceptance criteria are DONE with current evidence below.
 No remaining implementation blocker. Stop for Owner review; do not start

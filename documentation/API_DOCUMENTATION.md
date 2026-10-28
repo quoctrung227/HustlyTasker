@@ -1,6 +1,188 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-10-26
+Last updated: 2026-10-27
+
+## HT-FE-P3-04 account lifecycle consumer — COMPLETE / OWNER REVIEW GATE
+
+Frontend now consumes existing register, email-verification and password-reset
+contracts below; no backend endpoint, serializer, permission, model, migration
+or service rule changed. Public SPA /register has no automatic login or tenant
+membership. /forgot-password preserves the neutral reset-request message;
+/reset-password sends token/new_password/new_password_confirm, expects204 and
+requires explicit login afterward. Protected /account uses current /me identity,
+empty verification-request body and token-only verification confirmation.
+
+All unsafe requests reuse the existing same-origin SessionAuthentication/CSRF
+client. Passwords/tokens remain masked form memory and request bodies only,
+never query strings, browser storage or logs. Current email_verified is refreshed
+from the backend; request acceptance is not verification. Console delivery is
+intentionally unavailable for security mail; neutral reset202 does not prove
+delivery. Real email remains unverified; isolated tests use the locmem adapter.
+
+Owner keeps Invitation UI, Profile Creation, membership candidate/onboarding
+outside current scope and pending review. No guessed tenant IDs, fake endpoint,
+new role or authentication mechanism is introduced. Current frontend395/395/
+typecheck/lint/build and all five real isolated browser suites22/22 PASS, including
+cohesive Task1/1, account-security1/1, collaboration7/7, work7/7 and foundation6/6.
+Actual native launcher/Playwright/backend exits0 and owned cleanup are verified.
+Local non-mutating smoke and read-only DB connection also pass. Backend485/485
+is historical, not rerun: backend/schema/config remain unchanged. Manual Owner
+browser, real email, remote CI and production remain unverified. Final evidence
+is in HANDOVER.md; stop at Owner review without starting another task.
+
+## HT-API-FE-P3-03A — Collaboration mutation capabilities
+
+Five additive read-only booleans on existing authenticated responses resolve the
+FE03 consumer gaps. Existing methods, status codes, fields, pagination and locked
+mutation services stay authoritative. No new endpoint/schema/migration or role.
+
+| Response | Field | True when |
+|---|---|---|
+| Task list/detail/subtasks/mutation | can_submit | Authenticated current active Editor assigned via TaskAssignment.user; ACTIVE Profile/Workspace, WORKING and no unresolved PENDING/SUBMITTED Deliverable |
+| Deliverable list/submit/review mutation | can_approve | Current reviewer/manager, ACTIVE scopes, Task REVIEW, Deliverable SUBMITTED, latest by created_at DESC then id DESC, uploader differs from actor, no existing Review row of any status |
+| Same Deliverable responses | can_request_changes | Same authority/state predicate as can_approve; nonblank feedback is additionally required by the write serializer |
+| Comment list/detail/create/update | can_edit | Current capable commenter in ACTIVE scopes, nondeleted Comment authored by the authenticated User |
+| Same Comment responses | can_delete | Current capable commenter in ACTIVE scopes, nondeleted Comment authored by that User or current manager moderation authority |
+
+Flags require request identity matching the verified Workspace access context and
+the object's scope. Missing/mismatched context fails closed. Current memberships
+and lifecycle predicates reuse existing access services. No client actor ID or
+display name/email inference, no extra global User ID/PII. Tombstones have null
+content and both flags false; existing repeat DELETE remains idempotent.
+List query annotations/prefetch keep capability queries bounded.
+
+Existing writes, all SessionAuthentication + CSRF:
+
+- POST tasks/{t}/deliverables/: {file_url}, nonblank max500, response201. This is
+  text/URL submission, not an upload. Revision and Task REVIEW come from service.
+- POST tasks/{t}/deliverables/{d}/approve/: optional {comment}, response200.
+- POST tasks/{t}/deliverables/{d}/request-changes/: required nonblank {comment},
+  response200. Backend returns Task to WORKING; approval sets COMPLETED.
+- PATCH tasks/{t}/comments/{c}/: {content}, response200; DELETE same URL:204.
+  Comment content remains valid Unicode/no NUL, max4000 code points.
+
+All task paths retain /api/v1/profiles/{p}/workspaces/{w}/ nesting. Services repeat
+authorization and state checks under existing transaction locks, including stale
+hint, latest-submission, replay and self-review restrictions. Capability is a UI
+hint, never a durable grant. Standard400 input,403 authority/CSRF,404 scoped target
+and409 workflow conflict handling remains. No parent/child status cascade.
+See FE03_CONTRACT_MATRIX.md for before/after and HANDOVER.md for current evidence.
+
+Historical API03A verification2026-10-27: targeted PostgreSQL95/95 and full485/485 PASS;
+frontend356/356, typecheck/lint/build PASS. Real isolated collaboration7/7 now
+performs Submit/Request Changes/resubmit/Approve through React, plus independent
+approval and old Comment edit after reload/page2. Work7/7 and Auth/CSRF/tenant6/6
+regressions PASS. Native/Python/Playwright/backend exits0 and owned cleanup verify;
+development remains35 migrations/3 Users/2 Sessions/0 business rows with no writes.
+Both API03A and FE03 accepted scopes are complete; stop at Owner review.
+
+## Historical HT-FE-P3-03 frontend consumer — pre-extension contracts/gaps
+
+The missing capabilities and ephemeral author proof below describe the original
+frontend-only checkpoint; the approved extension above supersedes those gaps.
+
+No backend route, serializer, permission, model, migration or service changes in
+this task. Full pre-code mapping is [FE03_CONTRACT_MATRIX.md](FE03_CONTRACT_MATRIX.md).
+Task detail consumes paginated Deliverable rows with nested Review; no separate
+Deliverable detail/update/upload URL is invented. Safe external HTTP(S) URLs
+are links; arbitrary stored text is escaped. Comment list/detail/create/update/
+soft-delete and own Notification feed/count/read use existing methods and CSRF.
+
+Comment create UI verifies scoped OPTIONS POST metadata. Exact comment IDs from
+successful legitimate current User/scope POSTs establish only that comment's
+ephemeral authorship while mounted, not a general self-membership capability.
+Manager deletion uses the existing management hint; manager editing another
+author remains unavailable. Confirmed delete redacts cached bodies immediately
+and cancels stale GETs before refetch. Notification navigation uses validated
+scope IDs rather than following the returned API target_url. Feed/count/read
+remain server-filtered by recipient and current readable target.
+
+API GAP: Task.can_start proves current-assignee execution only in ASSIGNED,
+not Submit in WORKING; role-only Deliverable/Review OPTIONS cannot prove
+assignee/non-self/latest object conditions. Existing Comment author membership
+ID lacks a general current-User mapping. Submit/Approve/Request Changes and
+pre-existing author edit controls therefore remain hidden. Proposed read-only
+per-object capabilities require Owner approval in a separate bounded API task;
+no new policy is implemented here.
+
+Browser coverage distinguishes real UI Comment/Notification flows from
+API-driven Submit/Review transitions whose resulting history the UI reads.
+API-driven success is not evidence of missing UI mutation functionality.
+
+## HT-API-FE-P3-02A — Task capability and assignment roster (implemented)
+
+Additive read fields on existing authenticated endpoints; no new URL, schema,
+permission, status transition or authentication mechanism. Existing fields and
+pagination/filter semantics remain compatible.
+
+Task list/detail/direct-subtasks and Task mutation responses include
+`can_start: boolean`. It is computed from the authenticated request and verified
+Workspace access context, never a client-supplied User ID. The actual identity
+chain is request User → active same-Profile membership → active Workspace Editor
+membership → active TaskAssignment.user FK. True also requires both tenant
+scopes ACTIVE and Task status ASSIGNED. Profile Owner/Admin, Workspace Admin,
+Viewer and staff without that exact Editor authority do not gain execution.
+Missing/mismatched serializer context fails closed. No new global User identity
+or self-membership endpoint is exposed.
+
+The flag is a display hint only. Existing `POST .../tasks/{task_id}/start/` still
+accepts an empty object, requires SessionAuthentication + CSRF and repeats live
+authorization/assignment/status checks under transaction locks. Success200
+transitions ASSIGNED → WORKING and returns `can_start:false`; nonassignee/role
+denial403, inaccessible nested scope404, wrong workflow state409. No automatic
+retry, review bypass, completion or parent/child propagation is introduced.
+
+Existing manager-only `GET .../workspaces/{workspace_id}/members/` adds:
+
+| Field | Contract |
+|---|---|
+| profile_membership_id | Existing stable same-Profile identity submitted for assignment |
+| display_label | Trimmed User full name; otherwise safe `Thành viên <membership prefix>`. Never username/email fallback |
+| is_assignable | Active User + active Profile MEMBER + active Workspace MEMBER/Editor + ACTIVE Profile/Workspace |
+
+Roster visibility is unchanged: current manager scope, effective active supported
+Workspace assignments backed by active User/Profile membership; inactive/revoked
+rows stay absent. Profile Owner/Admin or Workspace Admin/Viewer may be visible
+but are not eligible merely because they have a Workspace row. No email, phone,
+password, username or global User ID is added. Pagination is retained. Scoped
+Exists/select_related/only and existing Task assignment prefetch keep query
+growth bounded rather than fetching an identity per list row.
+
+The frontend selector renders these labels, uses the backend eligibility flag,
+excludes the current assignee and submits the original ProfileMembership ID.
+Current assignment eligibility is revalidated by the unchanged assignment
+service on POST. Reading/opening the selector does not mutate Task state.
+Both previously documented API gaps below are superseded by this contract;
+current runtime verification and completion status are in HANDOVER.md.
+
+## Historical HT-FE-P3-02 consumer contracts and gaps — 2026-10-26
+
+No backend route/schema/permission changed. The UI now consumes existing
+Workspace POST/PATCH/archive/restore and manager-only member reads, Task
+GET/POST/PATCH/assign and paginated GET direct-subtasks. Task create with parent_id
+is also the Subtask creation contract; POST to the read-only subtasks route is
+405. Filters/status/priority/deadline/root_only/parent_id/order/page stay server
+scoped. Task update never sets arbitrary status; no Review approval bypass.
+
+DRF OPTIONS.actions.POST is used as a permission hint after its POST permission
+check; static Allow is not authorization. Vite's own CORS middleware is disabled
+so same-origin OPTIONS reaches Django; backend CORS/CSRF/auth settings unchanged.
+Each actual mutation still revalidates permission and requires session CSRF.
+
+API GAP: me exposes global User.id, while TaskAssignment and WorkspaceMember
+reads expose ProfileMembership IDs, with no current-self mapping. Start action
+metadata checks Editor role, not actual assignee; it cannot safely authorize a
+Start button. START remains hidden pending an approved scoped identity/capability
+contract. Workspace roster lacks names/email/Profile role; UI displays actual
+membership codes, filters active Workspace MEMBER candidates and relies on the
+assignment service for final Profile-role eligibility. Friendly identity and
+fully prevalidated eligible-target reads remain gaps. No guessed ID equality,
+PII expansion or backend implementation is introduced in this frontend task.
+
+Source/documentation discrepancy: Task.Status already includes legacy CANCELLED.
+Frontend can render/filter this legacy value without adding a cancel transition.
+Dashboard remains a real Profile access overview; no Task aggregate/search API
+is invented and current-page local search is explicitly labeled.
 
 ## HT-FE-P3-01 frontend consumer — 2026-10-26
 
@@ -115,7 +297,9 @@ deleted comment returns `409`; repeat deletion does not repeat audit/state
 changes. PUT and collection DELETE are not supported.
 
 Read fields are `id`, `task_id`, `author_profile_membership_id`, `content`,
-`is_deleted`, `edited_at`, `deleted_at`, `created_at`, `updated_at`. No author
+`is_deleted`, `can_edit`, `can_delete`, `edited_at`, `deleted_at`, `created_at`,
+`updated_at`. Both capability fields are request-bound booleans as defined in
+the HT-API-FE-P3-03A contract above. No author
 email, username or global User ID is exposed. The author membership projection
 is current and nullable if the author no longer belongs to this Profile.
 Deleted content is always `null` in API output; the original body stays in
@@ -773,6 +957,8 @@ Task responses contain exactly:
 - `priority`
 - `deadline`
 - `active_assignment`
+- `can_start`
+- `can_submit`
 - `created_at`
 - `updated_at`
 
@@ -785,8 +971,9 @@ exposing a stale tenant identifier.
 
 ### HT-TASK-P2-05 hierarchy, deadline and priority — 2026-10-25
 
-`parent_id` is the only added response field; all existing fields and the
-paginated envelope remain. Null identifies a root. A Task may have many direct
+At that hierarchy checkpoint, `parent_id` was the only added response field;
+later capability additions are listed in the current response above. All other
+fields and the paginated envelope remain. Null identifies a root. A Task may have many direct
 children. The maximum depth is three parent edges below a root (depth 0), or
 four levels total. Reparenting and detaching use the existing Task PATCH;
 `parent_id: null` detaches. Both the ancestor chain and the deepest moved
@@ -891,7 +1078,7 @@ Submit accepts exactly:
 }
 ```
 
-This foundation stores a URL string; it does not upload, fetch, scan, validate
+This foundation stores text or a URL string in `file_url`; it does not upload, fetch, scan, validate
 media contents, or authorize a storage provider. The service allocates a
 positive sequential revision while locking the Task. A Task may have multiple
 historical Deliverables, but only its latest submitted revision may be decided.
@@ -905,6 +1092,8 @@ Deliverable responses contain exactly:
 - `status`
 - `uploaded_by_profile_membership_id`
 - `review`
+- `can_approve`
+- `can_request_changes`
 - `created_at`
 - `updated_at`
 

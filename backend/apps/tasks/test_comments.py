@@ -109,7 +109,7 @@ class TaskCommentTests(APITestCase):
     def test_read_contract_exposes_current_membership_not_user_pii(self):
         response = self.client.get(self.url(self.comment))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(set(response.data), {"id", "task_id", "author_profile_membership_id", "content", "is_deleted", "edited_at", "deleted_at", "created_at", "updated_at"})
+        self.assertEqual(set(response.data), {"id", "task_id", "author_profile_membership_id", "content", "is_deleted", "can_edit", "can_delete", "edited_at", "deleted_at", "created_at", "updated_at"})
         for value in (self.editor.email, self.editor.username, str(self.editor.id)):
             self.assertNotIn(value, response.content.decode())
         self.assertIn("no-store", response["Cache-Control"])

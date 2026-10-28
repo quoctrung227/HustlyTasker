@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Navigate, useLocation } from 'react-router'
+import { Link, Navigate, useLocation } from 'react-router'
 import { ArrowRightIcon, EyeIcon, EyeSlashIcon, LockKeyIcon, CheckIcon } from '@phosphor-icons/react'
 import { Brand } from '../components/brand'
 import { Alert, Button, Card, FormField, Input, PageSkeleton } from '../components/ui'
@@ -85,6 +85,7 @@ export function LoginPage() {
           <Button className="password-toggle" variant="ghost" onClick={() => setVisible(!visible)} aria-pressed={visible}>{visible ? <EyeSlashIcon aria-hidden="true" /> : <EyeIcon aria-hidden="true" />}{visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}</Button>
           <Button className="login-submit" type="submit" busy={busy}>Đăng nhập<ArrowRightIcon aria-hidden="true" /></Button>
         </form>
+        <div className="work-actions"><Link className="text-link" to="/forgot-password">Quên mật khẩu?</Link><Link className="text-link" to="/register">Đăng ký tài khoản</Link></div>
         <p className="login-security"><LockKeyIcon aria-hidden="true" />Đăng nhập an toàn bằng tài khoản của bạn.</p>
       </div>
       <footer className="login-main__footer">HustlyTasker<span>Không gian cho những người cùng làm.</span></footer>

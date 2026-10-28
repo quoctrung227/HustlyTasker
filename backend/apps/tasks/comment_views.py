@@ -54,7 +54,9 @@ class CommentListView(CommentApiViewMixin, generics.ListAPIView):
         serializer = CommentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         comment = create_comment(**self._scope(), **serializer.validated_data)
-        return Response(CommentReadSerializer(comment).data, status=status.HTTP_201_CREATED)
+        return Response(CommentReadSerializer(
+            comment, context=self.get_serializer_context(),
+        ).data, status=status.HTTP_201_CREATED)
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -63,7 +65,9 @@ class CommentDetailView(CommentApiViewMixin, generics.GenericAPIView):
     http_method_names = ("get", "patch", "delete", "head", "options")
 
     def get(self, request, *args, **kwargs):
-        return Response(CommentReadSerializer(self._get_comment()).data)
+        return Response(CommentReadSerializer(
+            self._get_comment(), context=self.get_serializer_context(),
+        ).data)
 
     def patch(self, request, *args, **kwargs):
         comment = self._get_comment()
@@ -72,7 +76,9 @@ class CommentDetailView(CommentApiViewMixin, generics.GenericAPIView):
         serializer = CommentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         comment = update_comment(**self._scope(), comment_id=comment.id, **serializer.validated_data)
-        return Response(CommentReadSerializer(comment).data)
+        return Response(CommentReadSerializer(
+            comment, context=self.get_serializer_context(),
+        ).data)
 
     def delete(self, request, *args, **kwargs):
         comment = self._get_comment()

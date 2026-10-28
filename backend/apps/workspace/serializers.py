@@ -2,7 +2,7 @@ from collections.abc import Mapping
 
 from rest_framework import serializers
 
-from .models import Profile, ProfileInvitation, Workspace, WorkspaceMember
+from .models import Profile, ProfileInvitation, ProfileMembership, Workspace, WorkspaceMember
 
 
 class StrictInputSerializer(serializers.Serializer):
@@ -176,21 +176,60 @@ class ProfileInvitationTokenSerializer(StrictInputSerializer):
 
 
 class WorkspaceMemberReadSerializer(serializers.ModelSerializer):
-    """Minimal assignment metadata without User PII or a global User ID."""
+    """Manager-only roster labels, without email or a global User identifier."""
 
     profile_membership_id = serializers.UUIDField(read_only=True)
+    display_label = serializers.SerializerMethodField()
+    is_assignable = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkspaceMember
         fields = (
             "id",
             "profile_membership_id",
+            "display_label",
+            "is_assignable",
             "role",
             "is_active",
             "joined_at",
             "updated_at",
         )
         read_only_fields = fields
+
+    def get_display_label(self, membership):
+        name = membership.user.get_full_name().strip()
+        if name:
+            return name
+        # A username can itself be an email address. Never use it as fallback.
+        membership_id = getattr(membership, "profile_membership_id", membership.pk)
+        return f"Thành viên {str(membership_id)[:8]}"
+
+    def get_is_assignable(self, membership):
+        workspace = membership.workspace
+        if (
+            not membership.is_active
+            or membership.role != WorkspaceMember.Role.MEMBER
+            or not membership.user.is_active
+            or workspace.status != Workspace.Status.ACTIVE
+            or workspace.profile.status != Profile.Status.ACTIVE
+        ):
+            return False
+        eligible_profile_membership = getattr(
+            membership, "_has_assignable_profile_membership", None,
+        )
+        if eligible_profile_membership is None:
+            # Existing member mutation responses are individual objects rather
+            # than the roster queryset. Keep their additive fields consistent.
+            eligible_profile_membership = ProfileMembership.objects.filter(
+                profile_id=workspace.profile_id,
+                user_id=membership.user_id,
+                user__is_active=True,
+                is_active=True,
+                role=ProfileMembership.Role.MEMBER,
+            ).exists()
+        # These are the current assignment service's target predicates. This
+        # read-only hint cannot replace its locked mutation-time validation.
+        return bool(eligible_profile_membership)
 
 
 class WorkspaceMemberCreateSerializer(StrictInputSerializer):

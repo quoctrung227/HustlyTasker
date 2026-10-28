@@ -13,6 +13,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss()],
     server: {
       host: '127.0.0.1', port: 5173, strictPort: true,
+      // All browser requests are same-origin. Let /api/ OPTIONS reach DRF
+      // instead of Vite's CORS middleware answering a synthetic 204.
+      cors: false,
       proxy: { '/api': { target, changeOrigin: false } },
       fs: { strict: true, allow: [process.cwd()] },
     },

@@ -37,6 +37,34 @@ beforeEach(() => {
 })
 
 describe('routing and protected identity', () => {
+  it.each([
+    ['/register', 'Đăng ký tài khoản'],
+    ['/forgot-password', 'Quên mật khẩu'],
+    ['/reset-password', 'Đặt lại mật khẩu'],
+  ])('provides the intentional public account form at %s without a tenant fetch', async (path, title) => {
+    vi.mocked(authApi.me).mockRejectedValue(anonymous())
+    renderRoute(path)
+    expect(await screen.findByRole('heading', { level: 1, name: title })).toBeVisible()
+    expect(tenantApi.profiles).not.toHaveBeenCalled()
+  })
+
+  it('keeps account verification behind the existing session boundary', async () => {
+    vi.mocked(authApi.me).mockRejectedValue(anonymous())
+    renderRoute('/account')
+    expect(await screen.findByRole('button', { name: 'Đăng nhập' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Gửi mã xác minh' })).not.toBeInTheDocument()
+    expect(tenantApi.profiles).not.toHaveBeenCalled()
+  })
+
+  it('opens only the authenticated users verification page from the shared navigation', async () => {
+    renderRoute('/account')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Tài khoản' })).toBeVisible()
+    expect(screen.getByText(user.email, { exact: true })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Tài khoản' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Gửi mã xác minh' })).toBeVisible()
+    expect(tenantApi.profiles).not.toHaveBeenCalled()
+  })
+
   it('renders a safe fatal fallback outside router context and clears private tab text', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     document.title = 'Private workspace fixture'
@@ -96,7 +124,7 @@ describe('Profile/Workspace states and navigation', () => {
   it('shows loading while the tenant response is pending', async () => {
     vi.mocked(tenantApi.profiles).mockReturnValue(new Promise(() => {}))
     renderRoute('/profiles')
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Đang tải tổ chức'))
+    await waitFor(() => expect(screen.getByText('Đang tải tổ chức…').closest('[role="status"]')).toHaveTextContent('Đang tải tổ chức'))
   })
 
   it('renders only scoped Profiles and uses bounded page numbers for pagination', async () => {

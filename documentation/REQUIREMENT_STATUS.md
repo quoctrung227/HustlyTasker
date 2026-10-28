@@ -1,6 +1,6 @@
 # HUSTLYTASKER REQUIREMENT STATUS
 
-Last updated: 2026-10-26
+Last updated: 2026-10-28
 
 ## Quy ước đánh giá
 
@@ -17,7 +17,194 @@ Last updated: 2026-10-26
 
 Source of truth cho trạng thái là source code, migration đã áp dụng và kết quả kiểm thử. `documentation/` mô tả định hướng hiện hành. `reference/original_document/` là audit của hệ Next.js/Prisma cũ và chỉ được dùng để kế thừa business rules, không phải yêu cầu đổi Django sang Spring Boot hoặc công nghệ khác.
 
-Current checkpoint: **HT-FE-P3-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+Current checkpoint: **HT-AI-P4-01 — DESIGN COMPLETE / PENDING OWNER APPROVAL**.
+Owner newly requests two AI capabilities: Smart Task Generator and Feedback
+Analyzer. This is an architecture/security/provider/contract design task only;
+it does not make either feature implemented or retroactively complete an Fxx
+requirement. [AI_ARCHITECTURE_DESIGN.md](AI_ARCHITECTURE_DESIGN.md) separates
+approved boundaries from provider/model, authority, budget and persistence
+proposals that still require Owner approval.
+
+Generator needs human preview/edit/confirmation before existing Task services;
+Analyzer returns selected-source analysis without Review/Task/Comment/Notification
+mutation. Current Task priority/deadline/depth/tenant/workflow constraints stay.
+No estimated-duration, Project or new role is added. Shared adapter/strict JSON,
+data minimization, synthetic-only unpaid demo, cost reservations and durable
+idempotency are designed, not implemented. Final design checks preserve209
+runtime hashes/path set with only8 docs changed. Five JSON blocks parse and
+two canonical schemas/three examples were checked through a limited in-memory
+keyword validator plus DAG/depth/citations; this is not full JSON Schema engine
+or application testing. Cost arithmetic, 20 local links and normal git diff
+--check pass. No new application tests/provider quality/live result is claimed.
+No runtime/.env/database/key/SDK/billing action is part of this task. Historical
+FE04395/22/13 and backend485 evidence below is retained under its original scope.
+AI implementation remains NOT STARTED. Stop at OWNER REVIEW GATE; proposed
+provider/model/roles/caps/schema/retention decisions need explicit approval.
+
+### Historical completed FE04 checkpoint
+
+Historical checkpoint: **HT-FE-P3-04 — COMPLETE / OWNER REVIEW GATE**. Owner
+confirms account lifecycle and current Workspace/Task/Review/Comment/Notification
+as the accepted MVP. Invitation UI, Profile Creation, membership candidate API
+and remaining onboarding/management are OUT OF CURRENT TASK SCOPE / PENDING
+OWNER REVIEW. They remain product requirements rather than removed features.
+
+Existing-API registration/recovery/own-verification UI, safe local launcher and
+cohesive browser specs/test-only locmem adapter are implemented. Private root
+.env now contains the exact Owner-provided values; example secrets are blank.
+ValidateOnly, existing venv Django check and Django READ ONLY PostgreSQL
+connection pass with exit0:16.14/hustlytasker_db, pending migrations0,
+35 records/3 Users/2 Sessions/0 checked business/token/Notification/Audit rows.
+Current frontend395/395 PASS15.94s/typecheck/Biome52/build6.65s exits0. Acceptance
+1/1 PASS43.6s, account-security1/1 PASS22.4s, collaboration7/7 PASS1.2m,
+work7/7 PASS1.0m and foundation6/6 PASS36.3s total22/22, with actual native/
+Playwright/backend exits0 and owned cleanup. Local Django/Vite
+non-mutating smoke PASS, orchestrator0 and intentional child server stops-1;
+AUTOMATED VERIFIED / MANUAL OWNER CHECK PENDING. No new backend/schema/auth/RBAC or
+downstream-domain approval. Matrix/AI design-only notes are in
+FRONTEND_MVP_ACCEPTANCE.md; older results below are historical baseline. Current
+four-size axe0/keyboard/focus/responsive and safe PNG review pass. No bounded-MVP
+implementation blocker remains.144 protected assets and development35/3/2/0
+are preserved. REAL EMAIL DELIVERY NOT VERIFIED; remote CI/production/manual
+Owner remain unverified. Application backend485 tests are historical, not rerun.
+
+### Historical completed API03A checkpoint
+
+Historical checkpoint: **HT-API-FE-P3-03A — COMPLETE / OWNER REVIEW GATE**.
+**HT-FE-P3-03 — IMPLEMENTATION COMPLETE.**
+
+Owner approved the limited read-contract/frontend extension. Source resolves
+Submit identity/state, Review non-self/latest/state and existing-Comment author
+capability gaps through five required read-only booleans: Task.can_submit,
+Deliverable.can_approve/can_request_changes and Comment.can_edit/can_delete.
+Each uses authenticated request, verified tenant context and existing service
+predicates; no role, permission, workflow, model or migration is added.
+
+Frontend uses these hints for real Submit/Approve/Request Changes forms and old
+Comment edit/delete after reload/pagination. No guessed identity or mounted-only
+ownership proof remains. Server mutations revalidate every check; existing
+SessionAuthentication, CSRF, tenant caches and tombstone privacy remain.
+
+Current targeted isolated PostgreSQL95/95 PASS13.020s, run
+a718df8ac97a4813aa6c2aebfff0ccd8, actual native/Python exits0 and owned cleanup.
+Current frontend356/356 PASS41.49s (12files), typecheck/lint46/build6.69s PASS,
+exits0. Full isolated PostgreSQL485/485 PASS231.054s, run
+3b2abcd913324644b6240bfc49ca1c18, actual native/Python exits0/DjangoOK/owned cleanup.
+Current real browser collaboration7/7 PASS1.3m
+(ff6abc6459954d6d83f47ec94c426a62), Workspace/Task/Start7/7 PASS1.1m
+(3074e74939f84f3b8039665dab7196ba) and Auth/CSRF/tenant6/6 PASS43.0s
+(c125145b536b480badeccfba582f4c90); actual native/Playwright/backend exits0 and
+owned cleanup. Real React Submit/Approve/Request Changes and existing-comment
+edit after reload/page2 pass. Four-size axe0/keyboard/focus/overflow pass;
+24 collaboration screenshots retained and three form PNGs visually reviewed.
+
+All three gaps and accepted FE03 criteria pass. Fresh read-only development
+remains35 migrations/3 Users/2 Sessions/0 checked business/token/Notification/
+Audit rows;137 protected source hashes unchanged. No new schema/migration,
+persistent fixture or production action. No implementation blocker remains;
+real email, remote CI and production remain unverified. Stop at OWNER REVIEW
+GATE; Project stays PENDING OWNER DECISION and AI remains outside scope.
+
+### Historical FE03 partial checkpoint before HT-API-FE-P3-03A approval
+
+Historical checkpoint: **HT-FE-P3-03 — PARTIAL — API GAP / OWNER REVIEW**.
+
+The existing frontend now integrates Deliverable/revision/nested Review reads,
+Comment thread/composer/scoped author actions/manager soft-delete and personal
+Notification preview/count/feed/mark-read with `/notifications`. User/tenant/Task
+cache keys, SessionAuthentication/CSRF, existing role boundaries and shared
+design master remain in use. No backend/model/migration/security-setting change.
+
+The verified `FE03_CONTRACT_MATRIX.md` limits acceptance: Submit metadata does
+not prove current assignee in WORKING; Review role metadata does not prove
+non-self/latest/state authority; old Comment author membership IDs cannot prove
+the current User. These controls remain unavailable. Only exact new comment UUIDs
+from a legitimate POST in the current mounted User/scope permit own edit/delete;
+that proof is discarded on remount/logout/context change. Manager moderation
+uses the existing manager capability and tombstones redact deleted content.
+
+Frozen frontend322/322 PASS (21.69s); focused106 contracts/client,27 collaboration
+and12 notifications PASS. Typecheck, Biome44 files and build13.75s PASS. Current
+real collaboration7/7 (1.4m; ca613d41c174462c9375f03c201ac4c8) and Workspace/Task/
+Start regression7/7 (1.6m; f97f35926ad24bc2abb174f9a4edd83d) PASS with actual
+native/Playwright/backend exits0 and owned cleanup. Axe0 at four viewports,
+keyboard/overflow and four representative PNG visual reviews pass.144 protected
+backend/config hashes and lock unchanged; backend448 stays historical. Existing
+API-driven Submit/Review tests do not imply blocked UI actions are implemented.
+Current foundation Auth/CSRF/tenant6/6 PASS (55.6s), run
+f7f4970fb102434699fcd26c9ef9d8e2, with actual exits0/owned cleanup. Fresh read-only
+development35 migrations/3 Users/2 Sessions/0 checked business/token/Notification/
+Audit rows and0 owned frontend test containers/networks verify preservation.
+All unblocked UI/test work is verified. Keep FE03 partial for the core API gaps
+and stop at Owner review. Proposed HT-API-FE-P3-03A would add bounded Submit/
+per-Deliverable Review/per-Comment edit-delete hints only after separate approval.
+
+### Historical completed API extension checkpoint before FE03 authorization
+
+Historical checkpoint: **HT-API-FE-P3-02A — COMPLETE / OWNER REVIEW GATE**.
+**HT-FE-P3-02 — IMPLEMENTATION COMPLETE.** Both approved API gaps are resolved.
+
+Owner approved resolving the two FE02 gaps through three additive read fields:
+Task.can_start and manager-roster display_label/is_assignable. The request and
+verified Workspace context bind actual TaskAssignment.User identity; no client
+actor ID or email/name identity matching is trusted. Start keeps existing active
+Editor/ASSIGNED/assignment predicates and locked mutation revalidation. Roster
+eligibility matches active User/Profile MEMBER/Workspace MEMBER and lifecycle
+rules; labels use full name or safe membership code, never username/email fallback.
+Existing endpoint visibility/pagination, authentication, schema and workflow stay.
+
+Frontend Start/label/eligibility integration uses existing shared components and
+tenant cache keys. Final targeted backend91/91 PASS (8.358s), full PostgreSQL
+448/448 PASS (199.251s), frontend targeted107/full224 PASS (10.20s), typecheck/
+lint36/build6.42s PASS. Current isolated real work-browser7/7 and foundation
+Auth/CSRF/tenant6/6 PASS (36.3s), with actual native/Python/Playwright/backend
+exits0 and owned cleanup verified. All accepted FE02/extension criteria pass.
+Fresh read-only development stays35 migrations/3 Users/2 Sessions/0 business
+rows;135 protected model/service/schema/config assets unchanged. No persistent
+fixture/login/write/migration, schema or production action occurred. No remaining
+blocker within scope. Stop at Owner review; Project/AI and HT-FE-P3-03 retain
+their gates, with no automatic next task.
+
+### Historical FE02 partial checkpoint before HT-API-FE-P3-02A
+
+The following gap description and201/7/6 results predate the approved extension.
+
+Historical checkpoint: **HT-FE-P3-02 — PARTIAL — API GAP / OWNER REVIEW**.
+
+Owner-authorized source extends the existing SPA with Workspace create/edit/
+archive/restore and Task list/detail/create/edit/assignment, direct Subtask
+creation/navigation, existing priority/deadline and paginated server filters.
+The existing design master, SessionAuthentication, CSRF and server tenant/RBAC
+rules are retained. Verified scoped OPTIONS POST metadata and archive state are
+UI hints only; current server permissions govern every write. Assignment choices
+are sanitized ProfileMembership IDs, with final Profile/Workspace eligibility
+checked by the backend rather than inferred from a display name or global ID.
+
+START UI is **BLOCKED / API GAP**: current User ID and assignment membership ID
+cannot be safely mapped through the available contracts. Role-only OPTIONS
+authorization does not prove current-assignee identity. No new backend API is
+included; Owner review must separately scope the missing contract. CANCELLED
+exists in current source as a legacy status and is read-only in the UI, without
+a cancel action or a new five-state workflow transition.
+
+New mocked and seven isolated real-browser cases exist; the shared integration
+runner separates them from the preserved six foundation cases in fresh owned
+database/runtime runs, without changing throttles. Current typecheck/lint 36/
+build 7.01s, mock 201/201 (11.35s), real work 7/7 (56.5s) and foundation 6/6 (34.2s) PASS.
+Each actual launcher/Playwright/backend exit0 and owned cleanup verified;
+responsive/axe/keyboard and representative PNG visual checks passed. These
+results cover implemented surfaces, not the missing START/identity contract.
+Read-only development confirms PostgreSQL16.14,35 migrations,3 Users/2 Sessions
+and0 checked business/token/notification/Audit rows. No persistent fixture,
+login or migration was performed. Project remains PENDING OWNER DECISION;
+no adjacent module starts automatically. Stop at OWNER REVIEW GATE with partial
+status while the START gap remains.
+
+### Historical completed frontend checkpoint — HT-FE-P3-01 — 2026-10-26
+
+The foundation evidence below predates the separate HT-FE-P3-02 authorization.
+
+Historical checkpoint: **HT-FE-P3-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
 
 Owner-authorized frontend source now provides one strict TypeScript React/Vite
 SPA with a shared design system, layout/routes, typed same-origin API client,
@@ -144,9 +331,15 @@ API contract. HT-TASK-P2-05 adds the Task hierarchy contract described above.
 
 ## Tổng quan hiện tại
 
-Dự án đang ở `PHASE 3 - Frontend Foundation`, trong phạm vi HT-FE-P3-01
-được Owner phê duyệt. Frontend source đã có, nhưng acceptance còn đang kiểm
-chứng như checkpoint trên. Backend history below remains a completed baseline:
+Dự án đang ở `PHASE 3 - Frontend Foundation`; Owner đã phê duyệt
+HT-API-FE-P3-03A để đóng ba API GAP của HT-FE-P3-03; cả hai phạm vi hiện đã
+hoàn thành implementation và dừng OWNER REVIEW GATE. Source có năm capability
+read-only và form Submit/Approve/Request Changes, Comment cũ edit/delete theo
+quyền server. Backend targeted95/full485, frontend356/typecheck/lint/build và
+real UI browser7/7/6 đã PASS với exit0/cleanup; responsive/axe/focus và bảo toàn
+development đã kiểm chứng. Không đổi models, schema, migrations, service
+business rules, RBAC hoặc authentication. Backend
+history below remains a completed historical baseline:
 `HT-RBAC-DESIGN-P0-01` đã
 `COMPLETE / ACCEPTED — APPROVED BY OWNER DELEGATION`; `HT-RBAC-P1-03` Tenant
 Access Context and Scoped Service Foundation đã hoàn thành, sau đó Owner cho
@@ -187,39 +380,54 @@ remaining business APIs, frontend, and deployment are not complete.
 
 | Hạng mục | Trạng thái | Đã triển khai | Còn thiếu / vấn đề | Căn cứ |
 |---|---|---|---|---|
-| Dependency manifest | COMPLETE | Manifest UTF-8/pinned; Django 6.1.2 và DRF 3.18.3; current container runtime pass `pip check` | Owner host shell báo venv hoạt động, nhưng Codex managed context exit 103 và không thấy base interpreter path; cached Python 3.12 container là fallback đã kiểm chứng | `backend/requirements.txt`; xác minh HT-DB-P1-05 ngày 2026-10-19 |
-| Django configuration | PARTIAL | Secret/debug/hosts/DB/CSRF/security/mailer lấy từ environment; development/production fail-fast; production-like deploy check sạch | Chưa có giá trị production thật, trusted-proxy/static/deploy contract; secret cũ cần rotate nếu từng dùng ngoài local | `backend/config/settings.py`; `.env.example`; kiểm chứng Docker 2026-10-13 |
+| Dependency manifest | COMPLETE | Pinned manifests retained; existing Windows venv Python3.12.5 and Django check verified in FE04 with permitted access | Sandbox exit103 is an access limitation, not evidence of broken venv; production/runtime upgrades remain separate | `backend/requirements.txt`; `HANDOVER.md` |
+| Django configuration | PARTIAL OVERALL — FE04 local automated verification PASS | Existing settings unchanged; ignored .env/PowerShell launcher validation/Django check, READ ONLY PostgreSQL connection and Django8000/Vite5174 non-mutating smoke pass; pending migrations0 | Manual Owner browser, production/trusted-proxy/static/deploy and real email provider remain unverified; orchestrator0, child stops intentionally-1 | `scripts/start-backend-dev.ps1`; `FRONTEND_GUIDE.md`; `HANDOVER.md` |
 | Database migrations | PARTIAL — HT-DB-P1-11 DEVELOPMENT ROLLOUT COMPLETE | tasks.0004 then notifications.0002 applied once on approved development after verified backup/rehearsal; 35 records, valid CHECKs/indexes and 44 orphan-free FKs; legacy values preserved; full regression and final cleanup PASS | Other persistent targets unauthorized; other domain migrations absent | HT-DB-P1-11 operational evidence; `DATABASE_SCHEMA.md` |
 | Business schema | PARTIAL | Existing hierarchy/workflow retained; Comment lifecycle/protected Task FK and nullable complete-or-legacy Notification context/event/recipient uniqueness now exist in approved development | Cross-row tenant checks remain validated service/query responsibilities; Task soft delete and other tenant domains absent | Task/Notification models; HT-DB-P1-11; `DATABASE_SCHEMA.md` |
 | Tenancy/ownership design | COMPLETE / ACCEPTED | Owner đã phê duyệt 11 nhóm quyết định; HT-TASK-P2-03 tiếp tục chốt internal workflow trong đúng tenant boundary | Billing, public-link capabilities, retention duration và các domain action chưa implement vẫn defer sang task tương ứng; Client/Guest review và Payroll tách khỏi internal approval | `documentation/DECISION_LOG.md`; owner approvals 2026-10-16 và 2026-10-21 |
 | RBAC/access/invitation design | COMPLETE / ACCEPTED | 14 nền RBAC được chốt; Task manager/reviewer contract và Profile Invitation role/identity/lifecycle contract đã được hiện thực hóa trong các slice được duyệt | Client/Guest capabilities, payroll pricing/eligibility và downstream domain details vẫn ở task riêng | `documentation/RBAC_DESIGN.md`; `DECISION_LOG.md`; HT-INV-P2-04 checkpoint |
 | Django Admin | PARTIAL | User, Workspace, WorkspaceMember, Task, TaskAssignment, TaskComment; Task domain hiện inspection-only; Workspace hard delete bị chặn để không cascade workflow history; mapped Profile/period và lifecycle/member fields vẫn protected/read-only | Profile/ProfileMembership và 8 model trước chưa register; chưa có tenant-scoped Admin; aggregate CASCADE vẫn tồn tại ở schema và chỉ được chặn trên current Admin/API surfaces | `backend/apps/{tasks,workspace}/admin.py`; source review 2026-10-21 |
-| DRF/API foundation | PARTIAL | Scoped Comment CRUD and own Notification list/count/read implemented; required development schema applied; SessionAuthentication/global deny-by-default retained; READ ONLY smoke 67 requests/28 serializer checks and current isolated full 415/415 PASS | Authenticated success/mutations not tested on persistent development; adjacent APIs absent | HT-COM-P2-06 source and HT-DB-P1-11 evidence; `API_DOCUMENTATION.md` |
-| Authentication/RBAC | PARTIAL | Existing identity/tenant foundations reused; current managers/Editors comment, author-only edits and bounded moderation; own Notification feed revalidates Task access, no staff bypass; current security 253/253/full 415/415 PASS; no policy change in rollout | Existing production delivery/cache/account-lifecycle limits unchanged | Comment/Notification sources; HT-DB-P1-11; `RBAC_DESIGN.md` |
-| Automated tests | LOCAL BASELINE COMPLETE; HT-FE-P3-01 VERIFICATION PASS | Last backend rollout full415/415 and related groups passed; unchanged backend was not rerun here. Current frontend strict typecheck/Biome24/build PASS, mocked96/96 (8.60s), separate real Django/PostgreSQL/Chrome6/6 (40.7s), actual launcher/Playwright/backend exits0 and owned cleanup PASS | Mocked and real evidence are distinct; remote CI and interactive manual-browser testing remain unverified | Frontend test modules/integration helpers; `PROGRESS.md`; historical backend runner evidence |
-| Frontend | PARTIAL OVERALL — HT-FE-P3-01 FOUNDATION IMPLEMENTATION COMPLETE | Single React19/TypeScript6/Vite6 SPA, Router7/Tailwind4/Query5/Biome2, shared design system/shell/components, verified Session/CSRF/auth guards and read-only Profile/Workspace UI; typecheck/lint/build/mock96/real6/responsive/keyboard/axe PASS; docs refreshed | Broader business UI and deployment remain future tasks; no authenticated persistent-development or interactive manual-browser test. HT-FE-P3-02 requires Owner scope | `frontend/`; design-system/hustlytasker/MASTER.md; `HANDOVER.md` |
+| DRF/API foundation | PARTIAL OVERALL — accepted capability extension COMPLETE | Existing scoped APIs/applied schema and five request-bound hints retained; historical API03A targeted95/full485 PASS; FE04 leaves backend unchanged and verifies current consumers separately | Authenticated mutations not tested on persistent development; adjacent APIs absent | HT-API-FE-P3-03A source/tests; `API_DOCUMENTATION.md`; `HANDOVER.md` |
+| Authentication/RBAC | PARTIAL OVERALL — FE04 accepted regression VERIFIED | Existing identity/tenant/manager/Editor/author authority, locked services and Session/CSRF retained; current account lifecycle and five real browser suites22/22 PASS | Real production email/distributed throttle/deploy remain separate; no new auth or role policy | Existing access/services; `RBAC_DESIGN.md`; `HANDOVER.md` |
+| Automated tests | FE04 ACCEPTED SCOPE VERIFIED | Current frontend395/395 PASS15.94s/typecheck/lint52/build6.65s exits0; five real browser suites22/22 actual exits0/owned cleanup,13 launcher guards/local checks/axe0 pass;144 hashes match | Backend485 is historical baseline; remote CI/interactive manual Owner/real email/production unverified | `FRONTEND_MVP_ACCEPTANCE.md`; `PROGRESS.md`; `HANDOVER.md` |
+| Frontend | PARTIAL OVERALL — FE04 accepted MVP COMPLETE | Existing work/collaboration preserved; registration/recovery/own-verification UI and cohesive real acceptance verified with shared UI/UX master/protected client; no bounded-MVP blocker | Invitation/Profile Creation/member candidate/onboarding OUT OF CURRENT TASK SCOPE pending Owner review; retained product requirements. AI/downstream domains/production remain separate | `frontend/`; `FRONTEND_MVP_ACCEPTANCE.md`; `HANDOVER.md` |
 | Docker/deployment/CI | PARTIAL — TEST BASELINE IMPLEMENTED | Development Compose retained; separate tmpfs PostgreSQL 16/Python 3.12 local test project/dependency-only image and PR/push-main backend CI workflow; source read-only, no development volume/credentials, contents-read/no deploy; local full/failure/cleanup/actionlint PASS | CI WORKFLOW IMPLEMENTED — REMOTE RUN NOT VERIFIED; production backend image/deploy/monitoring still absent | `docker/compose.test.yml`; `docker/Dockerfile.test`; `.github/workflows/backend-ci.yml`; `README.md` |
 
 ## Trạng thái yêu cầu nghiệp vụ F01-F16
 
 | ID | Module | Trạng thái | Đã triển khai | Còn thiếu / vấn đề |
 |---|---|---|---|---|
-| F01 | Authentication | PARTIAL — IMPLEMENTATION & DEVELOPMENT ROLLOUT COMPLETE | Session auth plus verification/reset foundation; accounts.0002 development apply, legacy Users/Sessions and zero auto-verification preserved; current HT-DB-P1-10 related 253/253 and full 341/341 regression PASS | Timing not equalized; no standalone logout-all/deactivation, real-provider verification, or distributed throttle cache; production rollout not authorized |
-| F02 | Profile & Workspace | PARTIAL | Foundation `workspace.0002`/`0003`, monthly Workspace/lifecycle/member manager và Invitation onboarding source đã có; `workspace.0004` development rollout đã xác minh | Chưa Profile creation/general membership API/domain-wide RBAC; mọi non-development rollout còn gated riêng |
-| F03 | Membership Invitation | PARTIAL — CORE IMPLEMENTATION & DEVELOPMENT ROLLOUT COMPLETE | ProfileInvitation model/0004, consent lifecycle, role ceiling, digest token, per-invitation recipient proof, delivery abstraction, locked membership onboarding, audit, APIs/tests và controlled development rollout đã hoàn tất | Account verification signal now exists in source but Invitation deliberately keeps its independent proof contract; REAL EMAIL DELIVERY NOT VERIFIED; chưa inbox, shared production cache hoặc automated retention purge; non-development rollout chưa authorize |
-| F04 | Task Lifecycle | PARTIAL — HIERARCHY IMPLEMENTATION & DEVELOPMENT ROLLOUT COMPLETE | tasks.0003 applied approved development; unchanged manager-only same-Workspace hierarchy, depth3/cycle/self guards, paginated API/planning fields and independent workflow; current Task 88/88 and full 341/341 PASS | Task soft delete, cancel transition, Marketplace/claim and Client approval absent; production/other targets remain unauthorized |
+| F01 | Authentication | PARTIAL OVERALL — FE04 accepted account lifecycle UI VERIFIED | Existing Session/verification/reset backend and applied accounts.0002 retained; register/forgot/reset/own-verification UI with masked memory-only credentials/no auto-login; current frontend395/395 and five real browser suites22/22 pass | Locmem proves test delivery only: REAL EMAIL DELIVERY NOT VERIFIED. Timing equalization, logout-all/deactivation, real provider/distributed throttle and production remain separate |
+| F02 | Profile & Workspace | PARTIAL OVERALL — accepted Workspace UI retained | Existing monthly Workspace/lifecycle/roster and Task assignment UI retained; local development schema remains35 records with no FE04 migration | Profile Creation/member candidate API/general onboarding-management OUT OF CURRENT TASK SCOPE / PENDING OWNER REVIEW; retained product requirements, no fabricated endpoints |
+| F03 | Membership Invitation | PARTIAL — backend/rollout retained, UI OUT OF CURRENT TASK SCOPE | Existing invitation consent/token/role-ceiling/identity/locked onboarding/audit APIs and applied workspace.0004 retained | Owner explicitly defers Invitation UI to separate review; it is not removed from product. Account verification does not replace independent recipient proof. REAL EMAIL DELIVERY NOT VERIFIED; production cache/retention/deploy remain separate |
+| F04 | Task Lifecycle | PARTIAL OVERALL — FE04 accepted UI workflow VERIFIED | Existing hierarchy/workflow/Start/assignment retained; current real UI acceptance1/1 creates/assigns/starts/submits/changes/resubmits/approves through React; full five browser suites22/22 pass. API03A backend95/485 is historical only | No arbitrary transition or auto-completion. Legacy CANCELLED has no cancel action; downstream domains remain separate |
 | F05 | Marketplace | NOT STARTED | Chưa có implementation | Publish/claim rules, concurrency guard, API và tests |
-| F06 | Review Upload | PARTIAL | Revisioned Deliverable URL submission/history, uploader tenant attribution, status constraints và scoped API/service đã implement; required migrations đã apply development | Chỉ nhận `file_url`; actual upload/storage/media validation/processing chưa có; production/other target rollout chưa được authorize |
-| F07 | Team Review Status | PARTIAL — INTERNAL SLICE & DEV ROLLOUT COMPLETE | Internal manager approval/request-changes, one Review per Deliverable, no self-review, stale/repeat/concurrency guards và Task/Deliverable synchronization; development rollout và full 202/202 PASS | Client/Guest approval độc lập chưa có; production/other target rollout chưa được authorize |
+| F06 | Review Upload | PARTIAL OVERALL — accepted text/file_url backend and UI COMPLETE | Existing revisioned text/file_url API/read UI retained; Task.can_submit proves current assignee/state; real React Submit and targeted/full regression PASS | Only text/file_url backend, no upload/storage/media service; other target rollout unauthorized |
+| F07 | Team Review Status | PARTIAL OVERALL — internal backend/rollout/UI COMPLETE | Existing manager review services, one decision per Deliverable and self/stale/concurrency guards retained; per-Deliverable hints and real React Approve/Request Changes/resubmission verified | Client/Guest approval and other target rollout remain separate |
 | F08 | Guest Review Decision | NOT STARTED | Kiến trúc đã chốt GuestReviewLink tách khỏi Client Portal | Chưa có scoped hashed token, exact capabilities, expiry/revoke, decision flow hoặc throttle |
 | F09 | Client Portal | NOT STARTED | Client/ShareLink hiện chỉ là schema primitive; target hỗ trợ account và secure link độc lập với internal membership | Chưa migrate Client→Profile, chưa có secure link replacement, portal/API/capabilities |
 | F10 | Client Request Inbox | NOT STARTED | Chưa có model/code | Request intake, triage, conversion to task và permissions |
-| F11 | Task Comments | PARTIAL — FOUNDATION IMPLEMENTATION & DEVELOPMENT ROLLOUT COMPLETE | Reused TaskComment; scoped Task/Subtask CRUD, 4000-character validation, author/current-access edits, author/manager soft-delete/tombstones/audit, protected history; tasks.0004 applied; current Comment/migration 40/40 and full 415/415 PASS | Last-writer-wins edits, no full text revision history, mentions or automated retention; other targets unauthorized |
-| F12 | Notifications | PARTIAL — FOUNDATION IMPLEMENTATION & DEVELOPMENT ROLLOUT COMPLETE | Typed tenant/Task/AuditLog event, five atomic producers, current eligible recipients, per-event/recipient dedup and own paginated/read/count API; notifications.0002 applied; current Notification/migration 34/34 and full 415/415 PASS | No HTTP POST idempotency key, email/push/worker or automated retention; hidden feed rows may reappear after access restoration; other targets unauthorized |
+| F11 | Task Comments | ACCEPTED backend/rollout/FE03 CRUD scope COMPLETE | Existing4000-character/current-access CRUD, soft-delete/tombstone/audit retained. Server can_edit/can_delete author/moderation controls after reload/pagination and cache redaction verified by current unit/security/real browser tests | No rich text, mentions, revision history, realtime or retention expansion |
+| F12 | Notifications | PARTIAL OVERALL — BACKEND/ROLLOUT AND FE03 UI VERIFIED | Existing five atomic events, recipient dedup/current-access projection and personal list/count/read API retained. FE03 User-keyed preview/badge/feed/filter/page/mark-read and safe Task navigation verified | No read-all, unread toggle, email/push/worker or retention expansion; restored access may reveal earlier valid feed rows |
 | F13 | Payroll | NOT STARTED | Chưa có model/code | Payroll calculation, lock, approval/payment workflow và audit |
 | F14 | Finance Invoice | PARTIAL | Invoice và Payment models; approved target places Invoice in one Workspace, same-Profile Client, Payment under Invoice | Target ownership chưa migrate; numbering/billing workflow, positive amount constraints, service/API/tests còn thiếu |
 | F15 | CRM Share Link | PARTIAL | Client và ShareLink models; approved target puts Client in Profile and separates portal/review credentials | Tenant ownership chưa migrate; token hiện plaintext/có thể lộ qua `__str__`; thiếu hash/revoke/capability/expiry |
 | F16 | Automation | NOT STARTED | Chưa có cron/webhook worker hiện hành | Job design, idempotency, authentication, monitoring và deployment |
+
+## AI capabilities requested by Owner — 2026-10-28
+
+These are new Phase4 requirements traced to the current Owner instruction, not
+claims that the original F01–F16 already contain implemented AI runtime.
+
+| Capability | Design status | Implementation status | Required gate |
+|---|---|---|---|
+| AI Smart Task Generator | DESIGN COMPLETE — PENDING OWNER APPROVAL | NOT STARTED | Approve authority/provider/data policy, strict proposal contract, durable confirmation/budget schema and P4-02 scope; no direct model mutation |
+| AI Feedback Analyzer | DESIGN COMPLETE — PENDING OWNER APPROVAL | NOT STARTED | Approve feature authority/source coverage and P4-03 scope; selected-source citations, no automatic Review or Task action |
+| Shared AI provider/cost/security foundation | DESIGN COMPLETE — PENDING OWNER APPROVAL | NOT STARTED | Approve numeric limits, persistence/retention, configuration and adapter choice; default disabled, no unapproved egress/paid fallback |
+
+Current task does not change the F04/F06/F07/F11/F12 implementation or workflow
+statuses. Project, Invitation UI/Profile Creation/onboarding, production, real
+email and remote CI keep their existing separate scope/review limitations.
 
 ## Quyết định sản phẩm/kiến trúc còn cần chốt
 

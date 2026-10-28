@@ -1,9 +1,13 @@
+from functools import cached_property
+
 from rest_framework import serializers
 
+from apps.workspace.access import can_manage_workspace_tasks
 from apps.workspace.models import ProfileMembership
 from apps.workspace.serializers import StrictInputSerializer
 
 from .models import TaskComment
+from .comment_services import can_comment_on_task
 
 
 class CommentContentField(serializers.CharField):
@@ -29,11 +33,13 @@ class CommentReadSerializer(serializers.ModelSerializer):
     author_profile_membership_id = serializers.SerializerMethodField()
     content = serializers.SerializerMethodField()
     is_deleted = serializers.SerializerMethodField()
+    can_edit = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
 
     class Meta:
         model = TaskComment
         fields = ("id", "task_id", "author_profile_membership_id", "content",
-                  "is_deleted", "edited_at", "deleted_at", "created_at", "updated_at")
+                  "is_deleted", "can_edit", "can_delete", "edited_at", "deleted_at", "created_at", "updated_at")
         read_only_fields = fields
 
     def get_author_profile_membership_id(self, comment):
@@ -51,3 +57,48 @@ class CommentReadSerializer(serializers.ModelSerializer):
 
     def get_is_deleted(self, comment):
         return comment.deleted_at is not None
+
+    @cached_property
+    def _comment_allowed(self):
+        context = self.context.get("workspace_access_context")
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if (
+            context is None
+            or not getattr(user, "is_authenticated", False)
+            or not getattr(user, "is_active", False)
+            or getattr(context, "user_id", None) != user.pk
+        ):
+            return False
+        return can_comment_on_task(context)
+
+    @cached_property
+    def _moderation_allowed(self):
+        return self._comment_allowed and can_manage_workspace_tasks(
+            self.context["workspace_access_context"],
+        )
+
+    def _can_mutate(self, comment):
+        context = self.context.get("workspace_access_context")
+        return (
+            context is not None
+            and comment.task.workspace_id == getattr(context, "workspace_id", None)
+            and comment.deleted_at is None
+            and self._comment_allowed
+        )
+
+    def get_can_edit(self, comment):
+        return bool(
+            self._can_mutate(comment)
+            and comment.user_id == self.context["workspace_access_context"].user_id
+        )
+
+    def get_can_delete(self, comment):
+        # Tombstones offer no UI action even though repeat DELETE is idempotent.
+        return bool(
+            self._can_mutate(comment)
+            and (
+                comment.user_id == self.context["workspace_access_context"].user_id
+                or self._moderation_allowed
+            )
+        )

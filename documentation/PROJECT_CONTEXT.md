@@ -64,9 +64,77 @@ Container:
 
 Current Phase:
 
-PHASE 3 - Frontend Foundation
+PHASE 4 - AI Architecture and Design
 
-Current task status:
+Current task — 2026-10-28:
+
+`HT-AI-P4-01 — DESIGN COMPLETE — PENDING OWNER APPROVAL`
+
+The Owner authorizes architecture, official provider research, proposed API/JSON,
+security, cost controls and interaction design for Smart Task Generator and
+Feedback Analyzer. See [AI_ARCHITECTURE_DESIGN.md](AI_ARCHITECTURE_DESIGN.md).
+One future shared Django AI app/provider boundary is proposed inside the existing
+modular monolith. Generator requires separate human confirmation through unchanged
+Task services; Analyzer is read-only. SessionAuthentication/CSRF, tenant/RBAC,
+Task/Subtask hierarchy and Review workflow remain unchanged.
+
+Provider/model choice, AI feature authority, durable proposal/usage/idempotency
+schema, preview expiry/retention and numeric budgets remain proposals for Owner
+review. Default disabled; fixture-first, curated synthetic-only unpaid demo;
+private-data provider policy needs separate approval. No AI runtime, SDK, key,
+provider call, .env read, database access or migration is part of this task.
+Project and onboarding retain separate gates. P4-02/03/04 are NOT STARTED.
+
+Historical completed checkpoint — 2026-10-27:
+
+`HT-FE-P3-04 — COMPLETE / OWNER REVIEW GATE`
+
+Owner authorizes completing the implemented frontend MVP and account lifecycle
+consumers, cohesive isolated UI acceptance and safe local startup. Existing
+Django/DRF/PostgreSQL/session/tenant/workflow architecture remains. Matrix and
+AI design-only readiness are in FRONTEND_MVP_ACCEPTANCE.md; no AI/Project/module
+implementation is approved. Owner keeps Invitation/Profile Creation/member
+candidate/onboarding outside this task for separate review, not removed from
+the target product. A private stable .env is now configured and validated;
+existing-venv Django check, READ ONLY PostgreSQL connection and local Django/
+Vite proxy non-mutating smoke pass. No credential extraction/reset, persistent
+login, fixtures or migration is involved. Current evidence is in HANDOVER.md.
+Frontend395/395, typecheck/lint/build and five isolated browser suites22/22 pass,
+with actual exits and owned cleanup verified. The account lifecycle and existing
+team-work MVP are complete within the approved scope. AI readiness is design
+only. Manual Owner browser, real email, remote CI and production remain
+unverified; no automatic next task or production-ready claim follows.
+
+Historical completed checkpoint before FE04 authorization:
+
+`HT-API-FE-P3-03A — COMPLETE / OWNER REVIEW GATE`
+
+`HT-FE-P3-03 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE`
+
+The Owner approved a bounded source extension for the three FE03 collaboration
+gaps. Task `can_submit`, Deliverable `can_approve`/`can_request_changes` and
+Comment `can_edit`/`can_delete` are now computed from authenticated request,
+verified tenant context and existing mutation predicates. They expose no new
+User identity and grant no durable authority; locked mutation services remain
+the source of truth. No new endpoint, model, migration, role, workflow or
+authentication mechanism is introduced.
+
+The React Task Detail integrates actual Submit, Approve and Request Changes
+forms and uses server flags for old Comment edit/delete after reload/pagination.
+Native dialogs, the existing UI UX Pro Max master, pending/error feedback and
+User/tenant-scoped caches are retained. Current local frontend356/356 tests
+(12files,41.49s), typecheck/lint46files and productionbuild6.69s have actual exit0.
+These checks are separate from current real isolated collaboration7/7 PASS,
+including React Submit/Request Changes/resubmit/Approve and a separate fresh
+Submit/Approve flow. Native launcher/Playwright/backend exits0 and owned cleanup
+are verified. Full isolated PostgreSQL485/485 (231.054s), work-management7/7
+(1.1m) and foundation Auth/CSRF/tenant6/6 (43s) pass with actual runner exits0
+and owned cleanup. Final E2E-spec typecheck/lint return0. FE03 acceptance has
+been reassessed and its three API gaps are closed. HANDOVER holds the latest
+evidence and review gate. No persistent-development
+write/migration/fixture, production change, Project or AI task is authorized.
+
+Historical FE01 task status (superseded only for approved FE02 scope below):
 
 `HT-FE-P3-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE`
 
@@ -471,9 +539,10 @@ Approved architecture target, not fully implemented:
 
 Not completed:
 
-- Owner review of completed HT-FE-P3-01 before broader frontend business screens.
-  Typecheck/lint/build/mock96/real6/responsive/keyboard/axe and final safety checks
-  pass; this is not a production-deployment claim. Project A/B′ scope remains pending
+- Owner review of completed HT-API-FE-P3-03A and reconciled HT-FE-P3-03.
+  Current frontend356, backend485 and browser7+7+6 checks pass; the older
+  backend448 results are historical, not proof for changed source.
+  This is not a production-deployment claim. Project A/B′ scope remains pending
   Owner decision; the older bundled proposal is superseded and no Project
   implementation is authorized.
 - Remote GitHub CI execution remains unverified; the local test harness and
@@ -508,8 +577,10 @@ Not completed:
   purge, general Profile CRUD/membership API, Workspace self-leave, Project,
   Client/Finance tenant migrations, public-link replacement, and broader
   soft-delete services
-- Frontend business screens beyond the completed HT-FE-P3-01 foundation;
-  HT-FE-P3-02 is proposed only, pending Owner review and scope.
+- Owner review after completed FE03 capability/mutation verification. Its
+  Deliverable/Review/Comment/Notification source exists, including the separately
+  approved API03A extension. FE02 Workspace/Task UI and its START/roster identity/
+  eligibility extension were completed before this task.
 - Deployment
 
 
@@ -544,6 +615,72 @@ General Profile CRUD/membership, self-leave, full cross-domain RBAC, other
 business APIs, real provider integration, and every non-development rollout
 remain separately gated regardless of roadmap task numbering.
 
+
+## Historical frontend scope — HT-FE-P3-02 — 2026-10-26
+
+Workspace create/metadata/lifecycle/sanitized roster and scoped Task list/detail,
+metadata/assignment/child creation, deadline/priority/filter/pagination are now
+implemented on the same React application and design master. Permission hints
+come from DRF OPTIONS; final authority stays in Django services. Vite forwards
+same-origin OPTIONS by disabling its own CORS middleware; Django security and
+database settings are unchanged. No new dependency, model or migration.
+
+The Owner subsequently authorized HT-API-FE-P3-02A to resolve the two identity/
+assignment gaps: TaskRead.can_start and manager-roster display_label/is_assignable
+are implemented with current request/tenant/service predicates. Start UI invokes
+the unchanged locked backend service; assignment uses friendly labels and keeps
+ProfileMembership IDs as its mutation identity. No schema/auth/role/workflow
+change or new endpoint. No fake analytics or unsupported transition is added.
+HT-API-FE-P3-02A COMPLETE; FE02 is now IMPLEMENTATION COMPLETE. Current backend
+448/448, frontend224/224, work browser7/7 and foundation6/6 PASS with actual
+exit0/owned cleanup, type/lint/build/axe/keyboard/visual checks. Run IDs and
+evidence are in HANDOVER.md; historical415/201/7/6 must not replace new results.
+Development remains35 migrations/3 Users/2 Sessions/0 business rows. Project
+remains PENDING OWNER DECISION. Full
+Review/Deliverable/Comment/Notification UI was subsequently authorized in FE03
+with the bounded scope and gaps described below.
+
+### FE03 collaboration and approved API03A extension — 2026-10-27
+
+Existing Task detail now includes paginated Deliverable revisions/nested Review
+status/feedback and bounded Comment creation/edit/moderation. Personal
+Notifications have a protected feed, count, preview, explicit mark-read and
+validated Task navigation with current-target rechecks. The single AuthProvider,
+CSRF transport, UI UX Pro Max master and tenant/user cache boundaries remain.
+Models/schema and mutation services are preserved; isolated service fixtures
+are test-only. The historical FE03 PARTIAL/API GAP gate was superseded only for
+the Owner-approved API03A extension, not for adjacent modules.
+
+All three gaps are resolved in source: current active assigned Editor may see
+Submit only for WORKING without an unresolved Deliverable; reviewer/manager
+hints require Task REVIEW, latest SUBMITTED non-self Deliverable and no existing
+Review; Comment author/moderator hints require current authority and a nondeleted
+row. Task/Subtask retain independent workflow. Frontend old-author controls now
+use server booleans rather than ephemeral POST ownership proof or ID/name guesses.
+
+Submit and review forms reuse the existing API client/CSRF, native dialogs,
+focused linked summaries, inline errors and duplicate/abort guards. They refresh
+the current Task and collaboration scopes plus the User Notification prefix
+after confirmed success. They never set Task status optimistically or bypass
+the server's live permission/state revalidation. Comment deletion retains cache
+redaction and tombstones. No notification transaction or AuditLog rule changes.
+
+Final verification is complete; both tasks stop at OWNER REVIEW GATE. Current
+frontend356/356, strict typecheck, Biome46files and productionbuild6.69s pass
+with native exits0. Real collaboration7/7 (1.3m,
+runff6abc6459954d6d83f47ec94c426a62) passes with actual UI mutations, old Comment
+reload/navigation editing, Notification/revocation/expiry checks, native exits0
+and owned cleanup. Four-view axe0/keyboard/focus/overflow and24 screenshots
+support responsive verification; three mutation-form PNGs were visually reviewed.
+Full isolated PostgreSQL485/485 (231.054s,
+run3b2abcd913324644b6240bfc49ca1c18), work-management7/7 (1.1m,
+run3074e74939f84f3b8039665dab7196ba) and foundation Auth/CSRF/tenant6/6 (43s,
+runc125145b536b480badeccfba582f4c90) pass with actual exits0 and owned cleanup.
+Final E2E-spec typecheck/lint return0. HANDOVER retains final evidence and the
+review gate. The approved design
+master is unchanged, with focused UX/React form-error search guidance applied.
+No AI/Project or next module starts automatically; Project remains PENDING OWNER
+DECISION and the task must stop at OWNER REVIEW GATE.
 
 ## AI Development Instructions
 

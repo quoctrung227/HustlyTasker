@@ -45,7 +45,7 @@ export function invalidResponse(): ApiError {
 }
 
 export interface ApiRequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  method?: 'GET' | 'OPTIONS' | 'POST' | 'PATCH' | 'DELETE'
   body?: unknown
   signal?: AbortSignal
   /** Only tenant-data requests use this; auth/me never calls back recursively. */
@@ -83,6 +83,31 @@ function safeFieldErrors(payload: unknown): Record<string, string> {
   // No raw server values, unknown keys, email identities, or HTML enter UI errors.
   if ('email' in payload) fields.email = 'Vui lòng nhập địa chỉ email hợp lệ.'
   if ('password' in payload) fields.password = 'Vui lòng kiểm tra mật khẩu.'
+  const managementFields: Record<string, string> = {
+    username: 'Tên đăng nhập chưa hợp lệ hoặc không khả dụng. Vui lòng kiểm tra lại.',
+    first_name: 'Tên không được vượt quá 150 ký tự.',
+    last_name: 'Họ không được vượt quá 150 ký tự.',
+    password_confirm: 'Vui lòng nhập lại mật khẩu giống nhau.',
+    new_password: 'Mật khẩu mới chưa đạt chính sách bảo mật. Vui lòng chọn mật khẩu khác.',
+    new_password_confirm: 'Vui lòng nhập lại mật khẩu mới giống nhau.',
+    token: 'Mã không hợp lệ hoặc không còn sử dụng được. Hãy kiểm tra mã mới nhất.',
+    content: 'Nhập bình luận hợp lệ từ 1 đến 4.000 ký tự, không chứa ký tự rỗng hoặc Unicode không hợp lệ.',
+    file_url: 'Vui lòng kiểm tra thông tin sản phẩm đã nộp (tối đa 500 ký tự).',
+    comment: 'Vui lòng kiểm tra nội dung nhận xét; yêu cầu chỉnh sửa cần có lý do.',
+    name: 'Vui lòng nhập tên hợp lệ (tối đa 255 ký tự).',
+    description: 'Vui lòng kiểm tra nội dung mô tả.',
+    period: 'Kỳ làm việc phải là ngày đầu tháng và chưa được sử dụng.',
+    title: 'Vui lòng nhập tiêu đề hợp lệ (tối đa 255 ký tự).',
+    deadline: 'Vui lòng nhập thời hạn hợp lệ và kiểm tra múi giờ.',
+    priority: 'Vui lòng chọn mức ưu tiên được hỗ trợ.',
+    parent_id: 'Quan hệ cha/con phải cùng không gian, không có vòng lặp và tối đa 3 cấp con.',
+    target_profile_membership_id: 'Thành viên này chưa đủ điều kiện nhận việc. Hãy tải lại danh sách và chọn Editor hợp lệ.',
+  }
+  for (const [field, message] of Object.entries(managementFields)) {
+    if (field in payload) fields[field] = message
+  }
+  // Django model validation uses `parent`; the API input control is parent_id.
+  if ('parent' in payload) fields.parent_id = managementFields.parent_id ?? ''
   return fields
 }
 
@@ -160,7 +185,7 @@ export class ApiClient {
   async request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
     const normalizedPath = apiPath(path)
     const method = options.method ?? 'GET'
-    const unsafe = method !== 'GET'
+    const unsafe = method !== 'GET' && method !== 'OPTIONS'
     throwIfAborted(options.signal)
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (unsafe) {
@@ -213,7 +238,8 @@ export class ApiClient {
       }
     }
     throwIfAborted(options.signal)
-    if (!response.ok) throw errorFor(response, payload, (options.method ?? 'GET') !== 'GET')
+    const method = options.method ?? 'GET'
+    if (!response.ok) throw errorFor(response, payload, method !== 'GET' && method !== 'OPTIONS')
     if (payload === undefined) throw invalidResponse()
     return payload
   }

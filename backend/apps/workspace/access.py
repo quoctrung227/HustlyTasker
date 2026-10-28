@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from django.core.exceptions import ValidationError
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Q, Subquery
 
 from .models import (
     Profile,
@@ -551,6 +551,13 @@ def workspace_members_visible_to_managers(context):
         user__is_active=True,
         is_active=True,
     ).order_by("id").values("id")[:1]
+    assignable_profile_membership = ProfileMembership.objects.filter(
+        profile_id=context.profile_id,
+        user_id=OuterRef("user_id"),
+        user__is_active=True,
+        is_active=True,
+        role=ProfileMembership.Role.MEMBER,
+    )
 
     return WorkspaceMember.objects.filter(
         actor_profile_scope,
@@ -565,6 +572,12 @@ def workspace_members_visible_to_managers(context):
         ),
     ).annotate(
         profile_membership_id=Subquery(active_profile_membership),
+        _has_assignable_profile_membership=Exists(assignable_profile_membership),
     ).filter(
         profile_membership_id__isnull=False,
+    ).select_related("user", "workspace__profile").only(
+        "id", "user_id", "workspace_id", "role", "is_active",
+        "joined_at", "updated_at", "user__first_name", "user__last_name",
+        "user__is_active", "workspace__status", "workspace__profile_id",
+        "workspace__profile__status",
     ).distinct()

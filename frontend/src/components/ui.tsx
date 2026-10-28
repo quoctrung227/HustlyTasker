@@ -109,8 +109,8 @@ export function FormField({ id, label, error, hint, children }: {
   )
 }
 
-export function Dialog({ open, onClose, title, children, className }: {
-  open: boolean; onClose: () => void; title: string; children: ReactNode; className?: string
+export function Dialog({ open, onClose, title, children, className, busy = false }: {
+  open: boolean; onClose: () => void; title: string; children: ReactNode; className?: string; busy?: boolean
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const closeRequest = useRef(onClose)
@@ -140,19 +140,19 @@ export function Dialog({ open, onClose, title, children, className }: {
   return (
     <dialog ref={dialogRef} aria-labelledby={titleId} className={classes('dialog', className)} onCancel={(event) => {
       event.preventDefault()
-      onClose()
+      if (!busy) onClose()
     }}>
       <div className="dialog__header">
         <h2 id={titleId}>{title}</h2>
-        <Button variant="ghost" className="icon-button" aria-label="Đóng hộp thoại" onClick={onClose}><X size={20} aria-hidden="true" /></Button>
+        <Button variant="ghost" className="icon-button" aria-label="Đóng hộp thoại" disabled={busy} onClick={onClose}><X size={20} aria-hidden="true" /></Button>
       </div>
       <div className="dialog__body">{children}</div>
     </dialog>
   )
 }
 
-export function Pagination({ page, count, onPageChange, pageSize = 20 }: {
-  page: number; count: number; onPageChange: (page: number) => void; pageSize?: number
+export function Pagination({ page, count, onPageChange, pageSize = 20, disabled = false }: {
+  page: number; count: number; onPageChange: (page: number) => void; pageSize?: number; disabled?: boolean
 }) {
   if (count <= 0) return null
   const size = Number.isFinite(pageSize) && pageSize > 0 ? Math.floor(pageSize) : 20
@@ -166,9 +166,9 @@ export function Pagination({ page, count, onPageChange, pageSize = 20 }: {
     <nav className="pagination" aria-label="Phân trang">
       <p className="pagination__summary">{number.format(start)}–{number.format(end)} trong {number.format(count)} kết quả</p>
       <div className="pagination__controls">
-        <Button variant="secondary" onClick={() => onPageChange(current - 1)} disabled={current === 1} aria-label="Trang trước"><ArrowLeft size={18} aria-hidden="true" /></Button>
+        <Button variant="secondary" onClick={() => onPageChange(current - 1)} disabled={disabled || current === 1} aria-label="Trang trước"><ArrowLeft size={18} aria-hidden="true" /></Button>
         <span className="pagination__page" aria-live="polite" aria-atomic="true">Trang {number.format(current)} / {number.format(pages)}</span>
-        <Button variant="secondary" onClick={() => onPageChange(current + 1)} disabled={current === pages} aria-label="Trang sau"><ArrowRight size={18} aria-hidden="true" /></Button>
+        <Button variant="secondary" onClick={() => onPageChange(current + 1)} disabled={disabled || current === pages} aria-label="Trang sau"><ArrowRight size={18} aria-hidden="true" /></Button>
       </div>
     </nav>
   )
