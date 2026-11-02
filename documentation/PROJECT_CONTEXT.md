@@ -66,15 +66,21 @@ Current Phase:
 
 PHASE 4 - Fixture-only Smart Task Generator Backend
 
-Current task — 2026-10-28:
+Current task — 2026-11-02:
 
-`HT-AI-P4-02B — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW`
+`HT-AI-P4-02B-R3 — DEVELOPMENT MIGRATION SUCCESS — OWNER REVIEW GATE`
 
 The Owner approved a fixture-only Generator backend and reviewed dedicated
 durable state. `backend/apps/ai` is now an installed Django app containing
 `AiProposal`/`AiOperation`, additive `ai.0001_initial` and three authenticated
 tenant-scoped generate/read/confirm routes. Read also recovers committed results.
-The migration exists in source; persistent-development apply is not authorized.
+The Owner separately approved exact development rollout in R3. On2026-11-02,
+standard Django applied only `ai.0001_initial` once/exit0 on the original
+PostgreSQL16.14 development target. Both dedicated AI tables now exist;
+development has36 migration records,29 tables and136 indexes. All original data
+was preserved, including3 Users/2 Sessions/business0; AI tables remain empty.
+Only expected migration/ContentType/permission metadata was added. Production
+rollout and fixture/live enablement are not authorized by this schema task.
 
 Every request reuses current tenant/RBAC authority: active Profile Owner/Admin
 or Workspace Admin, original actor only, no staff shortcut. Generation creates
@@ -92,21 +98,26 @@ scrubbing do not enforce physical retention purge. Cache generation throttles
 are process-local/non-atomic. Live budgets/providers, AI frontend and Analyzer
 runtime retain separate gates; no schema expansion into Project or onboarding.
 
-Current-source isolated PostgreSQL evidence: AI 158/158 PASS 11.208s
+Historical implementation-stage isolated PostgreSQL evidence: AI 158/158 PASS 11.208s
 (bf34f0b7fd384c7a9958b4513cea18ac), targeted Task/Review/Workspace/RBAC 378/378
 PASS 165.639s (d41c6561e93f4b6489e0a858d87a75de), full 643/643 PASS 215.115s
 (6bdba3440f8d46edb28df73a9b30fe03). Docker recovered; actual launcher and Python
 PID1 container-die exits 0, dependency/system/no-drift/graph/full-chain checks and
 owned cleanup passed. PostgreSQL 137 was intentional cleanup. 210 protected
-runtime hashes stayed unchanged across final targeted/full runs. Fresh read-only
-development: PostgreSQL 16.14, 35 migrations, 3 Users, 2 Sessions, 0 business rows and
-AI tables absent. No .env read or persistent database mutation occurred.
+runtime hashes stayed unchanged across those targeted/full runs. Their then-current
+development snapshot was35 migrations with no AI tables. These suites were not
+rerun in R3. R3 reused the existing environment loader privately for child-process
+configuration, without inspecting, printing or changing secret values. Current
+checks validate the development schema, model/graph/history consistency, exact
+old-row preservation and8 actual loopback HTTP GET smoke requests; fixture flag
+false and210 reviewed runtime hashes unchanged. The suitable R2 backup and its
+isolated restore evidence were reverified; details remain in HANDOVER/readiness.
 
 Overall Generator remains PARTIAL because AI frontend/live provider are absent.
-Stop at OWNER REVIEW GATE. Proposed next task is separately approved controlled
-ai.0001 development rollout with fresh inventory/backup/rehearsal/plan, before
-separately authorized 02C fixture UI. No live provider, Analyzer or next task
-starts automatically. Historical AI 77/full 562 below retain their original scope.
+Stop at OWNER REVIEW GATE. Proposed next task is HT-FE-P3-05 fixture proposal
+preview/edit/confirmation UI, requiring separate Owner scope approval. No live
+provider, Analyzer or next task starts automatically. Historical AI77/full562
+below retain their original scope.
 
 Historical completed AI02A checkpoint:
 

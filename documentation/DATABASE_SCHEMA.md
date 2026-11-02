@@ -2,10 +2,49 @@
 
 # HustlyTasker Database Design
 
-Version: 0.12 source; persistent development remains the approved0.11 schema
-until a separately authorized AI rollout.
+Version: **0.12 source and persistent development** after the Owner-approved
+HT-AI-P4-02B-R3 rollout on2026-11-02. Production state is not verified.
 
-## HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED / OWNER REVIEW — finalized2026-10-29
+## HT-AI-P4-02B-R3 — DEVELOPMENT MIGRATION SUCCESS / OWNER REVIEW — 2026-11-02
+
+Exact `ai.0001_initial` applied once with standard Django migration, existing
+venv and validated private environment loader. Native child exit0; recorded
+2026-11-02T04:07:32.213869Z (11:07:32 Asia/Saigon). Migration source unchanged,
+SHA256 `2fa99cfcd14334e270f178efdeaf1fd0be7381c1f20459ef5836d535651cbf55`.
+No new/edited migration, model, runtime setting or business rule in R3.
+
+Verified target: original hustlytasker_postgres/container49ef93152944,
+docker_postgres_data,127.0.0.1:5432,hustlytasker_db, PostgreSQL16.14,
+cluster7671936116369391654. Current pre-apply data/schema/sequences/history
+matched the recoverable R2 snapshot exactly; backup remains unchanged and
+reverified. Backup/restore provenance is in
+[AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md).
+
+| Development schema/data | Verified before → after |
+|---|---|
+| Migrations |35→36; only ai.0001_initial|
+| Tables / indexes |27/122→29/136|
+| Constraints / FKs |121/44→139/51; all valid, indexes ready|
+| AI schema |AiProposal15 columns; AiOperation9;7 FKs,18 constraints,14 indexes|
+| AI constraint semantics |Deferred NO ACTION FKs, lifecycle/state/revision/expiry CHECKs, scoped-key uniqueness and partial one-confirmation index; Django ORM PROTECT policy unchanged|
+| Framework metadata |Only2 AI ContentTypes,8 AI default permissions and1 migration record; totals25/100/36|
+| Existing records |Every old row fingerprint and schema object preserved; Users3/Sessions2/AdminLogs7/business0|
+| Sequences |Only migration/ContentType/permission+1/+2/+8; all other sequences unchanged|
+| AI records |Proposal0/Operation0; no fixtures or Task mutation|
+
+Post-apply Django/model/graph/history checks, showmigrations and migrate --check
+PASS with no pending plan. Eight read-only actual HTTP smoke GETs passed without
+changing rows/schema/sequences. Fixture flag remains false; no live provider
+exists or was called. R1 72/158 and full643 tests below are historical, not R3
+reruns. SQL does not enforce cross-table tenant equality, JSON DAG or current
+authorization; those remain application invariants.
+
+Stop at OWNER REVIEW GATE. This changes only development schema/expected Django
+metadata, not production or AI product completion. Physical purge/shared quota,
+frontend AI and Analyzer still need separate work/approval. Older no-apply
+checkpoints below are historical and must not be mistaken for current DB state.
+
+## Historical HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED / OWNER REVIEW — finalized2026-10-29
 
 Execution evidence below is from2026-10-28; resume2026-10-29 did not rerun
 backup/restore/tests. Read-only resume confirms unchanged development schema,

@@ -1,12 +1,71 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-10-29
+Last updated: 2026-11-02
 
 ## Giai đoạn hiện tại
 
 `PHASE 4 - Fixture-only Smart Task Generator Backend`
 
-Current task: **HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED — OWNER REVIEW /
+Current task: **HT-AI-P4-02B-R3 — DEVELOPMENT MIGRATION SUCCESS — OWNER REVIEW GATE**.
+
+After the Owner's exact conditional approval and immediate safety rechecks,
+`manage.py migrate ai 0001_initial --noinput` completed once on the verified
+development target at2026-11-02T04:07:32Z (11:07 Asia/Saigon), actual child exit0.
+Current schema:36 migrations,29 tables,136 indexes; both AI tables exist with
+15/9 columns,7 FKs,18 constraints and14 indexes valid/ready. Existing data stayed
+intact:3 Users/2 Sessions/business0/AI0; only1 migration,2 ContentTypes and8
+permissions were added, with corresponding sequence increments1/2/8.
+
+The current pre-apply snapshot matched R2's data/schema/sequences exactly. Its
+retained110161-byte archive/hash/TOC251/full-read/readability and actual isolated
+restore evidence remained valid; no duplicate backup/rehearsal was necessary.
+Current Django system/model/graph/history checks, empty pending plan,
+showmigrations/migrate-check and8 actual loopback HTTP GET smoke checks passed.
+Preflight/immediate-preflight/migration/post child exits are0. No login, POST,
+business fixture, provider or production operation occurred. Fixture flag stays
+false and210 reviewed runtime hashes are unchanged. Historical72/158/643 tests
+were not rerun for this schema rollout.
+
+See [AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md)
+and [HANDOVER.md](HANDOVER.md) for backup and execution evidence. Overall Generator
+remains PARTIAL: React AI and live provider are absent. Proposed next task is
+**HT-FE-P3-05 — fixture proposal preview/edit/confirmation UI**, requiring separate
+Owner scope approval. Do not start it, enable AI, or begin Analyzer/Project/onboarding
+automatically. Stop at **OWNER REVIEW GATE**.
+
+### Historical completed R2 checkpoint
+
+Historical task: **HT-AI-P4-02B-R2 — READY FOR DEVELOPMENT MIGRATION EXECUTION —
+OWNER APPROVAL REQUIRED**.
+
+R2 preflight verified the original development target, fresh protected backup
+and successful isolated restore of the newer User/Session state. New custom
+archive110161 bytes/SHA-256/TOC251/full-read/readability checks passed; details
+are in [AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md).
+All27 restored table/schema/sequence/history/row fingerprints matched. A
+read-only Django helper passed5 checkpoints with Python PID1 exit0, including
+model/graph/history consistency and the exact pending ai.0001 plan. The restored
+target remained35 migrations with no AI tables; no AI migration was applied
+anywhere during R2 and no test suite/fixture/provider was run.
+
+Owned resources were cleaned with exit0. Final development read-only schema,
+sequences and all row fingerprints match the fresh R2 baseline:35 migrations,
+0 AI migrations,3 Users/2 Sessions/business0; original container49ef93152944 and
+volume preserved. All210 runtime hashes are unchanged. No matching Django/Vite
+process or other active DB connection/transaction was observed at initial/final
+checks; no server or user session was stopped. Recheck this immediately before
+any separately approved execution, along with backup freshness and the exact plan.
+
+Stop at **PRE-EXECUTION OWNER GATE**. The approval still required is for exact
+ai.0001_initial on the verified development target only; no production, feature
+enablement, frontend AI/Create Profile, Analyzer or next task is included. The
+normal launcher has no -Migrate mode; future environment-loading/command guidance
+is documented only. R1's72/158 and earlier full643 results below are historical,
+not new R2 test results. Overall Generator remains PARTIAL, fixture backend only.
+
+### Historical completed R1 checkpoint
+
+Historical task: **HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED — OWNER REVIEW /
 DEVELOPMENT APPLY NOT AUTHORIZED**.
 
 R1 execution evidence from 2026-10-28: a fresh 110161-byte custom development backup, 251-line TOC,
@@ -1265,9 +1324,11 @@ dependencies. HT-FE-P3-01 below separately authorizes the web foundation only.
 |---|---|---|
 | HT-AI-P4-01 — Architecture & Provider Design | DESIGN COMPLETE — REMAINING DECISIONS PENDING | Architecture is the design baseline, not blanket approval of AI-D01–AI-D10 |
 | HT-AI-P4-02A — Contracts, Fixture Adapter & Persistence Review | IMPLEMENTATION COMPLETE — HISTORICAL BASELINE | Stateless DTOs/validators/provider port/fixture/service boundary; historical AI77/full562 passed and are not current02B results |
-| HT-AI-P4-02B — Fixture Generator Backend & Durable Confirmation | IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW | 3 routes/2 models/ai.0001; implementation-stage AI158/Task-RBAC378/full643 results are historical; R1 readiness evidence below does not authorize development apply |
+| HT-AI-P4-02B — Fixture Generator Backend & Durable Confirmation | IMPLEMENTATION COMPLETE; DEVELOPMENT SCHEMA APPLIED VIA R3 / OWNER REVIEW | 3 routes/2 models/ai.0001; implementation-stage AI158/Task-RBAC378/full643 results remain historical; R3 applied exact ai.0001 on development without feature enablement |
 | HT-AI-P4-02B-R1 — Development Migration Readiness, Backup & Restore Rehearsal | MIGRATION READINESS VERIFIED — OWNER REVIEW / DEVELOPMENT APPLY NOT AUTHORIZED | 2026-10-28 backup/restore, exact isolated ai.0001, preservation and 72/158 PASS; exits/cleanup verified. Resume 2026-10-29 rechecked artifacts/state without rerunning tests; newer User/Session fingerprints require fresh rollout backup. Full643 remains historical |
-| HT-AI-P4-02 — Smart Task Generator | PARTIAL — FIXTURE BACKEND COMPLETE | Frontend preview/edit/confirm and live-provider/budget integration remain absent and require separate scope/approval; controlled development migration rollout is the proposed next gate |
+| HT-AI-P4-02B-R2 — Controlled Development Migration Rollout, Pre-execution Gate | READY FOR DEVELOPMENT MIGRATION EXECUTION — HISTORICAL R2 GATE | New snapshot backup/restore and exact read-only plan verified; no migration applied during R2. Its separate-approval gate was satisfied by the later R3 request and fresh safety checks; current development apply is recorded below |
+| HT-AI-P4-02B-R3 — Controlled Development Migration Execution | DEVELOPMENT MIGRATION SUCCESS — OWNER REVIEW GATE | Exact ai.0001 applied once/exit0;36 migrations, valid AI schema, original rows preserved; current checks/8 HTTP GET smoke pass; feature remains disabled |
+| HT-AI-P4-02 — Smart Task Generator | PARTIAL — FIXTURE BACKEND AND DEVELOPMENT SCHEMA COMPLETE | Frontend preview/edit/confirm and live-provider/budget integration remain absent and require separate scope/approval; proposed HT-FE-P3-05 fixture UI is not authorized by R3 |
 | HT-AI-P4-03 — Feedback Analyzer | NOT STARTED — PENDING SEPARATE APPROVAL | Reuse shared adapter/guards; bounded authorized source resolution, citations and read-only analysis UI |
 | HT-AI-P4-04 — AI Acceptance & Cost/Security Hardening | NOT STARTED — PENDING SEPARATE APPROVAL | Deterministic isolated E2E, prompt abuse/provider failure/budget races and tenant/security regression |
 

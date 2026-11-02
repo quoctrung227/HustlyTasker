@@ -1,12 +1,37 @@
 # HT-AI-P4-02A — AI Persistence, Retention & Locking Review
 
-Ngày: **2026-10-28**. Current: **P4-02B IMPLEMENTATION COMPLETE — PENDING
-DEVELOPMENT MIGRATION APPROVAL / OWNER REVIEW** after the Owner's scoped
-fixture-only approval. Original02A proposal review remains below as historical
-design evidence, not a ban on the newly authorized implementation. Overall
-Smart Task Generator remains PARTIAL: frontend AI and live provider are absent.
+Updated: **2026-11-02**. Current: **P4-02B-R3 DEVELOPMENT MIGRATION SUCCESS —
+OWNER REVIEW GATE** after the Owner's exact conditional development approval.
+Original02A/02B proposal and implementation evidence remain historical below.
+Overall Smart Task Generator remains PARTIAL: frontend AI and live provider
+are absent.
 
-## Current P4-02B persistence checkpoint
+## Current R3 persistence deployment checkpoint
+
+Only `ai.0001_initial` was applied once through standard Django on the verified
+development PostgreSQL16.14 target, actual child exit0 at2026-11-02T04:07:32Z.
+The current pre-apply snapshot matched R2's schema/sequences/all row fingerprints;
+its retained110161-byte archive and successful isolated restore remained valid.
+R3 reverified checksum/readability/TOC251/full read, without unnecessary backup
+or rehearsal repetition. Source migration and210 runtime hashes are unchanged.
+
+Post-checks confirm AiProposal15 columns/AiOperation9,7 FKs,18 constraints and14
+indexes valid/ready;36 total migrations/29 tables/136 indexes. Every original row
+was preserved, including3 Users/2 Sessions/business0; both AI tables are empty.
+Only expected1 migration/2 ContentTypes/8 permissions and sequence increments
+1/2/8 were added. Django/model/graph/history/migration consistency and8 actual
+loopback HTTP GET smoke checks passed, all preflight/apply/post child exits0.
+
+The existing environment loader consumed private local values only for child
+processes, without displaying or changing them. No provider call, fixture or
+business mutation test, production action, new model/migration or runtime edit.
+R1's72/158 and full643 suites below remain historical, not rerun in R3.
+Fixture flag remains false; physical purge and shared quota limitations remain.
+See [AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md)
+and [HANDOVER.md](HANDOVER.md) for retained evidence. Proposed fixture UI requires
+separate Owner approval; stop at OWNER REVIEW GATE.
+
+## Historical P4-02B persistence implementation checkpoint — 2026-10-28
 
 The Owner now approves a minimal durable Generator with manager/actor binding,
 atomic confirmation, scoped idempotency and additive AI migrations applied only

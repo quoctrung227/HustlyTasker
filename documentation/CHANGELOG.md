@@ -2,7 +2,60 @@
 
 Lịch sử thay đổi của dự án HustlyTasker.
 
+## Unreleased - 2026-11-02
+
+### HT-AI-P4-02B-R3 — DEVELOPMENT MIGRATION SUCCESS / OWNER REVIEW GATE
+
+- Applied only `ai.0001_initial` once on verified development PostgreSQL16.14
+  through the existing venv and repository's private environment loader; exact
+  standard Django command returned actual child exit0 at04:07:32Z (11:07 local).
+  No secret value was inspected, printed or changed. No runtime code changed.
+- Revalidated target/container/volume, source hashes, exact AI-only plan and
+  quiet-window observations immediately before apply. Current snapshot matched
+  R2 completely; retained110161-byte backup with SHA256
+  `c2987ee549e85ee83536f66bd934033cdbe1aa3dd1b06efc6bf9cb6b6195fe5a`
+  and its successful isolated restore remained applicable. Hash/readability/
+  TOC251/full archive read passed again; no backup was overwritten or recreated.
+- Verified two AI tables15/9 columns,7 FKs,18 constraints and14 valid/ready
+  indexes; totals36 migrations/29 tables/136 indexes. Preserved all original row
+  fingerprints,3 Users/2 Sessions and business rows0; AI tables empty. Only
+  1 migration/2 ContentTypes/8 permissions and sequence increments1/2/8 were added.
+- Current Django/system/model/graph/history/showmigrations/migrate-check and8
+  actual loopback HTTP GET smoke requests passed; preflight/immediate/apply/post
+  child exits0. No login, POST or business fixture was used. Listener closed;
+  no new isolated resources were created. Historical72/158/643 suites not rerun.
+- Fixture/live AI stays disabled;210 runtime hashes unchanged. No production,
+  provider call, schema-source edit, credential change, commit or push. R3 stops
+  at Owner review; frontend AI/Analyzer and other next tasks remain unapproved.
+
 ## Unreleased - 2026-10-29
+
+### HT-AI-P4-02B-R2 — READY FOR DEVELOPMENT MIGRATION EXECUTION / OWNER APPROVAL REQUIRED
+
+- Completed fresh read-only preflight on the original development PostgreSQL16.14
+  target:35 migrations/0 AI migrations,3 Users/2 Sessions and0 inventoried business
+  rows. Docker29.8.2, container49ef93152944, volume and loopback target verified.
+  Initial/final snapshots found no matching Django/Vite process, other DB
+  connection or active transaction; no process was stopped or restarted.
+- Created a new protected Git-ignored custom backup,110161 bytes, SHA-256
+  `c2987ee549e85ee83536f66bd934033cdbe1aa3dd1b06efc6bf9cb6b6195fe5a`.
+  TOC251, full archive read, matching hashes and Owner-context file readability
+  passed; R1 backup retained. Path and metadata are in the readiness report.
+- Restored the fresh snapshot only to owned isolated PostgreSQL; restore exit0
+  and all27 legacy table/schema/sequence/history/row fingerprint comparisons
+  passed, including the newer User/Session state. A read-only Django plan helper
+  passed5 checkpoints, Python PID1 exit0: no model drift, graph/history valid,
+  only ai.0001_initial pending. default_transaction_read_only remained ON; no
+  migration was applied even to this restored target, which stayed35 migrations
+  with no AI tables. No test suite, business fixture or AI provider ran in R2.
+- Ownership-checked cleanup exited0 and no test resources remain. Final
+  development schema/sequences/all row fingerprints and210 runtime file hashes
+  match the R2 baseline. No runtime/model/migration/settings or `.env` change.
+- Recorded the execution checklist and pending approval. Two AI tables and
+  framework metadata additions remain future expectations, not completed R2
+  development changes. **Do not apply until the Owner separately approves exact
+  development ai.0001_initial and immediate target/freshness/quiet-window gates
+  pass.** Earlier72/158/643 test results remain historical.
 
 ### HT-AI-P4-02B-R1 resume — MIGRATION READINESS VERIFIED / OWNER REVIEW
 

@@ -1719,3 +1719,37 @@ The R1 before/after preservation result remains valid for its execution window.
 Future rollout still needs separate Owner approval and a fresh backup/inventory
 that preserves this newer state; the retained archive must not be automatically
 restored over it. See the readiness report/HANDOVER for the finalized evidence.
+
+---
+
+# HT-AI-P4-02B-R3 exact development rollout — ACCEPTED SCOPE / EXECUTED 2026-11-02
+
+The Owner separately and conditionally authorizes **only `ai.0001_initial`** on
+the verified HustlyTasker DEVELOPMENT PostgreSQL target after current safety
+gates. This supersedes R1/R2's no-development-apply gate for that one execution;
+it does not change AI-D01–AI-D10, grant feature/runtime enablement, authorize
+production or approve another migration/task. Earlier decisions above retain
+their historical dates and scope.
+
+Execution evidence: original container49ef93152944/hustlytasker_postgres,
+docker_postgres_data,127.0.0.1:5432,hustlytasker_db, PostgreSQL16.14. Current
+pre-apply data/schema/sequences matched R2 exactly; retained protected archive
+110161 bytes/SHA256 c2987ee549e85ee83536f66bd934033cdbe1aa3dd1b06efc6bf9cb6b6195fe5a
+and its successful isolated restore remained applicable. Readability/TOC/full-read,
+source hashes, exact AI-only plan and quiet-window observations were reverified.
+
+`manage.py migrate ai 0001_initial --noinput` ran once through the existing venv
+and repository's private loader, actual child exit0 at2026-11-02T04:07:32Z.
+Post-checks show36 migrations, both empty AI tables15/9 columns,7 FKs,
+18 constraints/14 indexes valid/ready. All original rows remain intact, including
+3 Users/2 Sessions/business0. Only framework metadata1/2/8 and corresponding
+sequence increments were added. Django checks and8 non-mutating HTTP GET smoke
+requests passed; no live provider or fixture was enabled.210 runtime hashes match.
+
+No secret values were inspected, printed or changed. No business fixture,
+authenticated development mutation, new migration/source edit, production action,
+commit or push occurred. R1's72/158 and full643 tests were not rerun in R3.
+Physical purge and shared multi-worker quota limitations are unchanged. Proposed
+HT-FE-P3-05 fixture preview/edit/confirmation UI remains **RECOMMENDED, NOT
+APPROVED**; no live provider/Analyzer/onboarding task starts automatically.
+See HANDOVER/readiness for evidence. **STOP AT OWNER REVIEW GATE.**

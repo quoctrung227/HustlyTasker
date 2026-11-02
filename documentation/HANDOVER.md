@@ -1,6 +1,224 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-10-29 — HT-AI-P4-02B-R1 MIGRATION READINESS VERIFIED
+## Current checkpoint — 2026-11-02 — HT-AI-P4-02B-R3 DEVELOPMENT MIGRATION SUCCESS
+
+**DEVELOPMENT MIGRATION SUCCESS — OWNER REVIEW GATE.** Owner's R3 request
+conditionally authorized exactly `ai.0001_initial` on development. All gates
+passed and the migration was applied once. Earlier R1/R2 no-apply instructions
+below are historical. No further task, fixture enablement, live provider or
+production change is authorized. **Do not rerun the migration.**
+
+### Execution and target
+
+Existing `backend/venv/Scripts/python.exe`, cwd `backend`, ran exactly:
+
+```text
+manage.py migrate ai 0001_initial --noinput
+```
+
+Native Python exit **0**, no stderr; `Applying ai.0001_initial... OK`.
+Database migration timestamp **2026-11-02T04:07:32.213869Z**, or11:07:32
+Asia/Saigon. Target: PostgreSQL16.14/hustlytasker_db,127.0.0.1:5432,
+original container49ef9315294450710e2c71eefb1559993c821aff94531e79541d9811534ebbbe,
+hustlytasker_postgres/postgres:16, volume docker_postgres_data,
+cluster7671936116369391654. Engine29.8.2. No container/server restart by R3.
+
+The existing repository environment parser/assertion/process-construction
+functions privately consumed the Git-ignored local configuration for child
+processes. No secret value was inspected, displayed, serialized or changed.
+Startup script/settings/venv remain unchanged. Read-only checks use libpq
+read-only guards; the one apply used5s lock/60s statement timeouts, without
+disabling security or enabling AI. Immediate preflight preceded apply by seconds:
+target/mount/backup/source hashes, no matching application/test process, no other
+DB connections and unchanged snapshot/only-AI plan. No external process stopped.
+
+### Backup and preservation
+
+Retained R2 archive:
+`.local_backups/HT-AI-P4-02B-R2/20261028T174156Z_12cd6e8c27b34c3f971b84c00aee32cd/development.dump`.
+Size **110161 bytes**, SHA256
+`c2987ee549e85ee83536f66bd934033cdbe1aa3dd1b06efc6bf9cb6b6195fe5a`.
+Current pre-apply schema, all row fingerprints, sequences and history matched
+R2's final snapshot exactly. This made that recovered snapshot suitable; no
+unnecessary duplicate backup/rehearsal. Owner-context readability/hash/Git-ignore,
+251-line TOC/full archive read reverified. Actual isolated restore PASS/exit0
+is retained R2 evidence, not a restore rerun in R3. All backups retained unchanged.
+
+| Development verification | Before → after / result |
+|---|---|
+| Migration records / AI |35/0 →36/1; exactly ai.0001_initial added; no pending migrations|
+| Tables / indexes |27/122 →29/136; old schema exact|
+| Constraints / FKs |121/44 →139/51; all valid, indexes valid/ready|
+| AI columns |AiProposal15, AiOperation9; types/nullability/defaults match review|
+| AI integrity |7 validated deferred NO ACTION FKs, lifecycle CHECKs, scoped key uniqueness, partial one-confirmation uniqueness and lookup/expiry indexes verified|
+| Framework metadata |ContentTypes23→25, permissions92→100; only2 AI types/8 AI permissions plus1 migration added|
+| Existing data |Every old row fingerprint preserved, Users3/Sessions2/AdminLogs7/business0|
+| AI rows |Both tables0; no proposal, operation or Task demo created|
+| Sequences |Only migration/ContentType/permission sequences+1/+2/+8; every other sequence unchanged|
+
+SQL FKs/constraints do not enforce all cross-table tenant equality, JSON shape,
+hierarchy or current RBAC. Those invariants remain in existing services/tests.
+
+### Checks actually run in R3
+
+- Preflight, immediate-preflight, exact migration and post-verification native
+  Python exits **0**. Graph/history/model consistency, Django system check,
+  makemigrations --check --dry-run, showmigrations ai and migrate --check PASS;
+  final migration plan empty. Independent read-only SQL confirmed one AI record,
+  empty AI tables, no invalid constraints/indexes and no other DB connection.
+- **8/8 actual loopback HTTP GET smoke checks PASS** through Django WSGI:
+  health200, CSRF bootstrap200, auth/me403, Profiles403, Notifications403 and
+  three AI route boundaries403 for anonymous callers. CSRF token/cookie values
+  never logged; error responses minimized. No login, POST, business fixture or
+  provider call. All rows/schema/sequences exact before/after smoke. The owned
+  temporary HTTP listener closed; no server or isolated test resource remains.
+- AI fixture setting false; no live adapter/provider enabled. All210 reviewed
+  runtime hashes match R1/R2 and R3 before/after. No source/model/migration edit.
+- R1's72/158 and full643 results remain historical. They were **not rerun** in
+  R3; no full-suite, authenticated mutation success or browser UI E2E is claimed.
+
+Evidence stage:
+`.local_backups/HT-AI-P4-02B-R3/preflight-005e4ca1ceb04629b47166c777360c95/`.
+Contains development-before.json, preflight/post snapshots and reports,
+runtime-before.json, final-sql-check.json and native process receipts. The
+single-attempt marker prevents automatic reapply. The helpers are Git-ignored
+operational artifacts, not application code; no private environment/row values.
+
+### Files, remaining limits and exact continuation
+
+Preserved main/157d495ccc7afe42980d6af7a83dd7f432296092 and the six dirty R2
+documentation files. R3 updates documentation only: HANDOVER, readiness,
+PROGRESS, PROJECT_ROADMAP, REQUIREMENT_STATUS, CHANGELOG, DATABASE_SCHEMA,
+PROJECT_CONTEXT, API_DOCUMENTATION, AI_PERSISTENCE_REVIEW and DECISION_LOG.
+No commit/push/reset, fixture enablement, production action, restore or rollback.
+
+No R3 blocker remains. Overall Generator is still PARTIAL: frontend preview/
+edit/confirm, live providers and Analyzer are absent. Physical retention purge
+and shared multi-worker quotas remain unimplemented. This is development DDL
+success, not production/live-AI readiness. Project and onboarding gates remain.
+
+**Exact next step: STOP FOR OWNER REVIEW.** Recommend a separately approved
+HT-FE-P3-05 fixture preview/edit/confirm UI, reusing current backend contracts and
+isolated tests. Do not start it or enable fixtures/live AI automatically. On any
+later anomaly inspect schema/history first; never automatically fake, retry,
+rollback or restore development.
+
+Final R3 quality:11 documentation files dirty only; all58 local Markdown/source
+links valid/0 missing; four documented PowerShell blocks and the operational
+helper parse with0 errors; git diff --check exit0. All210 reviewed runtime hashes
+unchanged. Final checks/receipts are retained in quality-report.json and
+r3-final-report.json in the R3 stage. No untracked non-ignored source file,
+isolated container/network or owned HTTP listener remains. R3 is complete;
+**STOP AT OWNER REVIEW GATE**, no migration reapply or follow-on implementation.
+
+---
+
+## Historical checkpoint — 2026-10-29 — HT-AI-P4-02B-R2 READY / OWNER APPROVAL REQUIRED
+
+**HT-AI-P4-02B-R2 — READY FOR DEVELOPMENT MIGRATION EXECUTION — OWNER APPROVAL
+REQUIRED.** This means preparation only; ai.0001_initial remains unapplied.
+
+Owner authorizes read-only preflight, fresh inventory/backup/integrity/recovery
+verification, plan and checklist only. **NO DEVELOPMENT MIGRATION EXECUTION IS
+AUTHORIZED.** Stop at PRE-EXECUTION OWNER GATE after checks. Source baseline is
+main/157d495ccc7afe42980d6af7a83dd7f432296092, clean Owner commit; preserve it.
+Migration ai.0001 SHA2FA99CFCD14334E270F178EFDEAF1FD0BE7381C1F20459EF5836D535651CBF55
+is unchanged/additive-only. No runtime/model/migration edit, .env read or provider.
+
+Fresh read-only preflight: Engine29.8.2; exact original container49ef93152944,
+hustlytasker_postgres/postgres:16, docker_postgres_data,127.0.0.1:5432;
+PostgreSQL16.14/UTF8/en_US.utf8.35 migrations/0AI; no AI tables;27 tables,
+122 indexes,121 constraints/44 FKs all valid/ready. Users3/Sessions2/AdminLogs7/
+ContentTypes23/permissions92; all business/token/Audit rows0. No other DB
+connections/active transactions or matching Django/Vite process was observed at
+inspection; no process was stopped. R2 baseline data matches the newer R1-resume
+User/Session snapshot, not the old R1 backup. All snapshots are count/schema/hash
+metadata only; no private row values are printed.
+
+Fresh retained archive:
+`.local_backups/HT-AI-P4-02B-R2/20261028T174156Z_12cd6e8c27b34c3f971b84c00aee32cd/development.dump`
+110161 bytes, SHA256
+`c2987ee549e85ee83536f66bd934033cdbe1aa3dd1b06efc6bf9cb6b6195fe5a`.
+Custom pg_dump/copy/251-line TOC/full archive read exits0, host/container hashes
+match, Git-ignored. Exact Owner account read/write/hash was verified before
+archive creation; protected DACL has no broad user-group grant. Initial benign
+permission probe failed because only Sandbox/SYSTEM/Admin grants existed;
+explicit Owner-account access resolved it without granting broad groups or
+touching R1 backups. The timestamp is UTC; local date is29 October.
+
+Artifact stage:
+`.local_backups/HT-AI-P4-02B-R2/preflight-12cd6e8c27b34c3f971b84c00aee32cd/`.
+It holds inventory.sql, fresh development-before.json, runtime-before.json,
+context.json, backup-metadata.json and a new read-only preflight_restore.py.
+Runtime snapshot210 files. Do NOT run the old R1 helper: it applies AI schema
+and runs mutation tests, which are not part of this R2 preparation scope.
+
+DONE: fresh restore command --single-transaction/--no-owner/--no-acl/
+--exit-on-error exited0 on owned database
+ht_ai_r2_12cd6e8c27b34c3f971b84c00aee32cd, isolated systemID7701777503690309672,
+role ht_test_runner and comment hustlytasker-ai-r2:12cd6e8c27b34c3f971b84c00aee32cd.
+The existing test Compose topology verified internal network/tmpfs/no public
+DB ports/no persistent development-volume mount. Host→target archive SHA matched.
+
+Redacted evidence is r2-report.json in the stage. Five checkpoints PASS; direct
+Python PID1 command/exit0 independently inspected:
+
+| R2 checkpoint | Actual result |
+|---|---|
+| Fresh restore identity/data/schema comparison |All27 tables, logical columns/constraints/indexes, sequences, migration history and every row fingerprint match the fresh source snapshot, including current User/Session state |
+| Dependency check |pip check exit0 |
+| Read-only Django check/model/graph/history/plan |PASS; default_transaction_read_only and transaction_read_only verified ON; plan exactly ai.0001_initial forward, two CreateModel; default fixture flag false |
+| Restored snapshot preservation |All data/schema/sequences unchanged after checks;35 migrations/0AI; no AI tables or new business rows |
+| Source preservation |162 scoped helper hashes stable; separate210-file host snapshot unchanged versus R1 and R2 baseline |
+
+No helper path invokes migrate. No AI migration was applied even in isolation;
+no test suite/fixture/mutation/API provider was run. R1's72/158 and implementation
+643 remain historical, not R2 results. The prior migration rehearsal remains
+applicable to unchanged source/schema; this fresh restore proves recovery of the
+newer snapshot. Catalog comparison uses the reviewed logical ordinal and native
+PostgreSQL CHECK reparsing, without relaxing any constraint or changing source.
+
+DONE: owned restore DB removed only after exact system/owner/comment/no-use
+checks; shared labeled container/network cleanup exit0. No isolated resource
+remains. Original container49ef93152944/volume stays running. Final development
+READ ONLY comparison matches the fresh R2 baseline in every row fingerprint,
+schema object, sequence and migration:35 records/0AI,3 Users/2 Sessions and all
+business rows0. No active external DB connection or matching Django/Vite process
+was seen at initial/final inspection. These observations do not reserve a future
+quiet window. R1 archive is retained and unchanged; R2 archive remains protected.
+
+The reviewed future command is manage.py migrate ai 0001_initial --noinput in
+the existing backend venv/cwd, through the documented loader-aware child-process
+procedure. It is commented/gated, NOT executed. Expected later outcome is two AI
+tables15/9 columns,7 FKs,18 constraints/14 indexes plus exactly1 migration record,
+2 ContentTypes and8 permissions; original rows stay exact. Metadata sequences
+may increase only by the expected1/2/8; other sequences must remain unchanged.
+No fixture/live flag or business data creation is part of that authorization.
+
+R2 Git changes: HANDOVER.md, AI_DEVELOPMENT_MIGRATION_READINESS.md, PROGRESS.md,
+CHANGELOG.md plus roadmap/requirement current-status reconciliation. No runtime,
+model, migration, settings, secrets or dependency change; no commit/push/reset.
+The backup/helper/report artifacts are local and Git-ignored.
+
+**Exact continuation: STOP AT PRE-EXECUTION OWNER REVIEW GATE.** Ask for separate
+explicit approval of exact ai.0001_initial on DEVELOPMENT hustlytasker_db,
+127.0.0.1:5432, hustlytasker_postgres/docker_postgres_data only. Before any later
+write, reverify target/source checksum, unchanged AI-only plan, current inventory,
+backup freshness and quiet window. If anything changed, stop and refresh the
+affected preflight/backup evidence rather than applying from stale approval.
+Never auto-stop a server, fake migration history, rollback/restore development,
+enable live/fixture AI, run business fixtures or start frontend/another task.
+See AI_DEVELOPMENT_MIGRATION_READINESS.md for exact execution/post-check/recovery
+checklist. Passing preflight is not execution permission; no blocker currently
+remains except the required Owner approval and immediate pre-write rechecks.
+Final R2 quality checks:26 local Markdown links valid/0 missing, both documented
+PowerShell blocks parse without errors, git diff --check exit0;210 runtime hashes
+unchanged and both retained R1/R2 archive checksums match. Only six documentation
+files are dirty against the Owner's main/157d495 baseline.
+
+---
+
+## Historical checkpoint — 2026-10-29 — HT-AI-P4-02B-R1 MIGRATION READINESS VERIFIED
 
 **MIGRATION READINESS VERIFIED — OWNER REVIEW GATE.** Development apply of
 `ai.0001_initial` is still **NOT AUTHORIZED**. R1 execution evidence below is

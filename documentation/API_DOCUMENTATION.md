@@ -1,8 +1,28 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-10-28
+Last updated: 2026-11-02
 
-## HT-AI-P4-02B — IMPLEMENTATION COMPLETE / PENDING DEVELOPMENT MIGRATION APPROVAL
+## HT-AI-P4-02B-R3 — DEVELOPMENT SCHEMA APPLIED / API CONTRACT UNCHANGED
+
+The Owner-approved exact development `ai.0001_initial` rollout completed once,
+actual child exit0 on2026-11-02. Development now has both AI tables and36 applied
+migrations; original User/Session/business rows are preserved and AI rows remain0.
+Current system/model/graph/history/showmigrations/migrate-check checks pass.
+Actual HTTP on a task-owned loopback Django WSGI listener passed8 GET requests:
+health200, CSRF bootstrap200, and anonymous403 for me/Profiles/Notifications and
+the three AI routes. No authenticated success, POST/generate/confirm, fixture or
+business mutation was tested on persistent development; those flows retain their
+isolated historical test evidence below. Listener cleanup passed.
+
+This rollout changes no endpoint, request/response contract, RBAC or workflow.
+Fixture flag remains false; no live adapter/provider call, frontend AI, SDK/key
+or production action. Environment values were privately loaded through the
+existing repository mechanism for child processes only, never printed or changed.
+See [HANDOVER.md](HANDOVER.md) and
+[AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md).
+Stop at OWNER REVIEW GATE; no further implementation is authorized here.
+
+## Historical P4-02B implementation verification — 2026-10-28
 
 The bounded fixture-only API below is verified on isolated PostgreSQL. Stop at
 OWNER REVIEW GATE; this completion does not authorize development rollout or a
@@ -15,17 +35,19 @@ in165.639s (`d41c6561e93f4b6489e0a858d87a75de`); full isolated backend
 **643/643 PASS** in215.115s (`6bdba3440f8d46edb28df73a9b30fe03`). Actual launcher
 and Python PID1/container exit codes are0; owned test database/container/network
 cleanup, pip/Django/model-drift/migration graph and full-chain checks pass.
-Read-only development verification remains35 migrations,3 Users,2 Sessions and
-0 business rows; AI tables are absent and ai.0001 is not applied there. No private
-.env was read. See [HANDOVER.md](HANDOVER.md) for the continuation checkpoint.
-Historical FE04/API03A results below remain separate from this new verification.
+At that implementation checkpoint, read-only development verification found
+35 migrations, 3 Users, 2 Sessions and 0 business rows; AI tables were absent
+and ai.0001 was not applied there. No private .env was read in that earlier
+task. R3's later applied state and loader usage are recorded above and in
+[HANDOVER.md](HANDOVER.md). Historical FE04/API03A results below remain separate
+from that implementation verification.
 
-### Access, configuration and methods
+### Current access, configuration and methods
 
 - The installed AI app adds `ai.0001_initial` for `AiProposal` and `AiOperation`.
-  Apply/test only in isolated PostgreSQL for this task. Persistent-development
-  rollout needs separate Owner approval; do not enable these routes against an
-  unmigrated development schema.
+  R3 separately applied this exact schema on development after recovery/safety
+  gates. Further migrations, mutation tests on persistent development, feature
+  enablement and production rollout still require appropriate separate approval.
 - `DJANGO_AI_FIXTURE_ENABLED` defaults to `false`. Explicit opt-in only works
   when `DJANGO_ENVIRONMENT=development` and production mode is false. Production
   always refuses fixture execution; disabled processing returns `503

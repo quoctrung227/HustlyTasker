@@ -1,6 +1,6 @@
 # HUSTLYTASKER REQUIREMENT STATUS
 
-Last updated: 2026-10-29
+Last updated: 2026-11-02
 
 ## Quy ước đánh giá
 
@@ -17,7 +17,62 @@ Last updated: 2026-10-29
 
 Source of truth cho trạng thái là source code, migration đã áp dụng và kết quả kiểm thử. `documentation/` mô tả định hướng hiện hành. `reference/original_document/` là audit của hệ Next.js/Prisma cũ và chỉ được dùng để kế thừa business rules, không phải yêu cầu đổi Django sang Spring Boot hoặc công nghệ khác.
 
-Current checkpoint: **HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED — OWNER
+Current checkpoint: **HT-AI-P4-02B-R3 — DEVELOPMENT MIGRATION SUCCESS — OWNER REVIEW GATE**.
+
+Owner-approved exact development `ai.0001_initial` completed once with actual
+child exit0 on2026-11-02. Preflight and immediate preflight verified original
+target, unchanged reviewed source, no outside DB/application activity, sufficient
+storage and R2 backup freshness: all27 legacy row fingerprints/schema/sequences
+matched its restored snapshot. Retained archive110161 bytes/hash/readability/
+TOC251/full-read and prior successful isolated restore were verified; no new
+backup or rehearsal was needed for identical data.
+
+Post-check exit0:36 migrations/29 tables/136 indexes; AI tables15/9 columns,
+7 FKs/18 constraints/14 indexes valid/ready. All original row hashes remain:
+3 Users/2 Sessions/business0; AI rows0. Only framework metadata additions
+1 migration/2 ContentTypes/8 permissions and sequence increments1/2/8 occurred.
+Django checks/model drift/graph/history/showmigrations/migrate-check and8 actual
+loopback HTTP GET smoke requests passed without business mutations. Fixture flag
+is false; no live provider, SDK/key or production action.210 runtime hashes stable.
+R1's72/158 and full643 suites are historical, not rerun in R3.
+
+Overall Generator remains **PARTIAL**: fixture backend and development schema are
+ready, React AI/live provider/Analyzer are absent. Proposed HT-FE-P3-05 fixture UI
+requires separate Owner approval; no automatic next task or AI enablement.
+Physical retention purge and shared multi-worker quota limitations remain.
+See [HANDOVER.md](HANDOVER.md) for evidence and the **OWNER REVIEW GATE**.
+
+### Historical completed R2 checkpoint
+
+Historical checkpoint: **HT-AI-P4-02B-R2 — READY FOR DEVELOPMENT MIGRATION EXECUTION —
+OWNER APPROVAL REQUIRED**.
+
+R2 pre-execution checks passed; this is not development migration completion.
+Fresh protected backup110161 bytes, TOC251/full-read/hash/readability and actual
+isolated restore passed. All27 restored table/schema/sequence/history/row
+fingerprints matched current data. The read-only Django helper passed5 checkpoints,
+Python PID1 exit0, with only ai.0001 pending and no model/graph/history drift.
+default_transaction_read_only stayed ON. No AI migration was applied to development
+or the fresh restore, which still had35 migrations and no AI tables afterward.
+
+Owned cleanup exited0; no test resource remains. Final read-only development
+comparison matches the R2 baseline exactly: PostgreSQL16.14,35 migrations/0 AI,
+3 Users/2 Sessions/business0, original container49ef93152944/volume intact.
+All210 runtime file hashes are unchanged. No test suite, fixture, live provider,
+runtime/model/migration edit or `.env` read ran in R2. Earlier72/158/643 results
+are historical. No matching Django/Vite process or other active DB connection/
+transaction was observed at initial/final snapshots; repeat those observations
+and target/backup-freshness checks immediately before any authorized apply.
+
+Stop at **PRE-EXECUTION OWNER GATE** for separate approval of exact ai.0001_initial
+on the verified development target. Do not enable AI or begin frontend/Create
+Profile/Analyzer/production work. The overall Generator is still PARTIAL; source
+schema is ready but persistent rollout remains pending. See
+[AI_DEVELOPMENT_MIGRATION_READINESS.md](AI_DEVELOPMENT_MIGRATION_READINESS.md).
+
+### Historical completed R1 checkpoint
+
+Historical checkpoint: **HT-AI-P4-02B-R1 — MIGRATION READINESS VERIFIED — OWNER
 REVIEW / DEVELOPMENT APPLY NOT AUTHORIZED**.
 
 R1 execution evidence below is from 2026-10-28. The 2026-10-29 resume verifies
@@ -539,7 +594,7 @@ claims that the original F01–F16 already contain implemented AI runtime.
 
 | Capability | Design status | Implementation status | Required gate |
 |---|---|---|---|
-| AI Smart Task Generator | FIXTURE BACKEND SCOPE APPROVED; LIVE/UI GATES RETAINED | PARTIAL OVERALL — P4-02B IMPLEMENTATION COMPLETE; R1 MIGRATION READINESS VERIFIED, development apply not authorized | Current R1 direct restored-DB72/freshAI158 PASS; full643 remains historical. Separately approve exact ai.0001 development rollout before fixture UI; frontend/live integration still absent |
+| AI Smart Task Generator | FIXTURE BACKEND AND EXACT DEVELOPMENT ROLLOUT APPROVED; LIVE/UI GATES RETAINED | PARTIAL OVERALL — P4-02B IMPLEMENTATION COMPLETE; R3 DEVELOPMENT MIGRATION SUCCESS | Exact ai.0001 applied/exit0 with original rows preserved; current schema/Django/8 HTTP GET smoke verified. R1 72/158 and full643 remain historical; proposed HT-FE-P3-05 fixture UI and live integration require separate approval |
 | AI Feedback Analyzer | DESIGN COMPLETE — REMAINING DECISIONS PENDING | PRODUCT FEATURE NOT STARTED; typed analysis/citation fixture foundation in P4-02A | Separate approval for feature authority/live sources and P4-03 UI/service integration; no automatic Review or Task action |
 | Shared AI provider/cost/security foundation | FIXTURE CONTRACT/DURABLE GENERATOR SCOPE APPROVED | PARTIAL OVERALL —02B fixture backend verified, no live infrastructure | Current manager-only access, actor scope and durable confirmation passed PostgreSQL tests; physical purge, shared live budgets, provider SDKs and production controls remain absent/gated |
 
