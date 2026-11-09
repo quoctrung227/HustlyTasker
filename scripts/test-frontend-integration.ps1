@@ -2,7 +2,7 @@
 param(
     [ValidateRange(1024,65535)]
     [int]$BackendPort = 8001,
-    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members','workspace-members')]
+    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members','workspace-members','invitation-delivery-failure')]
     [string]$Suite = 'foundation'
 )
 
@@ -29,6 +29,7 @@ $htCreatedPg = $false
 $htCreatedServer = $false
 $htServerReady = $false
 $htSpec = switch ($Suite) {
+    'invitation-delivery-failure' {'e2e/invitation-delivery-failure.spec.ts'}
     'workspace-members' {'e2e/workspace-members.spec.ts'}
     'members' {'e2e/members.spec.ts'}
     'task-stability' {'e2e/task-stability.spec.ts'}
@@ -44,6 +45,7 @@ $htSpec = switch ($Suite) {
     default {'e2e/real-api.spec.ts'}
 }
 $htArtifactTask = switch ($Suite) {
+    'invitation-delivery-failure' {'HT-FE-INVITATION-DELIVERY-FIX-01'}
     'workspace-members' {'HT-FE-WORKSPACE-MEMBERS-01'}
     'members' {'HT-FE-MEMBERS-01'}
     'task-stability' {'HT-FE-STABILITY-01'}
@@ -244,7 +246,7 @@ try {
     if (-not $htReady) {throw 'Isolated PostgreSQL readiness timeout.'}
     # Fixture enablement exists only in the ownership-checked isolated server.
     # No deployment flag or local environment file is consumed or changed.
-    $htServeMode = if ($Suite -in @('ai-generator','feedback-analyzer')) {'serve-ai'} else {'serve'}
+    $htServeMode = if ($Suite -eq 'invitation-delivery-failure') {'serve-invitation-delivery-failure'} elseif ($Suite -in @('ai-generator','feedback-analyzer')) {'serve-ai'} else {'serve'}
     Invoke-CheckedDocker @('create','--name',$htServer,'--network',$htHttpNetwork,
         '--publish',"127.0.0.1:${BackendPort}:8000",'--workdir','/workspace/backend',
         '--mount',"type=bind,source=$htRepository,target=/workspace,readonly",

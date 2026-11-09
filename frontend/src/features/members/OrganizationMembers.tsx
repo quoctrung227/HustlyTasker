@@ -18,12 +18,13 @@ const deliveryLabels: Record<ProfileInvitation['delivery_status'], string> = {
 const lostScope = (error: unknown) => isApiError(error) && error.kind !== 'csrf' && [401, 403, 404].includes(error.status)
 const uncertain = (error: unknown) => !isApiError(error) || error.status === 0 || error.status >= 500
 const uncertainMessage = 'Chưa thể xác nhận kết quả. Lời mời có thể đã được lưu. Đóng biểu mẫu và kiểm tra danh sách trước khi thử lại.'
+const deliveryUnavailableMessage = 'Dịch vụ email hiện chưa sẵn sàng hoặc chưa được cấu hình. Chưa thể xác nhận việc gửi email. Lời mời có thể đã được lưu. Đóng biểu mẫu và kiểm tra danh sách trước khi thử lại; nếu vẫn lỗi, liên hệ quản trị để kiểm tra cấu hình email.'
 
 type MutationProps = {
   profileId: string
-  onChanged: () => void
+  onChanged: (showNewest?: boolean) => void
   onDenied: (error: unknown) => void
-  onNotice: (message: string) => void
+  onNotice: (message: string, kind?: 'success' | 'error') => void
 }
 type Failure = { message: string; fields: Partial<Record<'recipient_email' | 'requested_role', string>> }
 
@@ -71,22 +72,23 @@ function InviteForm({ profileId, roles, onChanged, onDenied, onNotice, onClose, 
         const api = isApiError(error) ? error : null
         const fieldErrors: Failure['fields'] = {}
         for (const name of ['recipient_email', 'requested_role'] as const) if (api?.fieldErrors[name]) fieldErrors[name] = api.fieldErrors[name]
-        setFailure({ message: uncertain(error) ? uncertainMessage : api?.message || 'Chưa thể tạo lời mời. Vui lòng thử lại.', fields: fieldErrors })
+        if (api?.status === 503) onNotice('')
+        setFailure({ message: api?.status === 503 ? deliveryUnavailableMessage : uncertain(error) ? uncertainMessage : api?.message || 'Chưa thể tạo lời mời. Vui lòng thử lại.', fields: fieldErrors })
         if (lostScope(error)) onDenied(error)
-        else if (uncertain(error) || api?.status === 409) onChanged()
+        else if (uncertain(error) || api?.status === 409) onChanged(true)
       }
     } finally {
       if (!controller.signal.aborted) { request.current = null; setPending(false); onPending(false) }
     }
     if (saved) {
       onNotice('Đã tạo lời mời. Hãy xem trạng thái email trong danh sách; lời mời chưa đồng nghĩa thành viên đã tham gia.')
-      onChanged(); onClose()
+      onChanged(true); onClose()
     }
   }
 
   return <form className="work-form" aria-label="Mời thành viên" noValidate onSubmit={(event) => void submit(event)} aria-busy={pending || undefined}>
     <p>Người nhận phải đăng nhập đúng tài khoản và chủ động chấp nhận lời mời. Quyền Workspace được quản lý riêng.</p>
-    {failure && <div ref={summary} className="form-summary" tabIndex={-1}><Alert kind="error" title="Chưa thể tạo lời mời"><p>{failure.message}</p>
+    {failure && <div ref={summary} className="form-summary" tabIndex={-1}><Alert kind="error" title="Chưa thể hoàn tất lời mời"><p>{failure.message}</p>
       {Object.keys(failure.fields).length > 0 && <ul>{Object.entries(failure.fields).map(([name, message]) => <li key={name}><a href={`#${ids[name as keyof typeof ids]}`} onClick={(event) => {
         event.preventDefault(); document.getElementById(ids[name as keyof typeof ids])?.focus()
       }}>{message}</a></li>)}</ul>}
@@ -149,9 +151,13 @@ function InvitationActions({ invitation, capabilities, ...props }: MutationProps
       saved = !controller.signal.aborted
     } catch (error) {
       if (!controller.signal.aborted) {
-        setFailure(uncertain(error) ? 'Chưa thể xác nhận kết quả. Kiểm tra lại danh sách trước khi thao tác tiếp.' : isApiError(error) ? error.message : 'Chưa thể xử lý lời mời.')
+        if (action === 'resend' && isApiError(error) && error.status === 503) {
+          // The replaced row can leave this page. Retain the failure outside
+          // its component rather than losing it while showing the newest row.
+          setFailure(null); props.onNotice(deliveryUnavailableMessage, 'error')
+        } else setFailure(uncertain(error) ? 'Chưa thể xác nhận kết quả. Kiểm tra lại danh sách trước khi thao tác tiếp.' : isApiError(error) ? error.message : 'Chưa thể xử lý lời mời.')
         if (lostScope(error)) props.onDenied(error)
-        else if (uncertain(error) || (isApiError(error) && error.status === 409)) props.onChanged()
+        else if (uncertain(error) || (isApiError(error) && error.status === 409)) props.onChanged(action === 'resend')
       }
     } finally {
       if (!controller.signal.aborted) { request.current = null; setPending(null) }
@@ -159,7 +165,7 @@ function InvitationActions({ invitation, capabilities, ...props }: MutationProps
     if (saved) {
       setConfirm(false)
       props.onNotice(action === 'revoke' ? 'Đã hủy lời mời.' : 'Đã tạo lời mời thay thế. Mã cũ không còn dùng được; xem trạng thái email mới trong danh sách.')
-      props.onChanged()
+      props.onChanged(action === 'resend')
     }
   }
 
@@ -183,7 +189,7 @@ function ScopedOrganizationMembers({ profileId, currentUserId }: { profileId: st
   const client = useQueryClient()
   const [memberPage, setMemberPage] = useState(1)
   const [invitationPage, setInvitationPage] = useState(1)
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState<{ message: string; kind: 'success' | 'error' } | null>(null)
   const [blocked, setBlocked] = useState<unknown>(null)
   const profile = useQuery({ queryKey: queryKeys.profile(profileId), queryFn: ({ signal }) => tenantApi.profile(profileId, signal), enabled: !blocked })
   const members = useQuery({ queryKey: memberKeys.members(currentUserId, profileId, memberPage), queryFn: ({ signal }) => membersApi.members(profileId, memberPage, signal), enabled: !blocked && profile.isSuccess })
@@ -197,19 +203,24 @@ function ScopedOrganizationMembers({ profileId, currentUserId }: { profileId: st
   const scopeError = blocked || (profile.isError ? profile.error : members.isError ? members.error : null)
   useEffect(() => { if (!blocked && lostScope(scopeError)) deny(scopeError) }, [blocked, deny, scopeError])
   useEffect(() => { if (!blocked && invitations.isError && lostScope(invitations.error)) deny(invitations.error) }, [blocked, deny, invitations.error, invitations.isError])
-  const changed = () => { void client.invalidateQueries({ queryKey: scopeKey }) }
+  const changed = (showNewest = false) => {
+    // New/replacement invitations sort onto page one, including a row whose
+    // email failed after commit. Routine background refresh never changes page.
+    if (showNewest) setInvitationPage(1)
+    void client.invalidateQueries({ queryKey: scopeKey })
+  }
   const retry = () => { setBlocked(null); void profile.refetch(); void members.refetch() }
   const header = <PageHeader title="Thành viên tổ chức" eyebrow={profile.isSuccess ? profile.data.name : 'TỔ CHỨC'} description="Thông tin thành viên trong phạm vi truy cập hiện tại của bạn." back={{ to: `/profiles/${profileId}`, label: 'Thông tin tổ chức' }} />
   if (scopeError) return <>{header}<ErrorState error={scopeError} onRetry={retry} /><p className="read-note">Chỉ Chủ sở hữu hoặc Quản trị viên tổ chức được xem danh sách này. Quyền trong Workspace không tự cấp quyền quản trị tổ chức.</p></>
   if (!profile.isSuccess || !members.isSuccess) return <>{header}<PageSkeleton label="Đang tải thành viên tổ chức…" /></>
   const capabilities = members.data.capabilities
-  const mutation = { profileId, onChanged: changed, onDenied: deny, onNotice: setNotice }
+  const mutation = { profileId, onChanged: changed, onDenied: deny, onNotice: (message: string, kind: 'success' | 'error' = 'success') => setNotice(message ? { message, kind } : null) }
   return <>
     <PageHeader title="Thành viên tổ chức" eyebrow={profile.data.name} description="Mời đúng người, cấp đúng phạm vi truy cập." back={{ to: `/profiles/${profileId}`, label: 'Thông tin tổ chức' }}
       action={<InviteCreate {...mutation} capabilities={capabilities} />} />
     <Alert>Thành viên tổ chức và quyền Workspace được quản lý độc lập. Người nhận chỉ tham gia sau khi chấp nhận lời mời hợp lệ.</Alert>
     {profile.data.status === 'ARCHIVED' && <Alert>Tổ chức đã lưu trữ. Danh sách chỉ đọc; không thể tạo, gửi lại hoặc hủy lời mời.</Alert>}
-    {notice && <Alert kind="success">{notice}</Alert>}
+    {notice && <Alert kind={notice.kind}>{notice.message}</Alert>}
     <section className="section-block" aria-labelledby="organization-members-heading"><div className="section-heading"><div><p className="eyebrow">NHỮNG NGƯỜI TRONG TỔ CHỨC</p><h2 id="organization-members-heading">Thành viên</h2></div><span className="subtle-label">{members.data.count} thành viên</span></div>
       {members.data.results.length ? <Card><ul className="member-list" aria-label="Thành viên tổ chức">{members.data.results.map((member) => <li key={member.id}><strong>{member.display_label}</strong><span>{roleLabels[member.role]} · {member.is_active ? 'Đang hoạt động' : 'Không hoạt động'}</span></li>)}</ul></Card> : <EmptyState title="Chưa có thành viên để hiển thị" description="Danh sách trong phạm vi bạn được phép xem sẽ xuất hiện tại đây." />}
       <Pagination page={memberPage} count={members.data.count} onPageChange={setMemberPage} label="Phân trang thành viên" />

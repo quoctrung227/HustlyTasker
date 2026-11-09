@@ -4,9 +4,26 @@ Last updated: 2026-11-09
 
 ## Giai đoạn hiện tại
 
-`PHASE 4 - Workspace access integration / AI migration still pending`
+`PHASE 4 - Invitation email configuration review / AI migration still pending`
 
-Current task: **HT-FE-WORKSPACE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+Current task: **HT-FE-INVITATION-DELIVERY-FIX-01 — APPLICATION FIX VERIFIED /
+REAL EMAIL CONFIGURATION PENDING OWNER**.
+Actual no-send settings diagnostic confirms console preflight rejection and
+missing SMTP host/username/password; read-only Invitation/audit counts0. Console
+credential suppression is intentional, not a delivery service defect to bypass.
+Fixed mutation pagination/new FAILED row visibility and durable resend error
+notice; added actual commit/fake transport and browser failure coverage.
+Backend48/UI32/full frontend908/quality PASS; delivery2+Members4+Workspace4+
+stability4+foundation6=20/20 browsers PASS with actual exits0/owned cleanup.
+Final29-table development fingerprint/schema/history comparison exact,36 migrations/
+5 Users/2 Sessions retained, ai.0002 unapplied. No genuine email sent, runtime
+backend/settings/schema/AI or persistent development change. Owner selects and
+privately configures mail service, then separately approves a real delivery test.
+No paid service, automatic provider setup, rollout or follow-on task is authorized.
+
+### Historical completed Workspace access integration
+
+Historical task: **HT-FE-WORKSPACE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
 Source-backed WorkspaceMember read/grant/role/revoke integration reuses existing
 locked services and approved role ceilings. Added only the missing scoped
 candidate GET/current capability hints; no schema or new authority. Existing

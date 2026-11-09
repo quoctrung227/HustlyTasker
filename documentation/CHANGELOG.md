@@ -4,6 +4,30 @@ Lịch sử thay đổi của dự án HustlyTasker.
 
 ## Unreleased - 2026-11-09
 
+### HT-FE-INVITATION-DELIVERY-FIX-01 — APPLICATION FIX VERIFIED / REAL EMAIL CONFIGURATION PENDING OWNER
+
+- Diagnosed the real configuration failure using the approved local loader and
+  no-send Django preflight: console is intentionally refused for credential
+  email, SMTP host/username/password absent. Read-only Invitation/audit counts0
+  confirm no hidden FAILED record. No security guard or backend service changed.
+- Fixed create/resend page reset so new/replacement/FAILED rows appear on page1
+  after explicit mutations; normal refetch keeps page/draft. Kept503 resend error
+  in scoped parent state when its old row leaves the list. Added truthful static
+  configuration/uncertain-persistence guidance without raw transport errors.
+- Added10 real-commit backend fake-transport tests and6 UI pagination/error cases;
+  backend48/UI32/full frontend908 and type/lint/build PASS. Added dedicated gated
+  isolated locmem fail-once suite; real browser2 PASS verifies durable FAILED,
+  duplicate409, explicit resend200/new ID/fake SENT and replay denial. Final
+  Members4/Workspace4/stability4/foundation6 complete20/20 real browser cases,
+  actual exits0/owned cleanup. Final09:15:53Z29-table development preservation
+  exact,36 migrations/5 Users/2 Sessions retained,ai.0002 unapplied. Initial
+  test-only detached nav/status expectation fixes remain recorded in HANDOVER.
+- Clarified console behavior in .env.example comments only; original assignments
+  remain identical. Documented exact private SMTP setup and separate Owner authorization before
+  genuine email testing. No credentials/provider/runtime settings, persistent
+  database, schema/AI or deployment change. Real email remains unconfigured/
+  unverified; simulation success is not reported as delivery to a real mailbox.
+
 ### HT-FE-WORKSPACE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE
 
 - Added manager-only paginated Workspace member-candidates read and additive

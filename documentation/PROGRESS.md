@@ -1,6 +1,49 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-11-09 (HT-FE-WORKSPACE-MEMBERS-01)
+## Current Snapshot - 2026-11-09 (HT-FE-INVITATION-DELIVERY-FIX-01)
+
+**APPLICATION FIX VERIFIED — REAL EMAIL CONFIGURATION PENDING OWNER.** The
+reported development503 is reproduced by a no-send Django settings preflight:
+the approved .env loader selects console, which credential-email delivery
+intentionally refuses BEFORE token/Invitation/audit creation. SMTP host/username/
+password are absent. Read-only database contains0 Invitations and0 invitation
+audits, not hidden FAILED records. No backend guard/transaction/RBAC defect found.
+
+Configured-transport failure is a separate postcommit path: it leaves PENDING/
+delivery FAILED+audit and503; list APIs/UI do not filter that row. Existing
+duplicate409 and explicit resend200/new-ID rotation remain authoritative.
+Do not bypass the console guard or switch development to locmem and claim mail.
+
+Fixed two UI recovery defects: explicit create/resend mutations show newest
+page1 (normal refresh preserves page/draft); a503 resend error remains visible
+after the old row is replaced/unmounted. Static503 copy explains configuration
+possibility and ambiguous persistence, keeps draft and never auto-retries/reports
+success. No settings/credentials/application backend/schema/AI changes.
+
+Fresh real-commit/fake-transport Invitation48/48 PASS60.654s, launcher/Python0,
+dependency/Django/drift/isolated full-chain/owned cleanup PASS; includes10 new
+tests. UI32/32 PASS15.69s; final full frontend908/908 PASS34.53s, typecheck/
+Biome/build exit0. New isolated delivery browser2/2 PASS11.6s verifies503→FAILED
+visible/reload→duplicate409→explicit resend200/fake SENT→replay409. Earlier
+test-only detached-nav and resend201-vs-actual200 expectation failures retained;
+no runtime policy or security assertion was weakened. Final Members4/4 PASS43.7s,
+Workspace4/4 PASS36.4s, stability4/4 PASS22.6s and Auth/tenant6/6 PASS44.9s bring
+the current real-browser aggregate to20/20, all actual exits0/owned cleanup.
+
+Current Owner-data baseline is29 tables/36 migrations/5 Users/2 Sessions/
+2 Profiles/memberships/1 Workspace/Task/4 AuditLogs,Invitation0/AI0. Do not use
+the older4-User checkpoint. Final09:15:53Z read-only snapshot exactly matches
+all29-table data/schema/constraints/indexes/sequences/history/cluster properties
+except connections; ai.0002 stays unapplied,0 Invitation/audit rows.770 originals/
+7 frozen code/config hashes verified,0 owned resources across7attempts/runs.
+Template comments clarify console behavior; every assignment/value unchanged.
+No persistent POST/send/fixtures/migrations, no
+SMTP/provider/AI activation or deployment. Owner must privately choose/configure
+SMTP and separately authorize any genuine send test. Stop at the review gate;
+real email is NOT operationally verified and the reported503 remains expected
+until an approved usable mail transport is configured.
+
+## Historical Snapshot - 2026-11-09 (HT-FE-WORKSPACE-MEMBERS-01)
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Source-backed
 audit found real WorkspaceMember roles ADMIN/MEMBER(Editor)/VIEWER, inherited

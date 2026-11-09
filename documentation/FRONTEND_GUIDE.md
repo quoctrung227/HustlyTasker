@@ -1,6 +1,152 @@
 # HustlyTasker frontend guide
 
-## HT-FE-WORKSPACE-MEMBERS-01 — Workspace access management (2026-11-09)
+## HT-FE-INVITATION-DELIVERY-FIX-01 — Delivery diagnosis and safe recovery (2026-11-09)
+
+**APPLICATION FIX VERIFIED — REAL SMTP PENDING OWNER CONFIGURATION.** This
+checkpoint does not claim genuine email delivery. Application recovery and
+transport outcomes are verified with isolated/fake mail, including all20 final
+browser regressions. No genuine SMTP test has been authorized or performed.
+No external email, provider signup/billing, credential change, development
+mutation/migration or deployment is authorized by this task.
+
+### Verified development cause of503
+
+The existing loader reads the repository-root Git-ignored local file
+`D:\da\HustlyTasker\.env`; the existing backend virtualenv then loads Django
+settings. A sanitized diagnostic reports development mode, the **console**
+mailer, credential-email preflight denied, and SMTP host/username/password absent.
+Only configuration presence/classification was reported, not secret values.
+
+`apps/common/email_delivery.py` intentionally rejects console, dummy and
+filebased backends for credential emails. Console/file output could expose a
+usable invitation or recovery token; dummy could falsely imply delivery. Do not
+disable this guard, print the token or silently switch development to locmem as
+a replacement for genuine SMTP setup.
+
+Creation checks mail availability inside its transaction **before** generating
+a token or inserting Invitation/AuditLog. This development preflight failure
+returns the generic503 without a row. Read-only inventory confirms **0 Invitation
+rows and0 invitation audit rows**, including no hidden PENDING/FAILED records.
+No automated POST was replayed against persistent development. Existing stored
+development logs had no matching static marker; the Owner's interactive terminal
+log was unavailable, so no unseen SMTP exception is claimed.
+
+### Two distinct503 outcomes and the visible-list fix
+
+| Failure stage | Persisted result | Safe recovery |
+|---|---|---|
+| Mail preflight unavailable, as currently configured | No new Invitation/token/audit | Configure an approved working transport first; a later explicit create can then be attempted |
+| Configured transport fails in the after-commit callback | PENDING Invitation with delivery_status FAILED and its audit remain; response503 | Inspect the row and use its explicit resend action after transport recovery; do not repeatedly create another invitation |
+
+The backend list does not hide delivery FAILED. It remains scoped to the current
+Profile/authority and Admin role ceiling. An unrelated UI visibility defect was
+that create/resend from a later pagination page could leave the newest or failed
+replacement on page1. Explicit create/resend and uncertain outcomes now return
+the invitation list to page1 and refetch; normal background refresh preserves
+the selected page and open form draft.
+
+The UI explains503 as unavailable/unconfigured email without claiming that
+nothing was saved. It clears stale success feedback, retains failed-create input
+and keeps a failed-resend error at Profile-page level even if the replaced row
+moves off the current page. Closing the form and inspecting history is safe;
+there is no automatic retry or optimistic SENT/success.
+
+For an existing pending row, another create conflicts409. Create success returns
+201. **Gửi lại** success returns200 with a new invitation ID/token and deliberately
+revokes the old pending credential;
+replaying resend on the old row conflicts409. A resend can itself fail after
+commit, leaving a visible FAILED replacement and exactly one pending row. If
+resend preflight fails before commit, the existing row is unchanged. Do not
+recover by deleting rows, resetting the database or bypassing membership consent.
+
+SENT means the configured mail adapter accepted one message. It is neither
+mailbox-delivery proof nor invitation acceptance. QUEUED, FAILED, PENDING and
+ACCEPTED are distinct delivery/business states. The recipient must still sign
+in with the invited email and explicitly accept a usable emailed code.
+
+### Owner-only SMTP configuration, kept private
+
+Choose an SMTP service or relay already approved by the Owner. This task does
+not choose a paid service, create credentials or modify local configuration.
+Privately edit the existing root `.env` using provider-issued values and the
+loader's literal KEY=value format. Do not post secrets in chat, place them in
+tracked files or pass them as visible terminal arguments.
+
+| Exact configuration name | What the Owner must supply |
+|---|---|
+| `DJANGO_MAILER_BACKEND` | Explicit SMTP backend: `django.core.mail.backends.smtp.EmailBackend` |
+| `DJANGO_SMTP_HOST` | Provider-approved SMTP host |
+| `DJANGO_SMTP_PORT` | Port documented for that host and encryption mode |
+| `DJANGO_SMTP_USERNAME` | Authorized SMTP account identity when authentication is required |
+| `DJANGO_SMTP_PASSWORD` | Corresponding SMTP credential/app password, privately stored; username/password must be configured together |
+| `DJANGO_SMTP_USE_TLS` | Provider-required STARTTLS boolean |
+| `DJANGO_SMTP_USE_SSL` | Provider-required implicit TLS boolean; TLS and SSL cannot both be true |
+| `DJANGO_SMTP_TIMEOUT` | Valid timeout for the approved SMTP setup |
+| `DJANGO_DEFAULT_FROM_EMAIL` | Sender identity/address authorized by the provider |
+| `DJANGO_SERVER_EMAIL` | Optional separately authorized sender for Django server/error email |
+
+Do not copy prefilled `.env.example` credential values into reports or treat
+template values as validated service credentials. Keep existing Django/PostgreSQL
+secrets and database identity unchanged. Do not change AI flags, CSRF/session
+settings or the pending ai.0002 migration to address email delivery.
+
+From the repository root, existing checks can validate local syntax/settings:
+
+```powershell
+.\scripts\start-backend-dev.ps1 -ValidateOnly
+.\scripts\start-backend-dev.ps1 -Check
+```
+
+`-ValidateOnly` checks the local launcher configuration; `-Check` additionally
+runs Django system checks. Neither sends email or proves SMTP authentication,
+provider acceptance or mailbox delivery. After privately changing configuration,
+stop/restart the existing backend terminal with
+`.\scripts\start-backend-dev.ps1`; it uses `--noreload`, so editing `.env` alone
+does not update a running Django process. These commands do not apply migrations
+or create fixtures. There is no need to recreate the virtualenv or database.
+
+Before a genuine delivery test, the Owner must explicitly authorize an intended
+recipient and the real send. After that authorization, manually use **Tổ chức →
+Thành viên tổ chức → Mời thành viên**, or **Gửi lại** for a persisted pending
+invitation. Check server status and the recipient mailbox/spam folder separately.
+Only an authorized successful real-delivery test can establish genuine email
+delivery. Until then: **REAL EMAIL DELIVERY NOT VERIFIED**. The current console
+configuration will continue returning503; the UI fix does not configure SMTP.
+
+### Current automated verification and preservation boundary
+
+Targeted isolated PostgreSQL Invitation tests: **48/48 PASS60.654s**, launcher and
+actual Python exit0, system/model/migration-chain checks and owned cleanup PASS.
+Final Organization Members component tests: **32/32 PASS15.69s**; full frontend
+unit/contract **908/908 PASS34.53s**, typecheck/Biome/build exit0 (build8.73s).
+Final real Chromium20/20 PASS: delivery failure2(11.6s), Members4(43.7s),
+Workspace4(36.4s), Task stability4(22.6s), Auth/CSRF/tenant6(44.9s). All launcher/
+Playwright/backend exits0 with owned cleanup. The first failure-browser attempt exposed a test-only wrong
+resend status expectation; the unchanged API contract is200, not create's201.
+Previous863/902/18 results are historical and are not this task's new results.
+
+The new API tests use actual commit boundaries with SMTP-opening guards and fake
+transport, proving preflight no-row503, persisted FAILED503/list visibility,
+duplicate protection, resend rotation/failure, tenant/role/session/CSRF behavior.
+The private browser failure mode is locmem-only in the ownership-checked isolated
+PostgreSQL harness; it is not a public endpoint or normal-development mail mode.
+No fake transport result proves real external delivery.
+
+Read-only development baseline:29 tables,36 applied migrations,5 Users,
+2 Sessions,2 Profiles/2 ProfileMemberships,1 Workspace,1 Task,4 AuditLogs;
+Invitation/invitation-audit/AI rows0. This is newer Owner data than the previous
+Workspace task's baseline; do not roll it back. ai.0002 remains UNAPPLIED.
+Final09:15:53Z read-only comparison exactly matches all29-table data/schema/
+constraint/index/sequence/history/cluster properties except transient connections.
+0 owned containers/networks remain across7backend/browser attempts; all770
+original files are preserved apart from the documented13 task changes. The
+.env.example edit is comment-only and every original assignment is unchanged;
+actual .env/settings/provider configuration remains untouched. Manual Owner
+acceptance and genuine email remain pending; evidence is recorded in HANDOVER.
+Stop at **HT-FE-INVITATION-DELIVERY-FIX-01 — OWNER REVIEW GATE**. No production
+deployment or next task follows automatically.
+
+## Historical HT-FE-WORKSPACE-MEMBERS-01 — Workspace access management (2026-11-09)
 
 Status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**. Reuse the
 existing local startup commands below. No dependency, authentication, schema,

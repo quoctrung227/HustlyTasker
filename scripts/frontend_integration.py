@@ -30,7 +30,7 @@ def private_test_mailbox(run_id):
     return directory
 
 
-def install_test_mailbox(run_id):
+def install_test_mailbox(run_id, *, fail_first_invitation=False):
     """Copy only locmem-accepted credential mail into this disposable container.
 
     No HTTP endpoint, deployment setting, mail provider or application email
@@ -41,6 +41,7 @@ def install_test_mailbox(run_id):
     import json
     import re
     import tempfile
+    from threading import Lock
     from django.conf import settings
     from django.core.mail.backends.locmem import EmailBackend
 
@@ -56,9 +57,24 @@ def install_test_mailbox(run_id):
         "Your HustlyTasker Profile invitation": "invitation",
     }
     original = EmailBackend.send_messages
+    failure_lock = Lock()
+    failure_pending = fail_first_invitation
 
     def send_messages(backend, messages):
+        nonlocal failure_pending
         messages = list(messages)
+        if fail_first_invitation:
+            invitations = [message for message in messages if message.subject == "Your HustlyTasker Profile invitation"]
+            if invitations:
+                if len(messages) != 1 or len(invitations) != 1 or invitations[0].to != [recipient]:
+                    raise RuntimeError("Isolated invitation failure fixture target mismatch.")
+                with failure_lock:
+                    if failure_pending:
+                        failure_pending = False
+                        # Fail before locmem accepts anything. The real business
+                        # callback must persist FAILED after its transaction has
+                        # committed; the next explicit resend can use locmem.
+                        raise RuntimeError("Deliberate isolated invitation transport failure.")
         accepted = original(backend, messages)
         if accepted != len(messages):
             raise RuntimeError("Isolated locmem acceptance count mismatch.")
@@ -490,7 +506,7 @@ class ThreadedServer(ThreadingMixIn, WSGIServer):
 
 
 def run(mode, arguments=()):
-    if mode not in ("serve", "serve-ai", "expire-sessions", "consume-test-mail", "feedback-state"):
+    if mode not in ("serve", "serve-ai", "serve-invitation-delivery-failure", "expire-sessions", "consume-test-mail", "feedback-state"):
         raise ValueError("Unknown integration operation.")
     if mode != "consume-test-mail" and arguments:
         raise ValueError("Unexpected integration arguments.")
@@ -572,7 +588,10 @@ def run(mode, arguments=()):
                 raise RuntimeError("AI fixtures require owned test settings.")
             settings.AI_FIXTURE_ENABLED = True
         seed_fixtures(os.environ["HT_TEST_RUN_ID"])
-        mailbox_cleanup = install_test_mailbox(os.environ["HT_TEST_RUN_ID"])
+        mailbox_cleanup = install_test_mailbox(
+            os.environ["HT_TEST_RUN_ID"],
+            fail_first_invitation=mode == "serve-invitation-delivery-failure",
+        )
         connections.close_all()
         from django.core.wsgi import get_wsgi_application
 

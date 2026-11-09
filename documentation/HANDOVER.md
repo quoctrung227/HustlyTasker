@@ -1,6 +1,143 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-11-09 — HT-FE-WORKSPACE-MEMBERS-01 OWNER REVIEW GATE
+## Current checkpoint — 2026-11-09 — HT-FE-INVITATION-DELIVERY-FIX-01 OWNER REVIEW GATE
+
+**APPLICATION FIX VERIFIED — REAL EMAIL CONFIGURATION PENDING OWNER.**
+Investigation and safe UI fixes are verified. Genuine delivery remains blocked
+by Owner SMTP/provider configuration and separate real-send authorization.
+Do not call this genuine-email completion or silently enable simulated delivery.
+
+Owner reports real development POST Profile invitations503/generic delivery
+unavailable and no visible row. Preserve initial CLEAN main/0f71ce502377c032c84fd4adc067370ff9b0e4c9;
+770 originals hashed in ignored .local_backups/HT-FE-INVITATION-DELIVERY-FIX-01/.
+No persistent development write/migration, AI flag/call, real external mail,
+credential change, commit/push or deployment authorized.
+
+ROOT CAUSE VERIFIED: existing .env loader + existing venv Django settings
+preflight reports development, mailer_kind console, credential-email preflight
+false; SMTP host/username/password absent. Only presence/classification was
+emitted, no .env values. An initial unprivileged venv run exited103; permitted
+read-only elevated diagnostic exited0 with no stderr/network/send. Template
+inspection earlier printed prefilled .env.example values once; do not repeat
+that raw read or claim all template output was sanitized. Credentials unchanged.
+Console/dummy/filebased are intentionally rejected by common/email_delivery.py
+to prevent credential-token logs/false delivery. create_profile_invitation checks
+this inside atomic BEFORE token/Invitation/audit creation. Do not weaken guard
+or silently use locmem to pretend genuine email works.
+
+READ-ONLY DEVELOPMENT: same original container/volume/loopback/database identity
+verified; current baseline29 tables/36 migrations/5 Users/2 Sessions/2 Profiles/
+2 ProfileMemberships/1 Workspace/1 Task/4 AuditLogs. Invitations0 and invitation
+audits0 (no PENDING/FAILED hidden); ai.0002 unapplied. This is newer Owner data,
+not the previous4-User/1-Profile checkpoint. Snapshot/aggregated Invitation states
+stored privately as development-before.json / invitation-inventory.json.
+Existing development-named logs were scanned for the static error marker only;
+no matching stored marker found, Owner interactive terminal log not accessible.
+No persistent POST replay was attempted. Source+actual settings preflight+empty
+Invitation/audit inventory identify pre-insert failure rather than postcommit.
+
+POSTCOMMIT PATH IS DIFFERENT: configured transport failure after transaction
+on_commit keeps PENDING+delivery FAILED and audit, then returns generic503.
+Backend/frontend lists do not filter delivery FAILED. Existing pending create
+conflicts409; resend rotates ID/token and revokes old row, no automatic retry.
+No backend runtime defect found; real SMTP setup requires Owner configuration.
+
+IMPLEMENTED AND VERIFIED:
+- New test_invitation_delivery_api.py10 real-commit/fake transport tests cover
+  preflight/postcommit503, list visibility/duplicate/resend and auth/CSRF. Backend
+  Invitation suite48/48 PASS60.654s, launcher/actual Python0 independently recorded;
+  pip/Django/model drift/isolated full-chain/owned cleanup PASS. Backend runtime
+  settings/common sender/services/views unchanged; no full backend rerun needed.
+- OrganizationMembers.tsx/test fix explicit mutation page reset
+  to1 (new/replacement/FAILED rows otherwise offpage), persistent truthful resend
+  error notice and configuration-aware503 recovery without hiding commit doubt.
+  Normal refetch must preserve current page/form; no new API/RBAC/schema.
+- Existing frontend_integration.py/test-frontend-integration.ps1
+  + new invitation-delivery-failure.spec.ts. Dedicated test-only serve mode uses
+  ownership-checked locmem fail-once for synthetic recipient, never SMTP/development.
+- Seven source/config/test files frozen in tested-source.json, including only
+  clarifying comments in .env.example; every original assignment/value matches
+  HEAD (template-preservation.json). Private .env/settings/credentials unchanged.
+  Final component32/32
+  PASS15.69s; typecheck/Biome86files/build8.73s exit0. Earlier focused150 run had
+ 145 PASS/5 FAIL because pagination helper retained a detached Page1 nav after
+  loading Page2; fixed test-only by reacquiring live navigation, with all row/
+  draft/no-retry/error assertions retained. attempt-1 logs remain, not PASS.
+- Root owns diagnostics, runners and documentation. Full skill/master previously
+  read; actual offline UIUX error-recovery/feedback/accessibility search applied.
+
+### Final actual test evidence
+
+| Check | Actual result |
+|---|---|
+| Invitation PostgreSQL |48/48 PASS60.654s; run1c7bbea18b8f4eb8bd4923e5a055eb3d; launcher/actual Python0, dependency/Django/drift/isolated full chain and owned DB cleanup PASS |
+| Final component |32/32 PASS15.69s |
+| Full frontend (one run) |908/908 PASS34.53s,26 files, launcher0 |
+| Final quality | TypeScript/Biome86files/build exit0, build8.73s; existing575.80kB chunk advisory retained |
+| Real fake-delivery browser |2/2 PASS11.6s, run7e208697293644eda647ebe746731131; real HTTP503 commit/FAILED/reload/duplicate409 and UI resend200/new ID/fake SENT/replay409 |
+| Existing Profile Members |4/4 PASS43.7s, run50f59422dc2244dcaa4606a9db587747 |
+| Existing Workspace access |4/4 PASS36.4s, run5fbbaa8a162f43d390477bb4a2ccd6fa |
+| Existing Task stability |4/4 PASS22.6s, run82a615665d004214b7f5a3fe4eccc488 |
+| Existing Auth/CSRF/tenant |6/6 PASS44.9s, run1b315509f1414b0baa71463e81039907 |
+| Browser exit/cleanup |20/20 final cases, every launcher/Playwright/backend0; owned DB/resources removed |
+
+New browser positives use real React/Django/isolated PostgreSQL and private
+locmem fail-once transport, not mocked HTTP. It allows exactly one expected
+Invitation503 while other500s still fail. It never contacts SMTP or proves
+mailbox delivery. First failure-browser attempt had1 PASS/1 FAIL due test-only
+resend201 expectation; actual source/docs say200. Corrected exact assertion,
+kept all rotation/FAILED/duplicate/replay/no-auto-retry checks and retained logs.
+The initial focused150 run's5 stale-nav failures described above are also kept.
+No failed attempt is reported as PASS. Other browser suites and full backend
+were not rerun; prior863/902/18 remain historical. Backend application runtime
+is unchanged, so48 targeted real-commit/security regressions are proportional.
+
+### Final preservation and changed files
+
+At2026-11-09T09:15:53Z final READ ONLY snapshot exactly matches all original
+29-table data/schema/constraints/indexes/sequences/history/cluster properties,
+excluding transient connections.36 migrations/5 Users/2 Sessions/2 Profiles/
+2 memberships/1 Workspace/Task/4 AuditLogs retained. WorkspaceMember/Invitation/
+AI0, invitation audit0. ai.0002 remains UNAPPLIED and its three tables absent.
+Same original container/volume/loopback verified; no development service restart,
+fixture, rollback, schema or credentials change.0 owned containers/networks
+remain across the backend and all6browser attempts (7groups total).
+770-file comparison:0 missing/unexpected changes, all7 final hashes stable;
+backend runtime/models/migrations/AuthProvider/Workspace/AI/AGENTS/README preserved.
+All template assignments unchanged; .env.example comments alone explain the
+console guard. Private .env was read only through the approved loader into
+process memory for presence/preflight checks, not modified or echoed.
+
+Task changes13 files:7 source/config/test and6 docs. Existing:
+.env.example (comments only); frontend/src/features/members/OrganizationMembers.tsx
+and OrganizationMembers.test.tsx; scripts/frontend_integration.py and
+scripts/test-frontend-integration.ps1. New: backend/apps/workspace/test_invitation_delivery_api.py
+and frontend/e2e/invitation-delivery-failure.spec.ts. Docs: HANDOVER,FRONTEND_GUIDE,
+PROGRESS,CHANGELOG,PROJECT_ROADMAP,REQUIREMENT_STATUS. No source settings/common
+mailer/services/views/filters or API contracts changed. Ignored evidence directory
+contains sanitized settings/presence/log-review, aggregate Invitation inventory,
+before/after snapshots, template/hash proofs, process receipts and cleanup.
+Final local-link/whitespace checks are recorded in documentation-check-result.json.
+
+### Exact safe continuation / Owner input
+
+Real SMTP remains UNCONFIGURED/UNVERIFIED. Owner must select an approved SMTP
+service/relay, privately fill the exact variables in FRONTEND_GUIDE and restart
+the existing --noreload backend. ValidateOnly/Check verify syntax/Django only,
+not SMTP auth or delivery. Never paste passwords here or change unrelated Django/
+PostgreSQL credentials. No paid service/account/key was created or selected.
+Before any genuine delivery test, get explicit Owner authorization naming the
+intended recipient/send. Only then manually create a new invitation (current
+development has none), or resend a future persisted pending row after checking
+history. Check SMTP acceptance and actual recipient mailbox separately.
+Until that configuration/authorization arrives, do not repeat the development
+POST, send mail, bypass the guard or claim the503 is gone. Application work in
+this scope is finished; no further autonomous task/rollout is authorized.
+**STOP: HT-FE-INVITATION-DELIVERY-FIX-01 — OWNER REVIEW GATE.**
+
+---
+
+## Historical checkpoint — 2026-11-09 — HT-FE-WORKSPACE-MEMBERS-01 OWNER REVIEW GATE
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** No implementation blocker in
 this approved scope. Owner manual website acceptance and real email remain

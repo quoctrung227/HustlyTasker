@@ -50,6 +50,23 @@ async function fillInvite(email = 'new-member@example.test') {
   await userEvent.setup().type(within(dialog).getByLabelText('Email người nhận'), email)
   return dialog
 }
+function paginatedInvitations() {
+  const older: ProfileInvitation = { ...invitation, id: '00000000-0000-4000-8000-000000000908', recipient_email: 'older@example.test' }
+  let newest: ProfileInvitation | undefined
+  vi.mocked(membersApi.invitations).mockImplementation(async (_profileId, currentPage = 1) => page(
+    currentPage === 1 ? [newest || invitation] : [older], newest ? 22 : 21,
+  ))
+  return { older, setNewest: (value: ProfileInvitation) => { newest = value } }
+}
+async function secondInvitationPage() {
+  const nav = await screen.findByRole('navigation', { name: 'Phân trang lời mời' })
+  await userEvent.setup().click(within(nav).getByRole('button', { name: 'Trang sau' }))
+  await waitFor(() => expect(membersApi.invitations).toHaveBeenLastCalledWith(profileId, 2, expect.any(AbortSignal)))
+  await screen.findByRole('heading', { name: 'older@example.test' })
+  // Loading an uncached page replaces the list/navigation subtree. Return
+  // the live page-two navigation rather than the detached page-one element.
+  return screen.getByRole('navigation', { name: 'Phân trang lời mời' })
+}
 
 const oldShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal')
 const oldClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close')
@@ -234,8 +251,12 @@ describe('invitation form stability and submission', () => {
     const dialog = await fillInvite()
     await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Gửi lời mời' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Lời mời có thể đã được lưu.')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Dịch vụ email hiện chưa sẵn sàng hoặc chưa được cấu hình.')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('liên hệ quản trị để kiểm tra cấu hình email')
     expect(within(dialog).getByLabelText('Email người nhận')).toHaveValue('new-member@example.test')
     await waitFor(() => expect(cache.isFetching()).toBe(0))
+    expect(screen.getByText('Chưa có lời mời')).toBeInTheDocument()
+    expect(screen.queryByText(/Đã tạo lời mời\. Hãy xem/)).not.toBeInTheDocument()
     expect(membersApi.createInvitation).toHaveBeenCalledOnce()
     expect(membersApi.invitations).toHaveBeenCalledTimes(2)
   })
@@ -343,5 +364,129 @@ describe('pending invitation lifecycle actions', () => {
     expect(membersApi.resendInvitation).toHaveBeenCalledWith(profileId, invitation.id, expect.any(AbortSignal))
     expect(screen.queryByRole('button', { name: 'Hủy lời mời' })).not.toBeInTheDocument()
     expect(await screen.findByText(/Đã tạo lời mời thay thế/)).toBeInTheDocument()
+  })
+})
+
+describe('invitation delivery outcomes remain visible across pagination', () => {
+  it('returns to page one after confirmed creation and shows the new invitation', async () => {
+    const collection = paginatedInvitations()
+    const createdInvitation = { ...invitation, recipient_email: 'new-member@example.test', id: '00000000-0000-4000-8000-000000000909' }
+    vi.mocked(membersApi.createInvitation).mockImplementationOnce(async () => {
+      collection.setNewest(createdInvitation)
+      return createdInvitation
+    })
+    setup()
+    await secondInvitationPage()
+    const dialog = await fillInvite()
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Gửi lời mời' }))
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
+    const list = screen.getByRole('list', { name: 'Lời mời tổ chức' })
+    expect(await within(list).findByRole('heading', { name: createdInvitation.recipient_email })).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Phân trang lời mời' })).getByText('Trang 1 / 2')).toBeInTheDocument()
+    expect(within(list).queryByRole('heading', { name: collection.older.recipient_email })).not.toBeInTheDocument()
+    expect(membersApi.createInvitation).toHaveBeenCalledOnce()
+  })
+
+  it('shows a committed FAILED row on page one after creation503 while keeping the same draft', async () => {
+    const collection = paginatedInvitations()
+    const failedInvitation: ProfileInvitation = { ...invitation, recipient_email: 'new-member@example.test', id: '00000000-0000-4000-8000-000000000909', delivery_status: 'FAILED', delivered_at: null }
+    vi.mocked(membersApi.createInvitation).mockImplementationOnce(async () => {
+      collection.setNewest(failedInvitation)
+      throw new ApiError(503, 'server', 'Untrusted transport details')
+    })
+    setup()
+    await secondInvitationPage()
+    const dialog = await fillInvite()
+    const email = within(dialog).getByLabelText('Email người nhận')
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Gửi lời mời' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Chưa thể xác nhận việc gửi email.')
+    const list = screen.getByRole('list', { name: 'Lời mời tổ chức' })
+    expect(await within(list).findByRole('heading', { name: failedInvitation.recipient_email })).toBeInTheDocument()
+    expect(within(list).getByText('Gửi email chưa thành công')).toBeInTheDocument()
+    expect(within(list).getByText('Thành viên · Đang chờ phản hồi')).toBeInTheDocument()
+    expect(within(screen.getByRole('navigation', { name: 'Phân trang lời mời' })).getByText('Trang 1 / 2')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Mời thành viên' })).toBe(dialog)
+    expect(within(dialog).getByLabelText('Email người nhận')).toBe(email)
+    expect(email).toHaveValue('new-member@example.test')
+    expect(screen.queryByText('Untrusted transport details')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Đã tạo lời mời\. Hãy xem/)).not.toBeInTheDocument()
+    expect(membersApi.createInvitation).toHaveBeenCalledOnce()
+  })
+
+  it('shows the replacement on page one after successful resend from page two', async () => {
+    const collection = paginatedInvitations()
+    const replacement: ProfileInvitation = { ...collection.older, id: '00000000-0000-4000-8000-000000000909' }
+    vi.mocked(membersApi.resendInvitation).mockImplementationOnce(async () => {
+      collection.setNewest(replacement)
+      return replacement
+    })
+    setup()
+    await secondInvitationPage()
+    const row = screen.getByRole('heading', { name: collection.older.recipient_email }).closest('li')
+    if (!row) throw new Error('Expected the old invitation on page two.')
+    await userEvent.setup().click(within(row).getByRole('button', { name: 'Gửi lại lời mời' }))
+    expect(await screen.findByText(/Đã tạo lời mời thay thế/)).toBeInTheDocument()
+    await waitFor(() => expect(within(screen.getByRole('navigation', { name: 'Phân trang lời mời' })).getByText('Trang 1 / 2')).toBeInTheDocument())
+    await waitFor(() => {
+      expect(membersApi.invitations).toHaveBeenLastCalledWith(profileId, 1, expect.any(AbortSignal))
+    })
+    expect(membersApi.resendInvitation).toHaveBeenCalledOnce()
+    expect(membersApi.resendInvitation).toHaveBeenCalledWith(profileId, collection.older.id, expect.any(AbortSignal))
+    expect(screen.getByText('Hệ thống email đã tiếp nhận')).toBeInTheDocument()
+  })
+
+  it('retains a safe resend503 notice when the new FAILED replacement moves to page one', async () => {
+    const collection = paginatedInvitations()
+    const replacement: ProfileInvitation = { ...collection.older, id: '00000000-0000-4000-8000-000000000909', delivery_status: 'FAILED', delivered_at: null }
+    vi.mocked(membersApi.resendInvitation).mockImplementationOnce(async () => {
+      collection.setNewest(replacement)
+      throw new ApiError(503, 'server', 'Untrusted transport details')
+    })
+    setup()
+    await secondInvitationPage()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Gửi lại lời mời' }))
+    const notice = await screen.findByRole('alert')
+    expect(notice).toHaveTextContent('Dịch vụ email hiện chưa sẵn sàng hoặc chưa được cấu hình.')
+    await waitFor(() => expect(within(screen.getByRole('navigation', { name: 'Phân trang lời mời' })).getByText('Trang 1 / 2')).toBeInTheDocument())
+    expect(await screen.findByText('Gửi email chưa thành công')).toBeInTheDocument()
+    expect(notice).toBeInTheDocument()
+    expect(notice).toHaveTextContent('Lời mời có thể đã được lưu.')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+    expect(screen.queryByText('Untrusted transport details')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Đã tạo lời mời thay thế/)).not.toBeInTheDocument()
+    expect(membersApi.resendInvitation).toHaveBeenCalledOnce()
+    expect(membersApi.resendInvitation).toHaveBeenCalledWith(profileId, collection.older.id, expect.any(AbortSignal))
+  })
+
+  it('shows truthful resend503 configuration guidance without inventing a replacement when none was stored', async () => {
+    vi.mocked(membersApi.invitations).mockResolvedValue(page([invitation]))
+    vi.mocked(membersApi.resendInvitation).mockRejectedValue(new ApiError(503, 'server', 'Untrusted transport details'))
+    const { cache } = setup()
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Gửi lại lời mời' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('liên hệ quản trị để kiểm tra cấu hình email')
+    await waitFor(() => expect(cache.isFetching()).toBe(0))
+    expect(screen.getByRole('heading', { name: invitation.recipient_email })).toBeInTheDocument()
+    expect(screen.getAllByRole('heading', { name: invitation.recipient_email })).toHaveLength(1)
+    expect(membersApi.resendInvitation).toHaveBeenCalledOnce()
+    expect(screen.queryByText(/Đã tạo lời mời thay thế/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Untrusted transport details')).not.toBeInTheDocument()
+  })
+
+  it('keeps page two and the same form during ordinary background refresh', async () => {
+    const collection = paginatedInvitations()
+    const { cache } = setup()
+    const nav = await secondInvitationPage()
+    const dialog = await fillInvite()
+    const email = within(dialog).getByLabelText('Email người nhận')
+    await userEvent.setup().selectOptions(within(dialog).getByLabelText('Vai trò tổ chức'), 'ADMIN')
+    await act(async () => { await cache.refetchQueries({ queryKey: memberKeys.profile(currentUserId, profileId) }) })
+    expect(within(nav).getByText('Trang 2 / 2')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: collection.older.recipient_email })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Mời thành viên' })).toBe(dialog)
+    expect(within(dialog).getByLabelText('Email người nhận')).toBe(email)
+    expect(email).toHaveValue('new-member@example.test')
+    expect(within(dialog).getByLabelText('Vai trò tổ chức')).toHaveValue('ADMIN')
+    expect(membersApi.createInvitation).not.toHaveBeenCalled()
+    expect(membersApi.resendInvitation).not.toHaveBeenCalled()
   })
 })
