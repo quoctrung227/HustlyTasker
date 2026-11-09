@@ -94,8 +94,11 @@ The Owner has now approved HT-FE-P3-02 Workspace/Task screens; these reuse this
 master. HT-FE-P3-03 authorizes collaboration UI; the Owner subsequently approved
 HT-API-FE-P3-03A for the bounded Submit/Review/old Comment-author capability
 extension. Current verification and its final Owner review gate are in HANDOVER.
-AI Smart Task Generator may later belong to Task planning; AI Feedback Analyzer
-to authorized feedback context. Neither has an active navigation item/API now.
+The Owner-approved P4-02C fixture Smart Task Generator now belongs to Task
+planning, with actual availability and explicit demo labeling. AI Feedback
+Analyzer React integration is now separately authorized in P4-03C below; its
+current verification status must be checked in HANDOVER rather than inferred
+from this design guidance.
 No colors/layout/placeholder claim introduces Project or new permission rules.
 
 ## Workspace and Task patterns — HT-FE-P3-02
@@ -200,3 +203,119 @@ the actual exits, cleanup and limitations. FE04 is COMPLETE / OWNER REVIEW GATE.
 Owner-approved MVP excludes Invitation/Profile Creation/membership onboarding
 from this task while keeping their future product requirements. AI readiness
 remains design only in FRONTEND_MVP_ACCEPTANCE.md; no automatic next task starts.
+
+## First-time Profile onboarding — HT-FE-P3-05
+
+Reuse the existing teal/neutral tokens, Plus Jakarta Sans, content width/gutters,
+Card, Button, FormField/Input, Alert and route-heading focus. No visual-direction
+reset, new dependency, tenant selector store or decorative onboarding tour.
+
+The actual focused `empty state onboarding action --domain ux` result selected
+a useful message plus a working next action; Dashboard/Profiles now lead from
+**Bạn chưa có tổ chức nào** to the protected **Tạo tổ chức mới** page. Existing
+Users get the same creation link on the Profile list header. A focused React
+async-form/error search informed caught failures, retained drafts and semantic
+pending/disabled controls. Those are platform-relevant guidance, not permission
+to change authentication or add native-only interactions.
+
+The short name-only form uses persistent required label/helper, Vietnamese safe
+errors, a focusable linked error summary, comfortable controls and a secondary
+Cancel/back path. Pending state blocks duplicate submit and indicates progress;
+the request/draft lifetime is current-User-scoped. Success is displayed only after
+the server confirms and directs the User to existing Workspace creation under
+the new Profile URL. It does not automatically create data beyond the requested
+Profile. No password, token, owner ID or manual tenant field enters the form.
+
+Current real isolated onboarding3/3 passed. Empty/form-error surfaces at
+375/768/1440/812x375 landscape passed keyboard/focus/overflow and axe0 checks;
+desktop-empty/mobile-form PNGs were visually inspected. Screenshots are local
+Git-ignored HT-FE-P3-05 artifacts; exact run/exit/cleanup evidence is in HANDOVER.
+All six real isolated browser suites25/25 and final development/schema/AI
+preservation passed; actual exits and owned cleanup are verified. FE05 is
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**. No manual development website
+or production verification is claimed. Historical FE04 exclusion applied only to that task;
+FE05's Owner approval covers Profile creation, not Invitation/general membership.
+
+## Fixture proposal preview and confirmation — HT-AI-P4-02C
+
+Reuse the teal/neutral tokens, typography, Card/Button/FormField/Input/Alert,
+route heading and shared native Dialog. No new visual direction, dependency,
+global navigation item or Task Detail redesign. The manager-only Task-list entry
+is secondary to existing manual creation and explains a disabled fixture flag.
+
+The visible simulation banner precedes input/preview and explains synthetic-only
+input, fixed output and the separate human-confirmation boundary. A persistent
+label and6,000-character counter accompany the optional brief. Local Task edits
+have inline validation plus a focused linked error summary; parent labels and
+preview metadata distinguish hierarchy from editable Task fields.
+
+The UI implementer read the full local skill/master and ran focused confirmation
+UX and React async cleanup/retry searches. Applicable guidance is explicit
+review-before-commit, semantic pending/disabled controls, caught recoverable
+failures and deliberate retry. Native-only guidance does not replace web rules.
+Keyboard-operable native confirmation/discard dialogs retain focus restoration,
+Cancel/Escape and existing responsive spacing. No optimistic creation or silent
+retry can imply success. Expired/ambiguous outcomes direct Users to recovery or
+Task inspection without asserting that an uncertain mutation failed.
+Internal-link and page-unload discard prompts cover local drafts; SPA browser
+Back/Forward does not use the anchor guard and may discard unsaved edits. Do
+not describe the current UI as providing durable draft persistence.
+
+P4-02C final enabled real isolated browser4/4 PASS49.5s includes preview and
+confirmation at375/768/1440/812×375, reduced motion, keyboard/native-dialog
+Escape/focus restoration, overflow and axe WCAG2/2.1AA with0 violations. Root
+visually inspected desktop preview1440 and confirmation375 PNGs from run
+71178bfad5c24cefac78ec063cd54897. Disabled1/1 and onboarding3/3 also passed;
+all corresponding process exits0 and owned cleanup are verified. Final
+development/schema/source preservation and all8 real isolated Chromium suites
+30/30 pass with actual exits0/owned cleanup and no remaining owned test
+containers/networks. HANDOVER owns final evidence. P4-02C is **IMPLEMENTATION
+COMPLETE — OWNER REVIEW GATE**, fixture-only; nondurable draft/SPA Back limits,
+advisory build chunk size and manual development review remain explicit.
+FE05/FE04 visual results above remain historical. No later AI work begins here.
+
+## Advisory Feedback Analyzer — HT-AI-P4-03C
+
+Reuse the existing Task Detail route and collaboration section hierarchy. The
+Analyzer is a lightweight adjacent section, not a new sidebar destination,
+dashboard redesign or second AI design system. Existing teal/neutral tokens,
+Plus Jakarta Sans, Card/Button/Alert/Pagination and semantic focus states remain.
+The current slice has a clear **Phân tích phản hồi** entry, visible fixture-only
+disclosure and honest unavailable state when the shared backend flag is off.
+
+Selected-source controls use labeled native checkboxes grouped by existing
+Review feedback and Task Comments. Show actual readable source text separately
+from synthetic suggestions; source IDs or author labels are not permission
+proof. Pagination bounds the loaded list, and selection is unique/capped at20.
+Optional focus has a persistent label,1,000-character counter and associated
+validation feedback. It must not suggest that the fixed fixture tailors results
+to entered focus. Submit is explicit and pending-disabled, never on keystrokes.
+
+Results say **Kết quả mô phỏng**, distinguish source citations from evidence of
+semantic understanding, and state that they are not saved as history. The
+interface has no Apply/Confirm, fabricated confidence, timecode or automatic
+Review/Task action. Display source/result text through normal React escaping,
+wrap long content and keep category/priority meaning in text as well as color.
+Current User/Profile/Workspace/Task state lifetime, aborts and stale-result
+discarding are part of the interaction contract, not a visual permission grant.
+
+The UI implementer read the full739-line local skill/master and ran focused
+offline searches using the existing Python test image: `checkbox group error
+summary --domain ux` selected the web focusable summary/connected inline-error
+guidance; `async request cleanup race --stack react` selected effect cleanup
+and caught async failures. These inform the actual grouped native controls,
+linked/focused errors, pending feedback and request/cache cancellation behavior.
+Existing web reflow, contrast, non-color-only status and semantic token guidance
+remain authoritative; no generated design-system replacement or native-only
+requirement is adopted.
+
+Focused component32/32 and transport/client153/153 pass, including deletion-cache
+race coverage. Final frontend675/675 and real Analyzer5/5 plus disabled1/1 pass;
+all real browser regressions total36/36. Automated375/768/1440 and812×375 landscape
+checks verify no horizontal overflow, keyboard Space/Enter, focused result,
+reduced motion and zero WCAG2/2.1 AA axe violations. Four full-page screenshots
+are saved in the Git-ignored task evidence directory. The375px/1440px images were
+visually inspected: grouped feedback and synthetic result remain distinct/readable,
+the focused result is visible and no horizontal overflow is present. Screenshot
+inspection and automated checks are not represented as Owner manual acceptance.
+[HANDOVER](../../HANDOVER.md) owns final evidence and Owner review status.

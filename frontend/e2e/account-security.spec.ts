@@ -92,7 +92,7 @@ test('real account UI registers, verifies delivered mail, resets password and ex
   await expect(page).toHaveURL('/register')
 
   await login(page, originalPassword)
-  await expect(page.getByText('Chưa có tổ chức nào', { exact: true })).toBeVisible()
+  await expect(page.getByText('Bạn chưa có tổ chức nào', { exact: true })).toBeVisible()
   await page.getByRole('navigation', { name: 'Điều hướng chính', exact: true }).getByRole('link', { name: 'Tài khoản', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Tài khoản', exact: true })).toBeVisible()
   await expect(page.getByText('Email chưa được xác minh. Bạn vẫn có thể sử dụng các quyền hiện có.', { exact: true })).toBeVisible()

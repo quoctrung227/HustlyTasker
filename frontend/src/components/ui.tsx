@@ -151,8 +151,8 @@ export function Dialog({ open, onClose, title, children, className, busy = false
   )
 }
 
-export function Pagination({ page, count, onPageChange, pageSize = 20, disabled = false }: {
-  page: number; count: number; onPageChange: (page: number) => void; pageSize?: number; disabled?: boolean
+export function Pagination({ page, count, onPageChange, pageSize = 20, disabled = false, label = 'Phân trang' }: {
+  page: number; count: number; onPageChange: (page: number) => void; pageSize?: number; disabled?: boolean; label?: string
 }) {
   if (count <= 0) return null
   const size = Number.isFinite(pageSize) && pageSize > 0 ? Math.floor(pageSize) : 20
@@ -163,7 +163,7 @@ export function Pagination({ page, count, onPageChange, pageSize = 20, disabled 
   const end = Math.min(current * size, count)
 
   return (
-    <nav className="pagination" aria-label="Phân trang">
+    <nav className="pagination" aria-label={label}>
       <p className="pagination__summary">{number.format(start)}–{number.format(end)} trong {number.format(count)} kết quả</p>
       <div className="pagination__controls">
         <Button variant="secondary" onClick={() => onPageChange(current - 1)} disabled={disabled || current === 1} aria-label="Trang trước"><ArrowLeft size={18} aria-hidden="true" /></Button>

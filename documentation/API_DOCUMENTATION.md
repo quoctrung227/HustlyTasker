@@ -1,6 +1,461 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-11-02
+Last updated: 2026-11-08
+
+## HT-FE-MEMBERS-01 — Organization roster and Invitation React integration
+
+Status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**. The Owner authorizes React
+membership/invitation integration plus the smallest schema-free API gap fix.
+Existing Invitation routes/business rules remain; no model/migration or
+persistent development/AI flag change is part of this task. Roster/API client,
+React member management and manual recipient flows are implemented. Current
+regression/development preservation checks below pass. Manual Owner website
+acceptance and actual external email delivery remain unverified; no further
+task, migration rollout or deployment is started automatically.
+
+### New manager-only Profile roster
+
+`GET /api/v1/profiles/{profile_id}/members/?page=1` uses standard
+`count/next/previous/results` pagination plus root `capabilities`. Default page20,
+optional page_size≤100, stable joined_at/id ordering; GET/HEAD/OPTIONS only.
+Active User/current same-Profile Owner/Admin membership is required. Ordinary
+Profile Members, including Workspace-only managers, get403; wrong-tenant or
+outsider IDs get404. Staff is not tenant authority. Responses are non-cacheable.
+
+Each result exposes only `id` (ProfileMembership UUID), `profile_id`,
+`display_label` (trimmed full name or membership-prefix fallback),
+`role:OWNER|ADMIN|MEMBER`, `is_active` and `joined_at`. Inactive membership history
+is manager-readable; is_active describes membership, not account sign-in state.
+No email, username, global User ID, credential or unrelated tenant data appears.
+The lazy queryset repeats current caller membership/role/active-account checks.
+
+Root capabilities are `can_invite:boolean`, `can_manage_invitations:boolean`,
+`allowed_invitation_roles:(MEMBER|ADMIN)[]`. Active Owner gets MEMBER/ADMIN;
+active Admin gets MEMBER. Archived Profile roster stays readable with both
+mutation flags false/roles[]. Existing Invitation GET remains manager-readable
+and role-ceiling filtered, while archived mutations remain denied. These are
+UI hints; POST services revalidate. No Profile role/removal/Owner-write API is added.
+
+### React contract and privacy boundaries
+
+The existing [Invitation contract](#profile-invitation-and-membership-onboarding-api)
+is reused: create sends only recipient_email/requested_role; resend/revoke send
+empty objects. Resend creates a NEW identity/credential; refresh the whole list.
+Owner sees ADMIN/MEMBER invitations, Admin only MEMBER. Existing API client,
+session/CSRF and private User+Profile+page cache scopes are reused; parsed DTOs
+project only allowed fields and tokens never enter query keys or read cache.
+
+React routes `/profiles/:profileId/members` and `/invitations/respond` provide
+organization management and manual recipient code entry. The recipient page uses
+existing authenticated accept/decline POSTs, not an inbox, public token preview
+or fabricated email link. Login/registration return only to the fixed safe
+recipient path; the code must be re-entered after authentication rather than
+persisted in login state/browser storage.
+Token is an exact write-only POST value (max512, no trimming), never URL/storage.
+No GET performs acceptance. A new recipient may register/sign in first and
+explicitly submit the code; acceptance still depends on actual unique recipient
+identity and a sent, usable credential. Invalid/expired/revoked/replayed/mismatch
+409 responses stay generic, without pretending to identify a particular reason.
+
+SENT means mail-adapter acceptance, not mailbox delivery or invitation acceptance;
+QUEUED/FAILED/PENDING/ACCEPTED remain distinct. Missing safe email configuration
+can return503 without a row; post-commit delivery failure can return503 WITH a
+durable PENDING invitation with delivery_status FAILED. Do not auto-repeat
+creation or claim no row exists. **REAL
+EMAIL DELIVERY NOT VERIFIED.** Locmem tests do not establish operational SMTP.
+
+Normal same-User refresh preserves invite drafts; genuine identity/tenant/
+authority loss removes private state, preserving HT-FE-STABILITY-01.
+
+### Fresh verification available at this checkpoint
+
+| Current check | Actual result |
+|---|---|
+| Members API/DTO tests |75/75 PASS3.36s |
+| Targeted frontend unit/contract/components (mock transport) |142/142 PASS13.73s |
+| Final full frontend unit/contract |801/801 PASS23.61s; includes the final NUL-input validation spelling |
+| Targeted isolated PostgreSQL |51/51 PASS56.587s, launcher0; independent targeted Python die event unavailable, not inferred |
+| Full isolated PostgreSQL |839/839 PASS245.158s, launcher and actual Python0 independently verified, owned cleanup |
+| Members real Chromium |4/4 PASS38.6s, runff576a67eb2a483397844103d1eb18c8; launcher/Playwright/isolated backend0 and owned database/resources removed |
+| Task-create stability regression |4/4 PASS20.9s, run3c516c63055f4dc8a47238b1120fd5c9; launcher/Playwright/isolated backend0 and owned cleanup |
+| Auth/CSRF/tenant foundation |6/6 PASS36.0s, run07e121e66e6d4fd4a55542c2706761d5; launcher/Playwright/isolated backend0 and owned cleanup |
+| Frontend quality | TypeScript/Biome/production build exit0 |
+
+Members browser evidence includes a real locmem invitation, newly registered
+recipient explicitly accepting through React, server membership creation,
+resend/decline/revoke/recipient restrictions and responsive/axe checks. It is
+isolated mail-backend delivery, not operational external email delivery. All
+three current Chromium suites total14/14 PASS. Four-viewport reflow/keyboard/axe
+checks pass; root visually inspected375/1440 screenshots. The14:48:54Z READ ONLY
+development comparison exactly preserves all29 tables' row/schema/index/sequence/
+history/cluster fingerprints (connections excluded):36 migrations/4 Users/
+2 Sessions/1 Profile/membership/Workspace/Task/3 AuditLogs/0 Invitation/AI rows.
+Candidate ai.0002 remains UNAPPLIED and its tables absent. No new schema,
+persistent test fixture, credential/flag change or live provider request occurs.
+Historical689/21/826 counts below remain historical, not substituted for this
+task's fresh results. Stop at **HT-FE-MEMBERS-01 — OWNER REVIEW GATE**.
+
+## HT-AI-P4-04C — Internal durable governance; no new HTTP API
+
+Status: **HT-AI-P4-04C — OFFLINE GOVERNANCE IMPLEMENTATION READY /
+DEVELOPMENT MIGRATION PENDING**. The Owner now
+authorizes additive governance persistence and offline services, with candidate
+`ai.0002_dispatch_governance` tested only on isolated PostgreSQL. No development
+migration, live OpenAI request, customer-data transfer or browser contract change
+is authorized. Existing Generator/Analyzer URLs and fixture DTOs remain unchanged.
+
+[governance.py](../backend/apps/ai/governance.py) adds internal server-callable
+`execute_generator`, `execute_feedback`, `reserve_dispatch`, `get_dispatch`,
+`begin_dispatch`, `fail_before_dispatch`, `mark_unknown` and `reconcile_dispatch`.
+There is no DRF endpoint or client-supplied policy/provider/model/bucket override.
+Current actor/tenant manager authority and original dispatch actor are checked
+using existing access services; dispatch UUID knowledge is never authority.
+All table-using paths fail closed before querying unapplied tables unless
+AI_GOVERNANCE_ENABLED is explicitly True, policy.enabled is True, execution mode
+is OPENAI_OFFLINE and existing fixture development/nonproduction guards pass.
+No new flag is enabled, and no live-mode transport is connected.
+
+The offline wrappers validate the brief or resolve selected actual Review/Comment
+sources through existing Django access code, then bind scope/input/policy to a
+purpose-specific keyed HMAC. Raw brief, source text, focus, evidence and provider
+response bodies are not stored in dispatch/reservation/accounting records or
+conflict errors. Sources are rechecked around fake execution. Policy HMAC
+prevents same-version provider/rate/token-bound drift; locked budget rows
+separately reject changes to budget version, cost/request/inflight limits.
+
+One transaction reserves the stable GLOBAL/Profile/User budget lanes and scoped
+dispatch identity before transport. A short committed RESERVED→DISPATCHING claim
+selects one caller; fake transport runs outside database transactions. Equivalent
+concurrent requests reuse metadata without another invocation; changed input or
+configuration conflicts. Lifetime request/cost/in-flight counters do not reset
+at midnight, and OUTCOME_UNKNOWN holds remain until explicit reconciliation.
+
+Internal DispatchExecution contains an authorized DispatchReceipt and, only for
+the successful first execution, a transient ProviderResult. Replays return the
+receipt with result=None: no generated body/history is persisted or reconstructed.
+The wrappers do not create AiProposal/AiOperation or business records. This is
+governance verification, not a replacement for Generator preview/confirmation
+or a complete live application API. Existing explicit Confirm remains unchanged.
+
+Receipt provenance includes provider/model/execution_mode, usage_status,
+reserved/estimated/accounted/billed amounts and nullable tokens, with
+generated_by_ai=False in this offline slice. Estimated/simulated accounting is
+not a provider invoice; billed_cost stays NULL. API-safe errors remain static.
+Failures after a committed claim preserve DISPATCHING/OUTCOME_UNKNOWN and holds,
+including persistence failure after a possible provider success. No blind retry,
+automatic expiry refund or silent fixture fallback is introduced.
+
+Reconciliation requires the original actor to retain current manager access,
+the original full policy and simulated evidence. The evidence/amount/token HMAC
+is idempotent; a changed reconciliation body conflicts. Revoked access or database
+failure can leave a hold unresolved; no new operator role/bypass is invented.
+It does not establish actual billing, a shared production spending guarantee or
+permission to dispatch live requests. Current tests/exit codes and candidate
+rollout state are recorded in [HANDOVER](HANDOVER.md); manual website acceptance
+and any future versioned live React/API contract remain separately pending.
+
+Current-source verification: focused52/52 PASS15.286 seconds and full isolated
+PostgreSQL826/826 PASS231.558 seconds; both launcher/actual Python exits0,
+required checks and owned cleanup verified. Parallel real PostgreSQL connections
+exercise cross-worker claim/budget behavior, while fake transport avoids model
+requests. Final development29-table row/schema/sequence/history/cluster snapshot
+matches preflight exactly, still36 migrations/4 Users and candidate0002 unapplied.
+No new HTTP/browser acceptance or live-billing guarantee follows from these tests.
+PROTECT reverse relations can affect arbitrary parent hard-delete/AdminCollector
+before rollout; existing gated authorized app paths are preserved, not every
+possible unmigrated ORM maintenance operation. Do not delete data to bypass it.
+
+## HT-AI-P4-04B — Internal offline OpenAI adapter; HTTP contracts unchanged
+
+Current status: **OFFLINE OPENAI ADAPTER COMPLETE — OWNER REVIEW GATE**.
+OpenAI `gpt-5.4-mini`, Responses API and strict JSON Schema are Owner-approved
+implementation targets for an injected fake/in-memory transport only. The new
+adapter is internal to the existing StructuredProvider boundary. It does not
+add an endpoint, modify Generator/Analyzer dispatch, change permissions, enable
+live settings or accept provider/model/key overrides from a browser.
+
+The implementation is [openai_adapter.py](../backend/apps/ai/openai_adapter.py):
+`OpenAIResponsesAdapter.generate(ProviderRequest, RequestControl)` implements the
+existing port. `OpenAIConfig` defaults to `enabled:false`, model `gpt-5.4-mini`,
+30-second timeout,4096 maximum output tokens and128KiB response-envelope cap.
+Code-owned bounds permit timeout up to120 seconds, output up to32768 tokens and
+envelope up to1MiB; outbound request cap is64KiB and existing domain output cap
+remains64KiB. These are offline adapter safeguards, not approved live quotas or
+spending limits. Only an explicitly injected `OfflineTransport` marked `offline`
+literally True can execute; no concrete network transport, API-key parameter,
+environment loader or default transport exists.
+
+The internal request mapping targets POST `https://api.openai.com/v1/responses`
+through that fake seam, nonstreaming inference, `store:false`, explicit model/
+output bounds, strict `text.format` JSON Schema and no tools.
+User briefs/focus/selected feedback are data, not privileged instructions. Parsed
+output must still pass existing TaskPlan/FeedbackAnalysis validators. Requests
+and responses used during this task are invented offline data; no real provider
+network transport or credential is required or activated.
+
+Existing public Generator and Analyzer envelopes below remain fixture-only:
+`mode:fixture_demo`, `generated_by_ai:false` and exact fixture usage. Do not feed
+an offline mocked response into that contract as live output or fabricate actual
+usage. Its internal ProviderResult uses `provider:"openai_offline"` and
+usage status `offline_simulated`; token counts from fake responses stay explicitly
+simulated, missing counts remain unknown and cost is None rather than fabricated
+zero or an actual bill. This is not a public API response discriminator.
+Current AiProposal/AiOperation records and confirmation/replay semantics
+remain unchanged. A future live API needs explicit provenance/usage/lifecycle and
+availability design, compatible React parsing and approved cost controls before
+activation. [AI_PERSISTENCE_REVIEW](AI_PERSISTENCE_REVIEW.md) proposes the schema
+boundary; no migration or live DTO branch is implemented here.
+
+SessionAuthentication, CSRF, nested tenant/manager authorization, server-resolved
+feedback/citations and explicit human confirmation remain authoritative. There
+is no browser-to-OpenAI route or direct provider mutation authority. Current
+adapter/test evidence belongs in [HANDOVER](HANDOVER.md); previous full/fixture
+test counts stay historical. Manual website acceptance remains PENDING.
+
+The parser requires a completed Responses envelope and one assistant structured
+text message; approved model alias or its documented snapshot must match current
+configuration. Refusals, incomplete output, tool calls, malformed/bounded JSON
+and invalid domain values fail closed. Provider401/403 map to static
+PROVIDER_UNAVAILABLE rather than a caller/tenant PERMISSION_DENIED,
+429 to RATE_LIMITED, timeout to PROVIDER_TIMEOUT and transport/unavailable errors
+to static safe categories. Raw response bodies, exception causes and credentials
+are not exposed. Effective fake timeout is bounded by RequestControl's remaining
+deadline, with checks before/after dispatch; no automatic retry/fallback exists.
+Cooperative cancellation cannot promise interruption or reversal of future
+remote computation or charges, and `store:false` does not imply zero retention.
+
+Current focused adapter55/55 PASS0.038 seconds and apps.ai270/270 PASS13.347
+seconds verify the offline implementation and existing fixture regressions;
+both launcher/actual Python exits are0. Dependency/Django/migration-chain checks
+and owned cleanup pass. Existing public endpoints/business services are not
+rewired. No real OpenAI request, actual usage/billing, live error behavior or
+customer-data transfer is verified/authorized by these fake-transport tests.
+Current evidence and final development/source preservation are in HANDOVER.
+
+## HT-AI-P4-04A — Provider readiness; implemented API unchanged
+
+Status: **DESIGN READY / PROVIDER IMPLEMENTATION BLOCKED — OWNER REVIEW GATE**.
+Source audit finds no approved live provider/model or live API selector. This
+task does not add an endpoint, request field, response discriminator, runtime
+flag, permission or migration. The current fixture contracts below remain the
+canonical implemented API; [HANDOVER](HANDOVER.md) records current verification.
+See the proposed next boundaries in
+[AI architecture](AI_ARCHITECTURE_DESIGN.md#ht-ai-p4-04a--live-provider-readiness-2026-11-08).
+
+Both existing React parsers explicitly require `mode:"fixture_demo"`,
+`generated_by_ai:false` and exact zero fixture usage. Generator responses are
+durable synthetic proposals; Analyzer responses use `persisted:false` and have
+no proposal/operation/history/confirm semantics. An arbitrary provider response
+must not be inserted into these envelopes or mislabeled as synthetic/zero cost.
+Future live provenance/usage and availability require an explicit compatible
+versioned contract and frontend parsing/UI changes in a separately approved
+implementation. Client-supplied provider/model/roles or tenant overrides remain
+prohibited; fixture availability metadata is not a live activation switch.
+
+Existing SessionAuthentication/CSRF, current manager/tenant checks, strict
+TaskPlan/citation validation and explicit human confirmation stay authoritative.
+Generator's same-key confirmation prevents duplicate committed Tasks; it does
+not prove paid-call deduplication before a proposal exists. Analyzer remains
+read-only/stateless. No external provider call, fallback simulation presented as
+live output or backend domain mutation is introduced by P4-04A. Historical test
+counts below are labeled by their original task, not current readiness tests.
+
+## HT-AI-P4-03C — React consumption of the existing Analyzer contract
+
+Current status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**.
+No Analyzer endpoint, request/response schema, permission or persistence changed.
+Existing
+Task-scoped Deliverable GET responses expose a singular nullable `review`
+object with its ID/comment; Comment GET exposes nondeleted content/ID and
+tombstone state. These are sufficient for authorized source selection.
+
+React POSTs only selected `review`/`comment` UUID references and optional
+focus to the existing endpoint below, using the single session/CSRF client.
+Fixture availability can be read through the existing permission-checked
+Generator OPTIONS metadata because both slices share the same backend guard;
+this grants no Task/source authority. No idempotency header, new route, result
+history or apply/confirmation contract is added. Current integration/test proof
+belongs in [HANDOVER](HANDOVER.md); historical P4-03A evidence stays separate.
+Current frontend675/675 and all real isolated browser suites36/36 pass, including
+Analyzer5/5 and disabled Analyzer1/1 with real session/CSRF/tenant checks.
+All-model counts/fingerprints remain unchanged by Analyze. Current isolated
+backend AI215/215 PASS16.494s has verified launcher/actual Python exit0; no backend
+code changed and full719 remains historical. The UI refreshes selected source
+pages through existing tracked queries; cancelled/reverted reads cannot restore
+redacted Comment content or count as fresh source validation. These protections
+do not add a realtime server-revocation or serializable-read guarantee.
+
+## HT-AI-P4-03A — DESIGN AND FIXTURE BACKEND COMPLETE / OWNER REVIEW GATE
+
+The Owner delegates a bounded backend foundation after domain/security audit.
+The scoped fixture backend is implemented and verified; this does not complete
+the full Analyzer product. See [foundation design](FEEDBACK_ANALYZER_FOUNDATION.md) and
+[HANDOVER](HANDOVER.md) for current evidence. No frontend, live provider,
+AiProposal/AiOperation persistence, model/migration or development flag change.
+
+`POST /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/ai/feedback-analysis/`
+(`ai:feedback-analyze`) uses current SessionAuthentication/CSRF and active
+`can_manage_workspace_tasks` authority (currently also the internal-review role
+predicate). Profile Owner/Admin, or Profile Member with effective Workspace
+ADMIN, are eligible; Editor/Viewer or staff without real membership are not.
+
+Request accepts exactly `sources:[{kind,id}]` (1–20 unique pairs, kind `review`
+or `comment`, UUID strings) and optional `focus` text≤1000 valid Unicode/NUL-free.
+The server resolves only selected Review.comment or nondeleted TaskComment.content
+within this exact Task scope and maps input order to S1…Sn. Wrong-parent,
+cross-tenant, missing/deleted/null-or-blank sources are unavailable. Total selected
+text≤12000 characters, request≤32KiB, provider response≤64KiB. No raw feedback,
+actor, role, mode, provider/model, tenant override, file URL or mutation fields.
+
+Success200 is an `ai.v1` envelope: `status:READY`, `mode:fixture_demo`,
+`generated_by_ai:false`, `persisted:false`, `fixture_version:fixture.v1`,
+`sources:[{ref,kind,id}]`, `payload` using the existing strict `ai.feedback.v1`
+summary/issues/suggested_actions/uncertainty/warnings schema, and zero fixture
+usage. There is no source text, author PII, URL, proposal/expiry/created-Task
+mapping or confirm/apply action. Fixed subtitle-contrast suggestions do not
+interpret selected feedback or focus, and never imply video/audio processing.
+The fixed example cites only the first selected source; citations are validated
+references, not proof that content was semantically read or media processed.
+
+The existing fixture/environment guard and shared per-user3/minute +20/day
+process-cache attempt limits are reused. OPTIONS is exempt; existing Generator
+limits remain. No persistent feature flag is enabled. Before/after authorization
+and selected-source re-query reject drift; no stale saved-analysis replay exists.
+These are optimistic checks, not a serializable transaction/locking or real-time
+revocation guarantee. They cannot retract delivered responses or prevent a source
+or authority change after the final read. Current process-local cache quotas are
+not a shared multi-worker production budget.
+The operation writes no business/AI/Audit/Notification rows. Repeated calls
+recompute and reauthorize; no durable Idempotency-Key protocol is required or
+promised for this zero-cost/stateless fixture. Generator idempotency is unchanged.
+
+Errors follow existing safe transport conventions:400 invalid input,403 current
+auth/CSRF/permission denial as applicable,404 unavailable nested object/source,
+409 stale context,429 throttling,503 disabled/unavailable fixture,502 invalid
+output,504 timeout. Responses must be non-cacheable and must not echo raw input,
+unknown field names or internal exceptions. Current isolated PostgreSQL AI215/215
+PASS15.272s includes43 new Analyzer tests; full719/719 PASS217.696s. Actual
+launcher/Python exits0 and owned cleanup are verified; dependency/Django/model/
+migration checks pass. Final read-only29-table development preservation is exact
+with36 migrations/3 Users/2 Sessions/1 Profile/membership/Workspace/Task and0
+Reviews/Comments/AI rows. No frontend/browser/live tests were run for P4-03A;
+the P4-02C results below remain historical. Manual Owner FE05/P4-02C acceptance
+and live/private-provider/data-policy decisions remain pending, not blockers for
+this verified local fixture slice.
+
+## HT-AI-P4-02C — fixture Generator integration / IMPLEMENTATION COMPLETE
+
+The Owner approves the React preview/edit/confirm integration and a bounded
+optional synthetic brief. The current contract below supersedes the original
+scenario-only HTTP restriction; legacy requests without `brief` remain compatible.
+This is deterministic demo data, not analysis by an AI model. No live adapter,
+provider key, schema change or persistent development flag enablement is included.
+
+The existing API client now accepts a UUID-only `Idempotency-Key` only for the
+scoped AI POST routes. It retains allowlisted AI error codes for safe UI handling;
+it does not expose arbitrary headers, provider errors or a parallel auth client.
+React validates strict response shape/provenance/lifecycle/size before preview.
+Current verification: targeted AI172/172 and full isolated PostgreSQL676/676
+PASS, frontend537/537 PASS, typecheck/Biome/build PASS. All eight real isolated
+Chromium suites30/30 PASS: Generator enabled4, disabled1, onboarding3,
+foundation6, Workspace/Task7, collaboration7, whole workflow1 and account1.
+Actual launcher/Python/Playwright/backend exits0 and owned cleanup are verified.
+Development preservation and45 protected source hashes match the pre-task
+baseline. See [HANDOVER.md](HANDOVER.md) for evidence and the **OWNER REVIEW
+GATE**. No live-provider/manual development proof is implied by these results;
+no next implementation or persistent feature enablement starts automatically.
+
+### Permission-checked availability
+
+`OPTIONS` on the generation base path retains standard DRF metadata and `Allow`,
+and adds `ai` with the following shape:
+
+```json
+{
+  "contract_version": "ai.v1",
+  "enabled": false,
+  "mode": "fixture_demo",
+  "generated_by_ai": false,
+  "scenarios": [
+    {"id": "subtitle-check-v1", "label": "Kiểm tra phụ đề — mẫu giả lập", "brief": "Ví dụ synthetic kiểm tra phụ đề."},
+    {"id": "task-tree-v1", "label": "Task và Subtask — mẫu giả lập", "brief": "Ví dụ synthetic Task và Subtask."}
+  ],
+  "limits": {"max_brief_chars": 6000, "max_tasks": 20, "max_depth": 3, "max_request_bytes": 32768}
+}
+```
+
+`enabled` is calculated from the existing fixture/environment guards. Scenario
+briefs are public synthetic examples, not stored User input. Existing tenant and
+manager checks run first. OPTIONS creates no proposal/business rows, invokes no
+fixture and consumes no generation quota. It grants no mutation authority.
+POST generation retains the existing 3/minute and 20/day approximate limits.
+
+### React confirmation boundary
+
+The protected route is
+`/profiles/:profileId/workspaces/:workspaceId/tasks/generate?proposal=<UUID>`.
+The optional query ID retrieves only the currently authorized original actor's
+proposal. Local edits support title, description, priority and deadline; parent
+structure stays fixed in this UI. No PATCH/draft-save endpoint is introduced.
+The full edited plan is frozen for an explicit confirmation dialog, then sent
+through the existing atomic confirmation service. Only the server response can
+show successful creation; the client never falls back to ordinary Task POSTs.
+
+A lost generation reply can be recovered by an explicit identical key/body
+replay. After ambiguous confirmation, the UI first reads the known proposal ID.
+It never automatically confirms with a fresh key; a manual identical frozen
+retry is available only after GET reports AVAILABLE for the same proposal ID
+and revision as the frozen body. A stale/mismatched proposal discards that
+confirmation and requires fresh human review; it is never silently retargeted.
+A confirmed result links to
+the returned Task UUIDs. Unresolved/expired recovery advises checking Tasks
+rather than asserting that no Tasks were created. AI query keys include current
+User/Profile/Workspace; exit/identity change aborts requests and removes that
+scope. No brief, draft, key or session secret is stored in localStorage.
+
+The historical FE05 and R3 results below are not P4-02C test evidence.
+
+## HT-FE-P3-05 — Profile creation / IMPLEMENTATION COMPLETE — OWNER REVIEW GATE
+
+The Owner-approved onboarding slice adds **POST /api/v1/profiles/** on the
+existing collection route. It requires a current active authenticated User and
+valid session CSRF, with no AllowAny or staff shortcut. It accepts exactly:
+
+```json
+{"name": "Nhóm sáng tạo"}
+```
+
+Name must be text, trimmed, nonblank and at most255 Unicode characters; null,
+nontext, NUL, invalid Unicode and unknown fields are rejected with400. Do not
+send owner/user/membership IDs, role, status, tenant ID, timestamps or description.
+The creator comes only from request.user. Existing create_profile_with_owner
+atomically persists ACTIVE Profile + active OWNER membership + safe membership
+audit; failure rolls back all three. No invitation is required to create a new
+tenant, and this grants no access to any existing tenant.
+
+Success201 returns the existing Profile DTO: id,name,status,created_at,updated_at.
+It contains no global User ID or private membership details. The new Profile is
+immediately visible to its creator through existing list/detail routes; unrelated
+Users still receive scoped404. GET pagination and current Profile read shape are
+unchanged; collection methods are GET/POST/HEAD/OPTIONS. Detail PATCH/PUT/delete
+remain unsupported except existing explicit lifecycle actions.
+
+Names are not globally unique under the existing domain. Separate valid POSTs,
+including concurrent/repeated names, create distinct Profiles with one correct
+initial membership each. This endpoint adds no idempotency key/deduplication
+protocol. React prevents rapid duplicate submits and does not automatically
+retry mutation; after an ambiguous network outcome, inspect the Profile list
+before intentionally submitting another creation.
+
+Targeted isolated PostgreSQL40/40 PASS1.577s/full662/662 PASS245.938s,
+launcher/Python exits0 and cleanup verified. Frontend426/426, typecheck/lint/build
+and all six real isolated browser suites25/25 passed; every launcher/Playwright/
+backend exit0 and owned cleanup verified. Final development row fingerprints,
+schema, sequences and history are exact:36 migrations/ai.0001 applied,
+3 Users/2 Sessions/business0/AI0;52 model/migration/AI hashes and19 tested
+changed-file hashes stable. No persistent development fixture or migration was
+run for this slice. AI schema/feature flags/contracts unchanged. Historical
+643/395/22 are separate results; manual Owner website acceptance is pending.
 
 ## HT-AI-P4-02B-R3 — DEVELOPMENT SCHEMA APPLIED / API CONTRACT UNCHANGED
 
@@ -42,7 +497,7 @@ task. R3's later applied state and loader usage are recorded above and in
 [HANDOVER.md](HANDOVER.md). Historical FE04/API03A results below remain separate
 from that implementation verification.
 
-### Current access, configuration and methods
+### Current fixture API access, configuration and methods
 
 - The installed AI app adds `ai.0001_initial` for `AiProposal` and `AiOperation`.
   R3 separately applied this exact schema on development after recovery/safety
@@ -73,6 +528,7 @@ Base path: `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/ai/task-prop
 
 | Method | Suffix | Purpose | Success |
 |---|---|---|---|
+| `OPTIONS` | base path | Existing manager-checked metadata plus fixture availability/scenarios/limits; no generation attempt | `200` |
 | `POST` | base path | Generate/store a deterministic synthetic proposal; creates no Task | `201` first result; `200` same-key/body replay |
 | `GET` | `{proposal_id}/` | Read current actor's proposal or recover committed confirmation result | `200` |
 | `POST` | `{proposal_id}/confirm/` | Explicitly confirm an edited plan through existing Task services | `201` first commit; `200` same-key/body replay |
@@ -85,18 +541,26 @@ uses the scoped detail `GET` or the identical successful confirmation replay.
 
 Both POST routes require `Content-Type: application/json`, existing session/CSRF
 handling and a valid UUID in the `Idempotency-Key` header. Clients should retain
-the key for retries of the same operation. Generate accepts exactly:
+the key for retries of the same operation. Generate accepts required `scenario_id`
+and optional `brief`; no other request fields are accepted. Example:
 
 ```json
-{"scenario_id": "task-tree-v1"}
+{"scenario_id": "task-tree-v1", "brief": "Yêu cầu giả lập: kiểm tra phụ đề cho video demo."}
 ```
 
 Allowed server-owned scenarios are `subtitle-check-v1` (one root suggestion) and
-`task-tree-v1` (a root plus child suggestion). Arbitrary briefs, source text,
-provider/model names, foreign tenant IDs and client-defined scenario content are
-not accepted. The underlying brief contract remains bounded at 6,000 characters;
-this HTTP slice uses fixed synthetic server briefs rather than taking customer
-briefs. Fixture output is predetermined test/demo data, not AI analysis.
+`task-tree-v1` (a root plus child suggestion). If present, `brief` must be a
+nonblank text value of at most 6,000 Unicode characters, without NUL or invalid
+Unicode. It is synthetic-only by Owner policy; validation does not automatically
+classify/redact real or confidential data. No provider/model override, foreign
+tenant ID or client-defined scenario content is accepted. Omitting `brief` uses
+the existing server example and preserves legacy scenario-only canonicalization.
+
+When present, the validated brief is bound into the keyed canonical-body digest:
+same key/brief replays, changed brief under that key conflicts. Raw input is not
+stored in a model, echoed in the response or copied into AuditLog/log messages.
+The fixture remains predetermined by scenario and does not analyze the brief.
+The disclosure is **Demo fixture cố định, không có model AI xử lý brief.**
 
 Generate attempts use DRF UserRateThrottle limits of **3 per rolling minute**
 and **20 per rolling day** per User, shared across that User's scopes in the same
@@ -125,7 +589,7 @@ The same response shape is returned from generate, detail and confirm:
 
 No global User ID, email, membership ID, raw brief, idempotency-key digest or
 request-body fingerprint is returned. The explicit fixture provenance must be
-shown as demo/not live AI by a future frontend consumer.
+shown as demo/not live AI by the P4-02C frontend consumer.
 
 Confirmation accepts exactly `proposal_revision`, literal JSON `confirmed: true`
 and the complete edited `payload`. Example synthetic plan:
@@ -214,13 +678,14 @@ consumers must not assume every error carries an AI `code`.
 
 The transport also reserves `502 INVALID_PROVIDER_RESPONSE` and
 `504 PROVIDER_TIMEOUT` for safe adapter failures. Current fixtures use no live
-provider. Contract states support a later accessible loading/preview/edit/confirm,
-expired/conflict/already-confirmed/denied UI; no fake AI controls are added now.
+provider. The P4-02C consumer handles loading/preview/edit/confirm,
+expired/conflict/already-confirmed/denied states without optimistic creation.
 
 Schema/locking rationale: [AI02B_SCHEMA_REVIEW.md](AI02B_SCHEMA_REVIEW.md).
 Fixture-only approval and future gates: [DECISION_LOG.md](DECISION_LOG.md) and
-[AI_PERSISTENCE_REVIEW.md](AI_PERSISTENCE_REVIEW.md). Development migration, live
-providers, Analyzer runtime and frontend AI each remain separately gated.
+[AI_PERSISTENCE_REVIEW.md](AI_PERSISTENCE_REVIEW.md). The existing development
+schema was applied by R3; P4-02C authorizes fixture UI only. Live providers,
+persistent feature enablement and Analyzer runtime remain separately gated.
 
 ## HT-FE-P3-04 account lifecycle consumer — COMPLETE / OWNER REVIEW GATE
 
@@ -664,6 +1129,7 @@ membership and the nested parent path.
 | Method | Path | Access | Purpose |
 |---|---|---|---|
 | `GET` | `/api/v1/profiles/` | Active authenticated User | List Profiles in which the User has an active membership, including an archived Profile that remains in the caller's scope. |
+| `POST` | `/api/v1/profiles/` | Active authenticated User + valid session CSRF | Create a new Profile from name only; request.user becomes its active Owner atomically. No pre-existing Profile membership is required. |
 | `GET` | `/api/v1/profiles/{profile_id}/` | Active membership in the Profile | Return minimal Profile metadata. |
 | `POST` | `/api/v1/profiles/{profile_id}/archive/` | Profile Owner | Archive the Profile; an empty request body is required. |
 | `POST` | `/api/v1/profiles/{profile_id}/restore/` | Profile Owner | Restore the Profile; an empty request body is required. |
@@ -923,10 +1389,11 @@ rather than an authentication mechanism.
 | `POST` | `/api/v1/invitations/accept/` | Active authenticated User matching the unique normalized recipient email | Consume a sent token and create or safely reactivate Profile membership. |
 | `POST` | `/api/v1/invitations/decline/` | Active authenticated User matching the unique normalized recipient email | Consume a sent token and terminalize the invitation as declined. |
 
-There is deliberately no recipient inbox/list endpoint. The current User
-model has no persistent account-level verified-email marker, so merely being
-signed in with an asserted address does not authorize discovery of invitation
-metadata. A recipient instead proves control for this one invitation by
+There is deliberately no recipient inbox/list endpoint. Accounts now has
+durable current-email verification state (`email_verified_at` plus normalized
+email binding), exposed as `email_verified` in the User API. It does not itself
+grant inbox/invitation metadata access or add a prerequisite to the reviewed
+acceptance contract. A recipient instead proves control for this one invitation by
 possessing the emailed secret and signing in with the uniquely matching
 normalized account email. This does not mark the account email globally
 verified.
@@ -991,12 +1458,14 @@ Accept and decline each accept exactly one write-only field:
 ```
 
 The token has at least 256 bits of randomness. Only its SHA-256 digest is
-stored. The service locks and revalidates the active Profile, pending/sent and
-unexpired invitation, authenticated User, uniquely matching normalized email,
-optional bound recipient User, and original inviter's current authority. A
+stored. The common token path locks and revalidates the active Profile,
+pending/sent and unexpired invitation, authenticated User, uniquely matching
+normalized email and optional bound recipient User. Acceptance additionally
+checks the original inviter's current authority; decline grants no access and
+does not require that original-inviter authorization check. A
 token cannot be used when delivery is merely queued or failed. Invalid,
 unknown, expired, rotated, consumed, mismatched-recipient, ambiguous-account,
-archived-Profile, or no-longer-authorized-inviter cases fail with the same
+archived-Profile, or (for acceptance) no-longer-authorized-inviter cases fail with the same
 generic conflict response and disclose no invitation metadata.
 
 Successful acceptance returns:

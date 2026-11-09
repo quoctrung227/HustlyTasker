@@ -30,7 +30,9 @@ function TestProviders(cache: QueryClient, { children }: { children: ReactNode }
 }
 
 function setup() {
-  const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+  // Keep unobserved fixture entries until auth explicitly clears them; GC is
+  // not evidence of identity/logout cache invalidation.
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
   const hook = renderHook(useAuth, { wrapper: TestProviders.bind(null, cache) })
   return { ...hook, cache }
 }
@@ -43,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   apiClient.setForbiddenHandler(null)
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
 describe('auth initialization and fail-closed identity state', () => {
@@ -144,16 +147,80 @@ describe('login and logout transitions', () => {
 })
 
 describe('session expiry and authorization revalidation', () => {
-  it('revalidates on focus and keeps private identity hidden while awaiting the result', async () => {
+  it.each(['focus', 'visibility', 'manual'] as const)('preserves verified identity and cache during a same-user %s revalidation', async (trigger) => {
     const refreshed = deferred<User>()
-    const { result } = setup()
+    const { result, cache } = setup()
     await waitFor(() => expect(result.current.status).toBe('authenticated'))
+    const cached = { name: 'Current identity synthetic workspace' }
+    cache.setQueryData(['private-workspace'], cached)
     vi.mocked(authApi.me).mockReturnValueOnce(refreshed.promise)
-    await act(async () => { window.dispatchEvent(new Event('focus')) })
-    expect(result.current.status).toBe('checking')
-    expect(result.current.user).toBeNull()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    await act(async () => {
+      if (trigger === 'focus') window.dispatchEvent(new Event('focus'))
+      else if (trigger === 'visibility') document.dispatchEvent(new Event('visibilitychange'))
+      else void result.current.revalidate()
+    })
+    expect(authApi.me).toHaveBeenCalledTimes(2)
+    expect(result.current.status).toBe('authenticated')
+    expect(result.current.user?.id).toBe(user.id)
+    expect(cache.getQueryData(['private-workspace'])).toEqual(cached)
     await act(async () => refreshed.resolve(user))
     expect(result.current.status).toBe('authenticated')
+    expect(result.current.user?.id).toBe(user.id)
+    expect(cache.getQueryData(['private-workspace'])).toEqual(cached)
+  })
+
+  it('preserves the current identity through the normal sixty-second background check', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    const refreshed = deferred<User>()
+    const { result, cache } = setup()
+    await act(async () => {})
+    expect(result.current.status).toBe('authenticated')
+    cache.setQueryData(['private-workspace'], { name: 'Current identity synthetic workspace' })
+    vi.mocked(authApi.me).mockReturnValueOnce(refreshed.promise)
+    await act(async () => { vi.advanceTimersByTime(60_000) })
+    expect(authApi.me).toHaveBeenCalledTimes(2)
+    expect(result.current.status).toBe('authenticated')
+    expect(result.current.user?.id).toBe(user.id)
+    expect(cache.getQueryData(['private-workspace'])).toBeDefined()
+    await act(async () => refreshed.resolve(user))
+    expect(result.current.status).toBe('authenticated')
+    expect(cache.getQueryData(['private-workspace'])).toBeDefined()
+  })
+
+  it('clears the previous private cache when background verification identifies a different user', async () => {
+    const refreshed = deferred<User>()
+    const { result, cache } = setup()
+    await waitFor(() => expect(result.current.status).toBe('authenticated'))
+    cache.setQueryData(['private-workspace'], { name: 'Previous identity synthetic workspace' })
+    vi.mocked(authApi.me).mockReturnValueOnce(refreshed.promise)
+    await act(async () => { window.dispatchEvent(new Event('focus')) })
+    expect(result.current.status).toBe('authenticated')
+    expect(result.current.user?.id).toBe(user.id)
+    await act(async () => refreshed.resolve(otherUser))
+    expect(result.current.status).toBe('authenticated')
+    expect(result.current.user?.id).toBe(otherUser.id)
+    expect(cache.getQueryData(['private-workspace'])).toBeUndefined()
+  })
+
+  it('does not let an automatic focus check interrupt a pending logout', async () => {
+    const logout = deferred<void>()
+    vi.mocked(authApi.logout).mockReturnValueOnce(logout.promise)
+    const { result, cache } = setup()
+    await waitFor(() => expect(result.current.status).toBe('authenticated'))
+    cache.setQueryData(['private-workspace'], { name: 'Previous identity synthetic workspace' })
+    let pending!: Promise<void>
+    await act(async () => { pending = result.current.signOut() })
+    const signal = vi.mocked(authApi.logout).mock.calls[0]?.[0]
+    await act(async () => { window.dispatchEvent(new Event('focus')) })
+    expect(authApi.me).toHaveBeenCalledTimes(1)
+    expect(signal?.aborted).toBe(false)
+    expect(result.current.status).toBe('checking')
+    expect(result.current.user).toBeNull()
+    expect(cache.getQueryData(['private-workspace'])).toBeUndefined()
+    await act(async () => { logout.resolve(); await pending })
+    expect(result.current.status).toBe('anonymous')
   })
 
   it('clears all private state when the focused session has expired', async () => {

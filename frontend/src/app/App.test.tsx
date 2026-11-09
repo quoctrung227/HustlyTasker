@@ -114,10 +114,11 @@ describe('routing and protected identity', () => {
 })
 
 describe('Profile/Workspace states and navigation', () => {
-  it('shows a useful empty Profile list with no pretend metrics or create controls', async () => {
+  it('shows a useful empty Profile list with a real onboarding action', async () => {
     vi.mocked(tenantApi.profiles).mockResolvedValue(page([]))
     renderRoute('/profiles')
-    expect(await screen.findByRole('heading', { name: 'Chưa có tổ chức nào' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Bạn chưa có tổ chức nào' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Tạo tổ chức' })).toHaveAttribute('href', '/profiles/new')
     expect(screen.queryByRole('button', { name: /tạo/i })).not.toBeInTheDocument()
   })
 

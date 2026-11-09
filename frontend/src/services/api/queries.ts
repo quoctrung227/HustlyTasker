@@ -1,5 +1,5 @@
 import { apiClient, invalidResponse } from './client'
-import type { LoginInput, Page, Profile, RegisterInput, User, UserEnvelope, Workspace } from './types'
+import type { LoginInput, Page, Profile, ProfileCreateInput, RegisterInput, User, UserEnvelope, Workspace } from './types'
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -79,6 +79,13 @@ export const authApi = {
 }
 
 export const tenantApi = {
+  async createProfile(input: ProfileCreateInput, signal?: AbortSignal): Promise<Profile> {
+    const payload = await apiClient.request<unknown>('v1/profiles/', {
+      method: 'POST', body: { name: input.name }, signal, protected: true,
+    })
+    if (!isProfile(payload) || payload.status !== 'ACTIVE') throw invalidResponse()
+    return payload
+  },
   async profiles(page = 1, signal?: AbortSignal): Promise<Page<Profile>> {
     return asPage(await apiClient.request<unknown>(`v1/profiles/?page=${pageNumber(page)}`, { signal, protected: true }), isProfile)
   },

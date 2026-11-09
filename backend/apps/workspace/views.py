@@ -15,7 +15,9 @@ from api.pagination import StandardResultsSetPagination
 
 from .access import (
     TenantAccessNotFound,
+    profile_invitation_capabilities,
     profile_invitations_visible_to_managers,
+    profile_members_visible_to_managers,
     profiles_visible_to,
     workspace_members_visible_to_managers,
     workspaces_visible_to,
@@ -32,11 +34,13 @@ from .permissions import (
     HasWorkspaceReadAccess,
 )
 from .serializers import (
+    ProfileCreateSerializer,
     ProfileInvitationActionSerializer,
     ProfileInvitationCreateSerializer,
     ProfileInvitationReadSerializer,
     ProfileInvitationTokenSerializer,
     ProfileLifecycleSerializer,
+    ProfileMemberReadSerializer,
     ProfileReadSerializer,
     WorkspaceCreateSerializer,
     WorkspaceLifecycleSerializer,
@@ -67,6 +71,7 @@ from .services import (
     add_workspace_member,
     archive_profile,
     archive_workspace,
+    create_profile_with_owner,
     create_workspace,
     restore_profile,
     restore_workspace,
@@ -145,14 +150,27 @@ class ScopedRetrieveMixin:
 
 
 @method_decorator(never_cache, name="dispatch")
-class ProfileListView(TenantReadOnlyViewMixin, generics.ListAPIView):
+class ProfileListView(TenantApiViewMixin, generics.ListAPIView):
     serializer_class = ProfileReadSerializer
     permission_classes = (HasActiveTenantIdentity,)
+    http_method_names = ("get", "post", "head", "options")
 
     def get_queryset(self):
         return profiles_visible_to(self.request.user).order_by(
             "created_at",
             "id",
+        )
+
+    def post(self, request, *args, **kwargs):
+        serializer = ProfileCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = create_profile_with_owner(
+            name=serializer.validated_data["name"],
+            owner=request.user,
+        )
+        return Response(
+            ProfileReadSerializer(profile).data,
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -169,6 +187,26 @@ class ProfileDetailView(
 
     def get_queryset(self):
         return profiles_visible_to(self.request.user)
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProfileMemberListView(TenantReadOnlyViewMixin, generics.ListAPIView):
+    """Read the existing Profile governance roster; expose no membership writes."""
+
+    serializer_class = ProfileMemberReadSerializer
+    permission_classes = (CanManageProfileInvitations,)
+
+    def get_queryset(self):
+        return profile_members_visible_to_managers(
+            self.profile_access_context,
+        ).order_by("joined_at", "id")
+
+    def get_paginated_response(self, data):
+        response = super().get_paginated_response(data)
+        response.data["capabilities"] = profile_invitation_capabilities(
+            self.profile_access_context,
+        )
+        return response
 
 
 @method_decorator(never_cache, name="dispatch")

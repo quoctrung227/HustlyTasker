@@ -64,9 +64,216 @@ Container:
 
 Current Phase:
 
-PHASE 4 - Fixture-only Smart Task Generator Backend
+PHASE 4 - Organization Members/Invitation review / AI development migration pending
 
-Current task — 2026-11-02:
+Current task — 2026-11-08:
+
+`HT-FE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE`
+
+Profile Members/Invitation React integration reuses existing invitation business
+services; a minimal authenticated read-only Profile roster now supplies safe
+membership labels/roles and current invitation capabilities. Profile Owner can
+invite ADMIN/MEMBER; Admin only MEMBER. Ordinary Members do not gain Profile
+governance and Workspace authority remains independently checked. Recipient
+must explicitly accept a valid emailed code under current identity/authority
+checks; no public token preview/inbox or automatic registration acceptance.
+Token is transient masked form state, never URL/cache/storage. Real email
+delivery remains unverified; SENT means backend acceptance only.
+
+Current frontend801/backend839/real browser14 and quality checks pass; exact
+development preservation verified at14:48:54Z,36 migrations/4 Users/2 Sessions.
+No new model/migration/AI/runtime flag or provider call. ai.0002 development
+rollout still requires separate approval. Profile membership role/remove and
+general Workspace membership management remain separate contracts/tasks.
+
+### Preserved frontend stability agreement — HT-FE-STABILITY-01
+
+Ordinary established-session revalidation must preserve mounted local forms.
+Only initial/recovery checks, confirmed identity failure/change or current
+tenant authority loss replace protected content. Same-user successful routine
+checks refresh active authority/data without a full-page loading fallback;
+Forbidden identity probes do not refetch the query that caused them. Local
+private state is scoped by verified User as well as tenant; navigation IDs alone
+must never preserve another User's draft. Session/CSRF/backend RBAC remain the
+source of permission. No durable frontend draft storage is implemented.
+
+The periodic Task-create dismissal was reproduced and fixed within that narrow
+task. Historical stability-task frontend689/689/browser21/21 and type/lint/build
+passed; the current Members-task verification is recorded above/in HANDOVER.
+Manual Owner website review remains pending; no AI/migration/production rollout
+or automatic next task is authorized.
+
+### Historical completed P4-04C offline governance
+
+`HT-AI-P4-04C — OFFLINE GOVERNANCE IMPLEMENTATION READY / DEVELOPMENT MIGRATION PENDING`
+
+The internal AI foundation now includes default-disabled PostgreSQL-backed
+dispatch/provenance and shared lifetime User/Profile/global cost/request/inflight
+reservations. Three metadata models (AiDispatch/AiBudgetBucket/
+AiDispatchReservation) and candidate ai.0002_dispatch_governance are tested
+only in isolated PostgreSQL. Same scoped input/key has one pretransport claim;
+uncertain outcomes retain holds without automatic paid retry or timeout refund.
+Keyed fingerprints avoid raw brief/feedback persistence. Usage estimates and
+simulated debits do not represent actual billing. Existing fixture HTTP/React,
+confirmation, stateless Analyzer and offline OpenAI adapter remain unchanged.
+
+Fresh focused52/full826 tests, actual exit0/checks/cleanup and final29-table
+development preservation pass. Persistent development still has36 migrations,
+4 Users/2 Sessions;0002 is UNAPPLIED, no new tables/flag/data written. All prior
+source except the intended model append remains exact. No real provider,
+HTTP/React governance integration, SDK/key/network or production change exists.
+Manual Owner acceptance remains pending. Next step is Owner review before a
+separately approved migration-readiness/backup/restore task and later rollout.
+Live token/billing/data limits and operator reconciliation remain separately
+gated. Generic parent hard-delete maintenance before schema rollout is unsafe;
+authorized current fixture/application paths remain gated and unchanged.
+
+### Historical P4-04B offline adapter
+
+`HT-AI-P4-04B — OFFLINE OPENAI ADAPTER COMPLETE / OWNER REVIEW GATE`
+
+The Owner-selected OpenAI gpt-5.4-mini Responses adapter implements the existing
+typed provider port through explicit default-disabled fake transport only.
+It uses strict schemas/domain validation, minimal inputs and truthful offline
+provenance. No SDK/key/network transport, app/React wiring or migration is added.
+Fixtures, atomic confirmation and stateless Analyzer are unchanged. Current new
+adapter55/finalAI270 tests pass;245 originals and development29-table fingerprints
+are preserved. Actual paid activation still needs provenance/shared accounting,
+data/retention and budget approval. Manual website acceptance remains pending.
+
+### Historical P4-04A readiness review
+
+Historical task — 2026-11-08:
+
+`HT-AI-P4-04A — DESIGN READY / PROVIDER IMPLEMENTATION BLOCKED / OWNER REVIEW GATE`
+
+The current runtime remains fixture-only. A shared typed provider port and strict
+domain validators exist, but live provider/model/data mode and durable spending/
+provenance contracts are not approved. The Owner's explicit task gate requires
+design+review before speculative adapter implementation. No runtime/schema/flag
+or authentication change is made. Current Generator confirmation and stateless
+Analyzer are retained; source-backed gaps and future data minimization are in
+[AI_ARCHITECTURE_DESIGN](AI_ARCHITECTURE_DESIGN.md#ht-ai-p4-04a--live-provider-readiness-2026-11-08).
+Manual website acceptance and provider activation remain separately pending.
+
+### Historical completed P4-03C integration
+
+Historical task — 2026-11-02:
+
+`HT-AI-P4-03C — React Feedback Analyzer — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE`
+
+The Owner now approves lightweight Task Detail source selection and advisory
+synthetic analysis through the existing backend. Current authorized Review and
+Task Comment reads provide source IDs; no new visibility, role, provider or
+database contract is needed. Local React state is bound to current User/Profile/
+Workspace/Task and must be discarded on scope/auth changes. Results are not
+history, proposals or domain actions. P4-03B persistence is not required or
+implemented for this stateless fixture MVP. Current frontend675/675, focused
+transport/client153/UI32, real isolated browser36/36 and backend AI215 checks
+pass; TypeScript/Biome/build exit0. Browser launcher/Playwright/backend0 and owned
+cleanup are verified. Final read-only29-table row/schema/sequence/history/cluster
+preservation is exact; tested33 hashes match and0 owned resources remain.
+The375px/1440px screenshots were visually inspected; manual Owner acceptance
+is still pending. Full719 remains historical P4-03A; backend160 source
+hashes are unchanged. Tracked selected-source page refreshes
+participate in the existing Comment deletion/redaction cancellation protocol,
+including rejecting reverted cached values after cancellation. The fixture has
+no mutation/history or live-provider behavior. Manual Owner FE05/P4-02C
+acceptance stays pending and the permanent deployment gate remains.
+
+### Historical completed P4-03A foundation
+
+`HT-AI-P4-03A — DESIGN AND FIXTURE BACKEND COMPLETE / OWNER REVIEW GATE`
+
+The current Owner delegates routine technical implementation within a bounded
+stateless fixture-only backend slice. Source feedback is Review.comment or
+nondeleted TaskComment.content, selected within one currently authorized Task.
+Use existing active manager/internal-review authority, typed citation validation
+and offline provider port; analysis is advisory and cannot change Task/Review,
+create Notifications or apply suggestions. AiProposal/AiOperation remain specific
+to Generator confirmation, with no analysis persistence or schema change.
+See [foundation](FEEDBACK_ANALYZER_FOUNDATION.md) and [HANDOVER](HANDOVER.md).
+
+The existing fixture/environment guards and current process-cache attempt limits
+remain; no live provider, frontend or persistent development flag enablement.
+Current isolated AI215/215 PASS15.272s (43 new Analyzer tests), full719/719
+PASS217.696s, actual launcher/Python exits0 and owned cleanup verified. Django/
+dependency/model/migration checks pass. Read-only development preservation matches
+29 tables' row/schema/sequence/history/cluster:36 migrations/3 Users/2 Sessions,
+1 Profile/membership/Workspace/Task and0 Reviews/Comments/AI rows. Existing235
+runtime/test files retain232 exact hashes; only safe error code, route and service
+docstring edits are intended. No frontend/browser/live tests run for this slice;
+historical P4-02C676/537/30 below are not new task evidence. Manual Owner acceptance
+of FE05 and P4-02C is still pending.
+
+This is a completed backend foundation, not the full Analyzer product. Fixed
+output cites the first selected source and does not interpret feedback/media.
+Authorization/source checks are optimistic pre/post checks, not serializable
+locking or revocation of delivered content. Process-local throttles are not
+multi-worker production quotas. No history/persistence/apply/confirm action;
+React/live/private processing needs the next separately approved scope.
+
+Before any production deployment, public hosting/release or production migration,
+the Owner must explicitly confirm website readiness and authorize deployment.
+The exact permanent readiness question is recorded in AGENTS/DECISION_LOG; test
+success never bypasses that gate. No deployment is currently authorized.
+
+### Historical completed P4-02C context
+
+`HT-AI-P4-02C — Smart Task Generator React Preview / Edit / Confirm — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE`
+
+The current Owner-approved slice connects the existing durable fixture Generator
+to React without live provider calls. Existing manager/original-actor tenant
+checks remain authoritative. An optional bounded synthetic brief is approved;
+only its keyed body fingerprint participates in durable replay, never raw brief
+storage/response echo. Fixed scenario output is labeled as simulation, not AI
+analysis or customer-data redaction.
+
+React uses the existing session/CSRF client and URL tenant scope for availability,
+local edits, explicit human confirmation and known-ID recovery. The confirmation
+service creates real Tasks atomically through existing Task services; generation
+alone creates no Tasks. UI parent structure stays fixed; notes/assumptions/warnings
+are preview-only. Scoped caches and in-flight requests are cleared on exit or
+identity change. No schema/provider/settings/flag or existing workflow redesign.
+
+Fresh read-only development baseline has36 migrations/3 Users/2 Sessions,
+1 Profile/1 membership/1 Workspace/1 Task/AI0; preserve newer records without
+inferring manual acceptance. Current isolated full backend676/frontend537,
+typecheck/Biome/build and all8 real isolated Chromium suites30/30 pass, with
+actual exits0 and owned cleanup verified in HANDOVER. Final read-only
+development comparison is exact across all29 tables/schema/sequences/history/
+cluster identity, with45 protected source hashes unchanged.
+Live AI/private-data use/shared quotas/purge, Analyzer, Project and
+general membership/Invitation UI keep their separate gates.
+This completes the fixed-fixture integration only. Local edits are nondurable,
+manual development acceptance remains unverified and no next implementation or
+persistent feature enablement begins before Owner review.
+
+### Historical completed FE05 checkpoint — 2026-11-02
+
+`HT-FE-P3-05 — Create Profile & First-Time User Onboarding — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE`
+
+The Owner approved first-party Profile bootstrap for active authenticated Users.
+POST /api/v1/profiles/ accepts only name and reuses the existing atomic service
+to create Profile, initial active OWNER membership and safe audit. React's
+protected /profiles/new and zero-Profile CTA select the created Profile through
+the existing /profiles/:profileId URL and proceed to Workspace creation. No
+parallel active-Profile store, new schema/role or automatic Workspace is added.
+Names remain nonunique and repeated creations are distinct; the frontend guards
+rapid duplicates rather than introducing a new idempotency contract.
+
+Current targeted isolated backend40/40/full662 and frontend426/typecheck/lint/
+build passed, as did all six real isolated browser suites25/25. Actual launcher/
+Python/Playwright/backend exits0 and owned cleanup verified. Final development
+row fingerprints/schema/sequences/history match the starting snapshot exactly:
+36 migrations/ai.0001 applied,3 Users/2 Sessions/business0/AI0. All52 model/
+migration/AI source hashes and19 tested changed-file hashes are stable; no test
+resource remains. No AI file/setting/migration/provider changes. HT-AI-P4-02C remains reserved for
+Generator preview/edit/confirm; Invitation/general membership UI stays separate.
+Stop at HT-FE-P3-05 OWNER REVIEW GATE; manual Owner website acceptance remains
+pending. No AI, onboarding expansion or another task starts automatically.
+
+### Historical R3 development rollout checkpoint — 2026-11-02
 
 `HT-AI-P4-02B-R3 — DEVELOPMENT MIGRATION SUCCESS — OWNER REVIEW GATE`
 

@@ -1,6 +1,507 @@
 # HustlyTasker frontend guide
 
-Current HT-FE-P3-04: **COMPLETE / OWNER REVIEW GATE**. MVP audit, account lifecycle
+## HT-FE-MEMBERS-01 — Organization Members and Invitation (2026-11-08)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** This bounded integration adds
+protected /profiles/:profileId/members and /invitations/respond. Use the existing
+local startup commands later in this guide; no new dependencies, environment
+credentials, AI flags, migration or email provider are configured by this task.
+
+### Management workflow and authority
+
+Open **Tổ chức → selected Profile → Thành viên tổ chức**. Owner/Admin see a
+paginated membership roster and invitation history using actual Django responses.
+Labels/roles/membership activity are scoped to this Profile; there is no global
+User directory or email/username fallback. The stored membership activity flag
+alone is not proof of current account/session authority.
+
+- Profile Owner may invite ADMIN or MEMBER. Profile Admin may invite MEMBER.
+  No OWNER invitation; Workspace Manager/Admin is not Profile governance.
+- **Mời thành viên** opens the shared native dialog. Enter the intended account's
+  email and a server-allowed organization role. Pending disables duplicate submit;
+  failures keep the draft. Normal focus/visibility/auth refetch keeps that draft.
+- **Gửi lại** uses the existing resend service for PENDING/EXPIRED invitations;
+  the server returns a new invitation ID and invalidates the old credential.
+  **Hủy lời mời** requires explicit confirmation and only operates on an eligible
+  current pending invitation. Expired/revoked/consumed entries remain history.
+- Archived Profile is read-only. Revoked/inactive authority or changed identity/
+  Profile aborts stale requests and removes old private data/actions. A recoverable
+  CSRF error preserves retryable input and does not masquerade as lost membership.
+- No Profile role editing/removal or Workspace direct-add control is fabricated.
+  General Workspace candidate/management integration requires its own approved
+  API/UI scope. Accepting Profile MEMBER does not grant any Workspace membership.
+
+### Recipient workflow and actual email behavior
+
+Current backend mail contains an opaque code, not an application URL. There is
+no recipient inbox/token-preview endpoint. **Tôi có mã lời mời** on the login or
+Profile page opens the protected response flow; a logged-out user logs in first,
+or registers and then logs in. Only the fixed /invitations/respond return path
+survives signup/login. A token in query/fragment is never ingested or forwarded.
+
+The recipient signs in with the invited email, manually enters **Mã lời mời**
+in a masked field, then chooses **Chấp nhận lời mời** or explicitly confirms
+**Từ chối lời mời**. Merely opening the page/logging in/registering never accepts
+anything. The backend validates current unique normalized email identity, token,
+expiry/delivery/state/Profile and, for acceptance, original inviter authority.
+Email verification is a separate account lifecycle, not implicit invitation
+acceptance. Invalid/wrong-user/expired/revoked/used codes receive a generic409;
+the UI does not diagnose another recipient or expose token metadata.
+
+On confirmed acceptance, code memory is cleared, accessible Profile queries are
+invalidated and **Đến tổ chức** uses the server-returned Profile ID. No Workspace
+is automatically created/granted. Decline creates no membership. Code remains
+only transient input state and POST body, never localStorage, query key/cache,
+URL, screenshot evidence or logs. Logout/identity changes discard private state.
+
+**REAL EMAIL DELIVERY NOT VERIFIED.** Automated tests use Django locmem only.
+SENT means the configured mail backend accepted a message, not proof of mailbox
+delivery. QUEUED and FAILED remain distinct. No safe email backend configuration
+causes503 before creation; a failure after transaction commit can also return503
+with an existing pending FAILED invitation. Inspect refreshed history before
+retrying; the UI never automatically retries or claims nothing was created.
+No SMTP provider or credentials were configured or changed in this task.
+
+### Fresh verification and reproducible commands
+
+Frontend API75/75 and focused142/142 are mocked unit/contract checks, not E2E.
+Final full frontend801/801 PASS23.61s; TypeScript/Biome/build exit0. Targeted
+PostgreSQL51/51 PASS56.587s; full839/839 PASS245.158s, actual full Python0.
+Targeted launcher0/summary verified; independent targeted child event unavailable.
+Real Chromium14/14 PASS: Members4(38.6s), Task stability4(20.9s), foundation6(36.0s).
+Each browser launcher/Playwright/backend exit0 and owned cleanup confirmed.
+
+```powershell
+.\scripts\test-backend.ps1 -TestLabel apps.workspace.test_profile_members_api,apps.workspace.test_invitation_api,apps.workspace.test_invitation_model_services
+npm.cmd --prefix frontend test
+npm.cmd --prefix frontend run typecheck
+npm.cmd --prefix frontend run lint
+npm.cmd --prefix frontend run build
+.\scripts\test-frontend-integration.ps1 -Suite members
+.\scripts\test-frontend-integration.ps1 -Suite task-stability
+.\scripts\test-frontend-integration.ps1 -Suite foundation
+```
+
+All browser business mutations occur only in ownership-checked isolated
+PostgreSQL fixtures. Locmem code extraction is a private test-only helper;
+it is not a public API or a manual development email retrieval mechanism.
+The invitation management, recipient registration/acceptance, resend/decline/
+revoke actions run through real React forms against Django; API calls in these
+specs provide read-back and intentional negative authorization assertions.
+375/768/1440/812x375 keyboard/focus/reflow/axe checks PASS;375/1440 PNGs inspected
+under Git-ignored .local_backups/HT-FE-MEMBERS-01/screenshots/.
+
+Full local UI UX Pro Max/master read and offline `confirmation destructive
+action --domain ux` / `async request cleanup --stack react` searches informed
+explicit confirmations, truthful delivery outcomes, abort cleanup, stable forms,
+native dialog focus and accessible labels/errors. Existing teal/neutral tokens,
+typography, sidebar/topbar and primitives are reused; no new design system.
+
+### Manual Owner acceptance — not executed against persistent development
+
+1. Start backend/frontend using the existing commands below; log in as a real
+   authorized Profile Owner/Admin and open **Thành viên tổ chức**.
+2. Verify this Profile's roster/history and allowed roles. Ordinary Member or
+   Workspace-only management must not gain Profile invitation authority.
+3. When an approved working mail backend is configured, invite the intended
+   real recipient. Confirm status/history; do not interpret SENT as mailbox proof.
+4. Recipient registers if needed, logs in with the invited email, opens
+   **Tôi có mã lời mời**, enters the code from their email and explicitly accepts
+   or declines. Check the resulting Profile access; MEMBER has no implicit
+   Workspace access. Test resend/revoke only with intended invitations.
+5. Verify open invitation/Task forms survive normal focus/refetch, and logout/
+   another identity cannot see the previous User's private data.
+
+These Owner actions may create real development records and were deliberately
+not performed by the agent. Final read-only task proof at14:48:54Z matches every
+original29-table data/schema/history/index/sequence/cluster property, excluding
+transient connections:36 migrations,4 Users,2 Sessions,Invitation0/AI0. Candidate
+ai.0002 remains UNAPPLIED. Manual website acceptance remains pending; no rollout
+or next task is authorized by these automated results.
+
+## Historical HT-FE-STABILITY-01 — Session revalidation and Task draft continuity (2026-11-08)
+
+Current status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**. This is a
+targeted lifecycle fix, not a Task-page redesign or draft-storage feature.
+
+### Reproduced cause and implemented correction
+
+Before the fix, normal window focus/visibility and the60-second auth timer called
+verifyIdentity with quiet=false. It set checking/user:null even for a valid
+session; ProtectedRoute replaced the entire Outlet with SessionState. The Task
+dialog and local inputs unmounted without a route change or document reload.
+Pre-fix real-route/component tests reproduce this; normal successful Task-list
+refetch alone does not replace the header containing TaskCreate. No evidence
+attributes that periodic bug to StrictMode, HMR or accidental button submission.
+
+Routine verification of an already authenticated session now preserves the
+mounted subtree while /me is pending and returns the same identity. Successful
+routine checks invalidate active queries to refresh actual tenant authority/data,
+without clearing the cache or mounting a new page. A permission403 identity
+probe deliberately does NOT invalidate the denied query again; this avoids a
+refetch loop. The60-second timer remains; automatic checks run only for an
+authenticated session and do not interrupt login/logout checking states.
+
+| Identity/context result | Required UI behavior |
+|---|---|
+| Initial session or explicit recovery | Existing blocking SessionState; no unverified private UI |
+| Pending/successful same-User routine check | Same Task dialog/input state; active permission/data queries refresh without full-page loading fallback |
+| Verified different User | Hide previous UI, cancel/clear private cache and remount User-keyed Outlet; same tenant ID never preserves another User's draft |
+| /me401/403 | Clear private cache, leave protected route and show login-required/unsaved-input explanation |
+| /me network/server failure | Existing fail-closed unavailable page hides private data with explicit recovery; no draft recovery guarantee |
+| Tenant change or confirmed lost capability/access | Existing tenant keys/permission checks remove old draft/actions; no stale privilege retention |
+
+Task form values remain in component memory only. No localStorage/sessionStorage,
+server autosave or new authentication/RBAC/API policy is introduced. Recoverable
+creation failures keep the form, success closes it only after confirmation, and
+the existing pending guard prevents rapid duplicate submits. Session failure,
+manual document reload and deliberate context navigation do not promise recovery.
+
+The full UI UX Pro Max skill/master were read. Verified offline searches
+`loading flicker --domain ux` and `stable keys --stack react` informed stable
+layout/focus and identity boundaries; no palette/layout/token/dependency change.
+The existing teal/neutral forms, native dialog and accessible feedback are reused.
+
+### Verification scope and Owner acceptance
+
+Final frontend689/689 PASS27.24s; TypeScript/Biome/build exit0. Current real
+Chromium suites21/21 PASS: stability4, foundation6, work-management7 and
+fixture Generator4. Each launcher/Playwright/backend exit0 with owned cleanup.
+Four viewport reflow/keyboard/axe checks pass;375/1440 screenshots visually
+inspected. Development29-table fingerprints/schema/history remain exact,
+36 migrations/4 Users/2 Sessions preserved; candidate ai.0002 is UNAPPLIED.
+No backend source changed, so backend826 is historical and not rerun here.
+Earlier screenshot capture timeout and fixture/type/focus assertion corrections
+are preserved in HANDOVER. The final HMR capture uses a bounded viewport image,
+not a full tall background-page resize; all behavioral/axe assertions remain.
+
+Use the existing isolated runner; it never seeds persistent development:
+
+```powershell
+.\scripts\test-frontend-integration.ps1 -Suite task-stability
+.\scripts\test-frontend-integration.ps1 -Suite foundation
+.\scripts\test-frontend-integration.ps1 -Suite work-management
+.\scripts\test-frontend-integration.ps1 -Suite ai-generator
+```
+
+The stability spec forwards actual Django responses with controlled delivery
+timing, injects one explicit network failure before its first POST reaches the
+backend, and verifies the next real CSRF-protected creation. These distinctions
+are intentional: timing/fault injection is not a fabricated successful API.
+DOM identity, document sentinel and main-frame navigation distinguish rerender
+from remount/reload. The HMR probe is a newly owned Git-ignored self-accepted
+module, not a rewrite/restore of existing source; it cannot prove that arbitrary
+React-boundary edits/full reload preserve local drafts. Screenshots contain
+synthetic test data only. Actual results/failed attempts/cleanup are in HANDOVER.
+
+Manual Owner check after reviewing the report (not claimed performed by Codex):
+
+1. Use the existing two-terminal local startup instructions below and log in
+   with your own legitimate account/context. Do not enable live AI or migrate.
+2. Open Create Task; enter title/description/priority/deadline. Leave it open
+   beyond60 seconds, switch browser focus/tab and return. Values should remain.
+3. Cancel explicitly, then reopen to check the normal empty draft. Use existing
+   Task create/edit/detail navigation as intended, without demo fixtures.
+4. Verify pending/failed-request feedback; success must only follow server
+   confirmation. A real session failure must hide private fields and explain
+   sign-in/recovery. Do not test revocation by altering development records merely
+   to reproduce a fixture scenario.
+
+04C offline governance remains ready with its development migration pending.
+No backend/AI/migration/credential or persistent development write is part of this
+fix. Stop at HT-FE-STABILITY-01 OWNER REVIEW GATE; no deployment is authorized.
+
+## HT-AI-P4-04A — Integration readiness and Owner acceptance (2026-11-08)
+
+Status: **DESIGN READY / PROVIDER IMPLEMENTATION BLOCKED — OWNER REVIEW GATE**.
+This is a source/contract readiness review, not a new React implementation or
+visual redesign. The existing fixture Generator and Analyzer UI remain intact.
+Their strict transport parsers require synthetic provenance and zero usage;
+genuine provider responses need a separately reviewed compatible contract and
+truthful UI provenance. No persistent fixture/live flag or provider is enabled.
+The current architecture proposal is
+[AI_ARCHITECTURE_DESIGN](AI_ARCHITECTURE_DESIGN.md#ht-ai-p4-04a--live-provider-readiness-2026-11-08).
+
+### Concise manual acceptance — Owner confirmation still PENDING
+
+These are checks for the Owner after review, not claims that manual testing has
+occurred. FE05 Create Profile, P4-02C Generator and P4-03C Analyzer manual
+acceptance remain PENDING until explicit Owner confirmation. Use legitimate
+Owner-selected development data for normal website acceptance. Implementation
+tests/fixtures and AI synthetic mutation demonstrations belong only to isolated
+PostgreSQL; do not seed development, alter its flags or use another user's
+credentials merely to complete this checklist.
+
+| Area | Manual acceptance outcome to confirm |
+|---|---|
+| Authentication | Login/logout and account recovery/verification states are clear; expired session returns to login and private content disappears |
+| First Profile | A zero-Profile account can use Tạo tổ chức; the new Profile is selected and its creator has backend-confirmed Owner access |
+| Profile switching | Only accessible Profiles appear; switching changes the route/context without showing the prior tenant's content |
+| Workspace | The selected Profile scopes monthly Workspace creation/navigation; authorized edit/archive/restore and read-only member states are clear |
+| Task/Subtask | Create/edit/assign/Start, deadline/priority, hierarchy and pagination follow actual role/status permissions |
+| Deliverable/Review | Submit→Request Changes→resubmit→Approve follows the existing workflow, with separate actors and no self-review bypass |
+| Comment/Notification | Authorized edit/delete produces a tombstone; personal feed/count/mark-read and target navigation respect current access |
+| Smart Task Generator | Disabled fixture shows honest unavailability; an isolated enabled demo labels fixed synthetic output, requires preview/edit and explicit confirmation before Tasks exist |
+| Feedback Analyzer | Disabled fixture is expected configuration, not proof of a failed feature; an isolated enabled demo selects existing sources, shows citations/synthetic disclosure, and has no Apply/domain mutation |
+| User/session change | Logout, session expiry and User/Profile/Task changes remove stale private query/results; Viewer/Editor do not gain manager AI controls |
+
+No new product screen, browser-to-provider call or authentication mechanism is
+introduced. Browser AbortSignal protects stale UI but does not demonstrate
+cancellation of future remote computation or charges. Live AI requires approved
+provider/model/data terms, a compatible provenance/usage contract and reliable
+cost enforcement before activation. No manual/live PASS is inferred from earlier
+automated tests. Current P4-04A checks are in [HANDOVER](HANDOVER.md);675 frontend
+and36 browser results in the next section are historical P4-03C evidence.
+
+## HT-AI-P4-03C — Feedback Analyzer React integration
+
+Status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**, 2026-11-02. The Owner approves a
+lightweight advisory fixture UI in the existing Task Detail, not a new workflow,
+Analyzer persistence or a live AI provider. Existing manual Review/Comment and
+Smart Task Generator actions remain independent.
+
+The integration reuses current Task/Workspace manager capability hints and the
+existing permission-checked AI availability request. Server authorization is
+still required at analysis time; a role label, known UUID or old result grants
+no access. With the fixture disabled, the UI must explain unavailability rather
+than expose an action that pretends to run live AI. No persistent development
+feature flag is enabled by this task.
+
+Eligible source IDs already exist in the authorized paginated APIs: each
+Deliverable can contain one `review` with usable text, while nondeleted Task
+Comments expose their current content/ID. Selection sends unique
+`{kind:"review"|"comment",id}` references for this Task,1–20 sources, plus
+optional focus≤1,000 valid Unicode/NUL-free characters. The source-text budget
+is12,000 aggregate characters. No source author/role/tenant/provider field or
+raw source body is added to the POST contract.
+
+The section is keyed by current User/Profile/Workspace/Task. Opening it lazily
+loads existing20-per-page source APIs; selected sources can span pages without
+duplicate kind/ID pairs. Before/after sending, only selected pages are refreshed
+through their existing tracked cache keys. A newer deletion/redaction cannot be
+overwritten by an untracked old GET, and a cancelled read's reverted cached data
+is not accepted as a completed refresh. Scope/auth/permission/source changes
+abort requests and clear local results rather than populating a new context.
+
+Results say **Kết quả mô phỏng** and explain that a real model has not
+understood the selected feedback or focus. S1…Sn labels map to the returned
+selected-source manifest, not invented quotations or semantic evidence. Local
+results are not saved as history, proposal IDs or operations. Repeating after
+a lost response is an explicit new stateless analysis and consumes quota again;
+there is no Generator confirmation/idempotency recovery or automatic retry.
+
+Final frontend675/675 PASS27.31s includes106 new transport tests and32 component
+tests; focused transport/client153/153 and component32/32 also pass. TypeScript,
+Biome and build exit0 (build7.58s). All10 real isolated browser suites36/36 PASS:
+Analyzer5, disabled Analyzer1, Generator4, disabled Generator1, onboarding3,
+auth/CSRF/tenant6, Workspace/Task7, collaboration7, complete workflow1 and account1.
+Every suite reports launcher/Playwright/backend exit0 and owned database/resource
+cleanup. Analyzer verifies UI selection/POST/citations, deleted-source handling,
+Viewer/Editor/CSRF/cross-tenant denial, Task-switch cancellation/session expiry,
+keyboard focus and375/768/1440/812×375 reflow with zero axe violations. All-model
+row counts/fingerprints remain unchanged by the advisory analysis operation.
+The deleted-source test uses a separately labeled API-driven fixture deletion.
+
+Current isolated backend AI215/215 PASS16.494s confirms compatibility, actual
+launcher/Python exits0 and owned cleanup; backend160 source hashes remain intact.
+Full backend719 is historical and was not rerun for this frontend slice. The
+initial Analyzer browser4/5 role-helper return-to assertion was corrected; final
+5/5 passed. Source-refresh cancellation now also rejects reverted cached values,
+with a regression proving that an old read cannot restore an unselected deleted
+Comment. Final read-only29-table development comparison preserves all row hashes,
+schema/FKs/indexes, sequences, migrations and cluster identity exactly; all33
+tested source hashes and160 backend hashes match. Owned test resources are gone.
+The375px/1440px screenshots were visually inspected for readable source/result
+separation, focus and reflow. Source-backed details belong in
+[foundation](FEEDBACK_ANALYZER_FOUNDATION.md) and [HANDOVER](HANDOVER.md).
+Historical P4-02C results below are not P4-03C tests. Manual Owner acceptance of
+Create Profile, Generator and this Analyzer UI remains unverified.
+
+The route stays `/profiles/:profileId/workspaces/:workspaceId/tasks/:taskId`.
+An eligible manager opens **Phân tích phản hồi** beside the existing collaboration
+sections, selects **Phản hồi đánh giá** and/or **Bình luận công việc**, optionally
+enters **Trọng tâm phân tích (không bắt buộc)**, then explicitly submits. Current
+source text is distinct from the readonly **Kết quả mô phỏng** section. Changing
+selection/focus discards the previous result; closing the panel clears its local
+draft/result. Existing Review/Comment buttons retain their ordinary independent
+backend-authorized behavior.
+
+Reproduce the isolated automated acceptance after implementation verification:
+
+```powershell
+.\scripts\test-frontend-integration.ps1 -Suite feedback-analyzer
+.\scripts\test-frontend-integration.ps1 -Suite feedback-disabled
+```
+
+The enabled fixture setting is confined to the owned isolated test server.
+These commands are not a manual acceptance run on the Owner's development data.
+For manual website review, use the existing two-terminal startup instructions,
+log in with the Owner's own account, open an authorized Task and verify truthful
+unavailability/empty-source behavior under current configuration. Do not change
+the persistent fixture flag or seed feedback merely to make the panel available.
+An enabled interactive development demonstration requires separate authorization;
+full enabled flow evidence belongs to isolated browser tests. No new local setup,
+secret, API key or provider is required by this React implementation.
+The prior P4-03A Windows-venv interpreter limitation is historical evidence, not
+a new startup PASS or a reason to recreate that venv. Current toolchain/startup
+verification and any remaining limitation must be reported separately in HANDOVER.
+
+## HT-AI-P4-02C — Smart Task Generator fixture UI
+
+Status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**, 2026-11-02. This is the
+Owner-approved fixture preview/edit/confirm UI. Live AI, Analyzer, provider keys,
+production and persistent development fixture enablement remain excluded.
+
+An active manager sees **Tạo công việc bằng AI** next to the existing manual
+creation action in the Task list. Permission-checked OPTIONS reports actual
+fixture availability. With the existing flag off, the entry is disabled with an
+explanation; opening the route shows **Bản mô phỏng chưa khả dụng**, and manual
+Task creation remains usable. This task does not change private environment or
+runtime flags to make the button available on persistent development.
+
+When enabled on the owned isolated test server, the protected route
+`/profiles/:profileId/workspaces/:workspaceId/tasks/generate` offers two server
+scenarios and optional **Mô tả yêu cầu giả lập**, at most 6,000 characters. The
+banner says **Bản mô phỏng — không phải AI thật**: only synthetic input is allowed;
+the output is a fixed scenario, not AI analysis. Backend validation checks text
+shape/length, not whether arbitrary input is genuinely synthetic.
+
+**Đề xuất công việc** saves a proposal, not Tasks. Preview supports local edits
+to title, description, priority and nullable deadline, using existing timezone
+handling. Parent/Subtask links remain unchanged. Notes, assumptions and warnings
+are preview metadata, not Task fields. Edits are not saved to the server before
+confirmation and can be lost on refresh; the known proposal URL restores only
+the server proposal. No draft, brief or idempotency key is persisted in browser
+storage.
+
+Internal anchor navigation and full-page unload use discard warnings. Browser
+Back/Forward within the SPA is not intercepted by that anchor guard: unsaved
+local edits can be lost. This is a draft-persistence UX limitation, not server
+confirmation or idempotency bypass; refresh still retrieves only server state.
+
+**Kiểm tra và xác nhận** opens the shared native **Xác nhận tạo công việc** dialog
+with the frozen edited payload and exact Workspace. Only **Xác nhận tạo công
+việc** calls the existing atomic confirmation API. Pending controls block
+duplicate clicks. Success displays actual returned Task links and refreshes the
+current Workspace cache; there is no optimistic success, assignment or status
+override, and no ordinary Task POST fallback.
+
+If generation loses its response, explicitly retry the same frozen generation
+key/body. If confirmation loses its response, the client first GETs the known
+proposal; confirmed results recover the same Task mapping. Explicit resend of
+the frozen confirmation is offered only after GET says AVAILABLE for the same
+proposal ID/revision. A mismatch cancels the old confirmation and requires
+review of current server content; route changes never retarget the frozen body.
+Do not create a new batch to guess whether the previous confirmation committed. Expiry or an
+unresolved recovery asks the User to inspect Tasks before starting over.
+
+Queries include User/Profile/Workspace. Leaving or changing identity aborts old
+requests and removes scoped AI cache; existing logout/session-expiry private
+cache cleanup stays authoritative. Mutation still requires current backend
+manager/original-actor authorization and session CSRF, even after preview.
+
+Use the isolated suites for automated acceptance; they never seed persistent
+development and do not call a live provider:
+
+```powershell
+.\scripts\test-frontend-integration.ps1 -Suite ai-generator
+.\scripts\test-frontend-integration.ps1 -Suite ai-disabled
+```
+
+The enabled suite's `serve-ai` mode turns on fixtures only after checking owned
+isolated PostgreSQL identity. The disabled suite uses the normal false default.
+Current final-source frontend537/537 PASS24.35s/18 files; typecheck/Biome/build
+exit0, build8.97s with an advisory >500kB chunk warning. Focused Generator27 and
+Generator/Task51 checks also pass. Real enabled4/4 PASS49.5s, disabled1/1
+PASS8.4s and onboarding3/3 PASS43.4s; launcher/Playwright/backend exits0 and
+owned cleanup are verified. Four-size preview/dialog axe, keyboard/focus and
+overflow checks passed; desktop preview/mobile dialog PNGs were visually
+inspected. Foundation6/6 PASS43.6s and Workspace/Task7/7 PASS1.2m also passed,
+actual launcher/Playwright/backend exits0/cleanup verified. Collaboration7/7
+PASS1.3m, whole workflow1/1 PASS34.2s and account-security1/1 PASS23.2s complete
+all eight real isolated Chromium suites: **30/30 PASS**, actual exits0 and
+owned cleanup verified. Final read-only
+development comparison at2026-11-02T05:25:34Z matches all29 table fingerprints,
+schema/FKs/indexes/sequences/history/cluster identity and45 protected source
+hashes. Development remains36 migrations/3 Users/2 Sessions/1 Profile/1 membership/
+1 Workspace/1 Task/AI0; no persistent fixture or feature-flag change was used.
+Final resource inspection at05:28:55Z found0 owned frontend/backend test
+containers and0 owned networks. No unrelated process/resource was stopped.
+
+The initial enabled-browser2/4 run and initial unit527/537 run are retained as
+failures, followed by corrected final-source runs. Fixes cover an exact label,
+stale identity/revision guards and the pre-existing Task-page test harness's
+Auth boundary; no security assertion was weakened. Exact run/exit/cleanup
+evidence belongs in [HANDOVER.md](HANDOVER.md). Existing FE05 acceptance below
+is historical and does not prove P4-02C tests or manual development usage.
+No manual development login/generation/confirmation is claimed. Existing FE05
+manual Owner acceptance remains unverified. Review this fixture-only slice
+before requesting any later implementation or feature enablement.
+
+## HT-FE-P3-05 — Create Profile & First-Time User Onboarding
+
+Status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**,2026-11-02. The Owner now
+approves first-party Profile creation only; Invitation UI and general membership
+onboarding remain separate. HT-AI-P4-02C is reserved for future Generator UI.
+
+An authenticated User with no Profiles sees **Bạn chưa có tổ chức nào** on
+Dashboard or Tổ chức, with a working **Tạo tổ chức** link to protected
+`/profiles/new`. Existing Users can create another Profile from the Tổ chức
+header. The form has one supported field, **Tên tổ chức**, uses existing
+teal/neutral shared controls, validates1–255 Unicode characters, retains drafts
+on recoverable failures and prevents rapid duplicate submits. Errors are safe
+Vietnamese messages with linked field errors and focused summary. Requests use
+the existing API client's same-origin cookies and CSRF; no user/owner IDs.
+
+Success201 seeds only the returned Profile detail, invalidates current Profile
+list pages and navigates to `/profiles/{id}/workspaces`. That URL is the existing
+active-Profile mechanism, not a new global store/localStorage selector. Refresh
+retains URL scope and the backend revalidates access. **Tạo không gian** is then
+resolved through existing server capability hints and Workspace creation; no
+Workspace is created automatically. Existing Profile cards switch scopes.
+Draft/request lifetime is bound to the current User and canceled on unmount or
+identity change, preventing late replies from repopulating another User's cache.
+
+Manual Owner acceptance after review, using the existing two-terminal startup
+commands below:
+
+If a backend terminal is already running, press Ctrl+C in that Owner-controlled
+terminal and restart `.\scripts\start-backend-dev.ps1` from the repository root.
+The launcher uses `--noreload`, so an existing process will not automatically
+load this new POST. The agent stopped no Owner process and changed no credential.
+In the second terminal, `cd frontend` and `npm run dev`; no migration/seed command.
+
+1. Open http://127.0.0.1:5173 and log in through React.
+2. With no Profiles, choose **Tạo tổ chức**, enter a valid name and submit once.
+3. Confirm the new organization name and selected Workspace URL; choose
+   **Tạo không gian**, enter its name and month, then submit.
+4. Confirm the Workspace appears, refresh, open it and choose **Xem công việc**.
+5. Open **Tổ chức**, confirm the Profile card, create another organization if
+   desired and switch through its card. Log out when finished.
+
+The agent does not perform these mutations on persistent development. Automated
+acceptance uses isolated PostgreSQL and the shared launcher:
+
+```powershell
+.\scripts\test-frontend-integration.ps1 -Suite onboarding
+```
+
+Current targeted backend40/40/full662 passed with actual launcher/Python exits0
+and cleanup. Frontend426/426, typecheck/lint/build and all six real isolated
+browser suites25/25 passed (onboarding3/foundation6/work7/collaboration7/MVP1/
+account1), every launcher/Playwright/backend exit0 and owned cleanup verified.
+Final development row fingerprints/schema/sequences/history are unchanged:
+36 migrations/ai.0001 applied,3 Users/2 Sessions/business0/AI0. All52 model/
+migration/AI and19 tested changed-file hashes are stable; no test resources remain.
+Exact evidence is in HANDOVER; historical395/22/643 are separate results.
+No schema/migration, AI runtime, secret loading or persistent development test
+data is part of FE05. **AUTOMATED VERIFIED / MANUAL OWNER CHECK PENDING.**
+Separate valid POSTs can create separate Profiles with equal names: after an
+uncertain network outcome, check Tổ chức before intentionally submitting again.
+
+## Historical HT-FE-P3-04 verification
+
+HT-FE-P3-04: **COMPLETE / OWNER REVIEW GATE**. MVP audit, account lifecycle
 consumers, cohesive isolated UI acceptance and local startup are verified within
 the approved scope. See FRONTEND_MVP_ACCEPTANCE.md and
 HANDOVER.md for current scope and evidence. The Owner supplied local environment
@@ -345,8 +846,8 @@ Protected routes add `/profiles/:profileId/workspaces/:workspaceId/tasks` and
 the nested `/:taskId` detail. Workspace list creates an authorized monthly
 Workspace; detail edits metadata, confirms archive/restore and shows the
 manager-only sanitized member roster. Period is chosen as month and sent as
-YYYY-MM-01 at creation, not edited later. No Profile creation or membership
-mutation UI is included.
+YYYY-MM-01 at creation, not edited later. That FE02 slice did not include Profile
+creation or membership mutation UI; FE05 separately adds only Profile creation.
 
 Task list renders real title/description/status/priority/deadline, assignment
 membership code and update time. Filters/sort/page go to the server. Local

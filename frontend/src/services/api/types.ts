@@ -37,6 +37,11 @@ export interface Profile {
   updated_at: string
 }
 
+/** Ownership and lifecycle are assigned by the server from the current session. */
+export interface ProfileCreateInput {
+  name: string
+}
+
 export interface Workspace {
   id: string
   profile_id: string

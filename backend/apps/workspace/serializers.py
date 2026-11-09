@@ -46,6 +46,43 @@ class ProfileReadSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class ProfileMemberReadSerializer(serializers.ModelSerializer):
+    """Manager roster metadata, without account identifiers or contact details."""
+
+    profile_id = serializers.UUIDField(read_only=True)
+    display_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProfileMembership
+        fields = ("id", "profile_id", "display_label", "role", "is_active", "joined_at")
+        read_only_fields = fields
+
+    def get_display_label(self, membership):
+        name = membership.user.get_full_name().strip()
+        return name or f"Thành viên {str(membership.pk)[:8]}"
+
+
+class ProfileCreateSerializer(StrictInputSerializer):
+    """Only the Profile name is client-owned; identity and role are not input."""
+
+    name = serializers.CharField(
+        max_length=255,
+        allow_blank=False,
+        trim_whitespace=True,
+    )
+
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping) and "name" in data:
+            value = data["name"]
+            if not isinstance(value, str):
+                raise serializers.ValidationError({"name": ["Enter a valid Profile name."]})
+            try:
+                value.encode("utf-8", errors="strict")
+            except UnicodeEncodeError:
+                raise serializers.ValidationError({"name": ["Enter valid Unicode text."]}) from None
+        return super().to_internal_value(data)
+
+
 class WorkspaceReadSerializer(serializers.ModelSerializer):
     """Minimal Workspace metadata without transitional ownership data."""
 

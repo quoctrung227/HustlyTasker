@@ -2,8 +2,159 @@
 
 # HustlyTasker Database Design
 
-Version: **0.12 source and persistent development** after the Owner-approved
-HT-AI-P4-02B-R3 rollout on2026-11-02. Production state is not verified.
+Version: **0.12 persistent development** after the Owner-approved
+HT-AI-P4-02B-R3 rollout on2026-11-02. Current source also contains the unapplied
+governance candidate below; source/development schema are not yet identical.
+Production state is not verified.
+
+## HT-AI-P4-04C — Candidate dispatch governance schema (2026-11-08)
+
+Status: **HT-AI-P4-04C — OFFLINE GOVERNANCE IMPLEMENTATION READY /
+DEVELOPMENT MIGRATION PENDING**. The Owner authorizes
+additive models/migration preparation and isolated PostgreSQL rehearsal only.
+`ai.0002_dispatch_governance` is a new candidate; **persistent development apply
+is NOT approved**. No applied0001 is modified, no existing row is backfilled,
+and existing AiProposal/AiOperation fields, constraints and fixture semantics
+remain unchanged. The original model-class prefix is SHA256-identical to its
+pre-task content; only three metadata models are appended.
+
+Source: [models](../backend/apps/ai/models.py),
+[candidate migration](../backend/apps/ai/migrations/0002_dispatch_governance.py),
+[migration tests](../backend/apps/ai/test_governance_migrations.py).
+The candidate depends on ai.0001_initial and contains three CreateModel
+operations; it does not alter/drop business tables, insert demo rows or infer
+tenant/provider provenance from legacy payloads. Reverse removes only candidate
+tables on the isolated rehearsal target; this is not permission to rollback
+development or discard its future governance records.
+
+| New model | Actual fields and purpose |
+|---|---|
+| AiDispatch | UUID; PROTECT actor/Profile/Workspace and optional proposal; feature/provider/model/execution_mode; contract/config/pricing versions and provider-policy digest; scoped key/body digests; lifecycle; reserved/accounted/estimated/billed amounts; input/output limits and nullable usage; claim/timestamps/lease; safe error and reconciliation digest. No brief, feedback, focus, generated JSON or provider-response body |
+| AiBudgetBucket | UUID; GLOBAL/PROFILE/USER scope, execution mode, nullable PROTECT Profile/User matching scope, immutable policy version; cost limit, reserved/accounted exposure, request/concurrency limits and request/active counters; created_at. Stable cumulative lifetime lane with no date/model/config-version partition or automatic reset |
+| AiDispatchReservation | UUID; PROTECT dispatch and bucket; immutable reserved amount; HELD/SETTLED/RELEASED with nullable settlement amount; created_at. One row per dispatch/bucket, derived by server rather than supplied bucket IDs |
+
+Amounts use Decimal(20,8); null estimated/billed/usage values mean unknown,
+not a fabricated zero. Current execution permits only OPENAI_OFFLINE and records
+SIMULATED usage/estimated accounting. FIXTURE/OPENAI_LIVE enum values support
+truthful schema discrimination, not runtime activation. Billed cost must remain
+NULL for every nonlive mode. Schema representation does not authorize live data,
+provider requests, real billed-cost reconciliation or pricing policy.
+
+### Database constraints and application invariants
+
+- Dispatch identity is unique on actor/Profile/Workspace/feature/execution mode/
+  key digest. Provider/model/configuration changes join the body HMAC, so reusing
+  a key with changed input/policy conflicts instead of creating another lane.
+  Required digests are lower-case64-character hexadecimal strings.
+- The three budget identities are unique GLOBAL+mode, Profile+mode and User+mode.
+  Scope/nullability CHECKs prohibit ambiguous tenant/user mappings. Policy changes
+  cannot create another global lane or reset counters; disagreement fails closed.
+- Finite/nonnegative monetary bounds, reserved+accounted≤limit, request-count≤
+  request-limit and active≤concurrency/request-count are database CHECKs. No UTC
+  rollover can erase outstanding unknown holds because buckets are lifetime rows.
+- Dispatch lifecycle requires the appropriate claim/timestamps/accounted state;
+  SUCCEEDED requires known SIMULATED/REPORTED usage and both token counts.
+  Observed token counts or estimated cost above a configured bound are not
+  forbidden unconditionally: unexpected provider evidence must be representable
+  as UNKNOWN, while settlement remains bounded by held exposure in this slice.
+- Reservation uniqueness and lifecycle require HELD with no settlement, SETTLED
+  with nonnegative settlement≤held amount, or RELEASED with explicit zero.
+- PROTECT FKs prevent accidental deletion of accounting references. There is no
+  purge, retention reset, automatic lease refund or new user-facing history.
+- SQL FKs do not prove current membership or cross-model tenant equality. The
+  service resolves current manager authority/original actor, derives the exact
+  scope buckets and revalidates sources. Model clean checks cross-scope optional
+  proposal/workspace relationships; they do not replace service authorization.
+
+New callable paths are gated before candidate-table queries by missing/default-
+false AI_GOVERNANCE_ENABLED, explicit policy.enabled and the existing fixture
+development/nonproduction guard. Existing HTTP/React/fixture paths do not query
+these tables, so an unapplied development candidate is not silently required at
+startup. No flag is enabled or environment secret inspected in this task.
+
+This compatibility statement covers the existing authorized gated application
+paths, not arbitrary ORM maintenance. Until rollout, a generic hard-delete or
+AdminCollector over a referenced User/Profile/Workspace/AiProposal can follow
+new reverse PROTECT relations and query absent candidate tables. Such destructive
+maintenance is outside this task; do not claim an unapplied schema supports every
+possible ORM operation or run deletes as a workaround.
+
+Final source verification: focused governance/migration52/52 PASS15.286 seconds,
+including six candidate migration methods, and full isolated PostgreSQL826/826
+PASS231.558 seconds. Launcher and actual Python exits0 for both runs, model/
+migration-chain checks pass and owned test resources are removed; PG137 is
+intentional disposable cleanup. Forward/reverse tests cover empty and related
+legacy fixture data, constraints/indexes and preservation of original AI/business
+rows. These are isolated results, not a persistent migration rollout.
+Final READ ONLY comparison2026-11-08T10:21:26.5079807Z matches all29 development
+tables' row fingerprints, columns/FKs/indexes/constraints, sequences, migrations
+and cluster identity, excluding ephemeral connection counts. Still36 migrations,
+4 Users/2 Sessions/1 Profile/membership/Workspace/Task/3 AuditLogs/AI0;
+ai.0002 remains UNAPPLIED. Full evidence is in [HANDOVER](HANDOVER.md).
+Rollout still needs separate Owner approval, backup and controlled rehearsal.
+
+## HT-AI-P4-03A — stateless Feedback Analyzer, no schema change — 2026-11-02
+
+The new Task-scoped fixture analysis reads explicitly selected Review.comment
+and nondeleted TaskComment.content through current tenant/manager predicates.
+It returns advisory ai.feedback.v1 JSON and a minimal source citation manifest;
+it creates no analysis table, durable AI operation/proposal, audit, Notification
+or business record. AiProposal/AiOperation remain Generator-only and ai.0001
+is not changed or reapplied. No retention/expiry/purge schema is introduced.
+
+Existing source relationships stay Review→Deliverable→Task→Workspace→Profile
+and TaskComment→Task. Deliverable URLs, legacy Client/ShareLink and other Tasks
+are not analysis sources. Deleted Comment content remains excluded even when
+retained physically by the existing soft-delete policy.
+
+Pre-task read-only development:36 migrations,29 tables,3 Users/2 Sessions,
+1 Profile/1 ProfileMembership/1 Workspace/1 Task; Review/Comment/AI rows0.
+No migration/model change exists; targeted AI215/215 and full719/719 PostgreSQL
+tests, full isolated migration-chain/model-drift checks pass. Final read-only
+development comparison at2026-11-02T06:34:34Z matches all29 table row fingerprints,
+schema/FK/indexes, sequences and migration/cluster history. Existing schema/data
+are unchanged; no new migration is pending from this task. Evidence and the
+Owner review gate are in HANDOVER.
+
+## HT-AI-P4-02C — fixture UI integration, no schema change — 2026-11-02
+
+React consumes existing AiProposal/AiOperation generation, read and atomic
+confirmation. Permission-checked OPTIONS metadata and Owner-approved optional
+synthetic brief require no model or migration. Brief≤6000 is transient input,
+bound to the request HMAC when present; it is not stored raw in either AI table.
+Absent brief preserves the old canonical request/replay. Editing remains local
+until the existing confirmation validates the complete edited payload.
+
+Fresh pre-task read-only inventory:36 migrations/ai.0001 already applied,
+3 Users/2 Sessions,1 Profile/1 ProfileMembership/1 Workspace/1 Task,AI rows0.
+These newer business rows supersede only old inventory assumptions, not R3/FE05
+historical evidence. No development fixtures or schema writes are authorized.
+Final read-only preservation at2026-11-02T05:25:34Z matches29 tables' row hashes,
+schema/constraints/indexes, sequences and migration/cluster identity exactly.
+All45 protected source hashes remain unchanged. Isolated backend172/676 and
+real browser30 checks pass with owned resources removed; no persistent write.
+See HANDOVER for current run IDs, exit codes and evidence paths.
+
+## HT-FE-P3-05 — Profile onboarding uses existing schema — 2026-11-02
+
+The Owner-approved Create Profile API/UI requires no schema or migration.
+Profile.name remains required/max255 and is not globally unique. Existing
+create_profile_with_owner atomically creates the ACTIVE Profile, the current
+authenticated User's active OWNER membership and safe membership AuditLog.
+Existing multi-Owner/multi-Profile/tenant constraints and Workspace creation
+remain unchanged. Repeated valid requests can create distinct same-named
+Profiles; there is no new idempotency protocol or uniqueness constraint.
+
+All52 model/migration/AI source hashes match the pre-task snapshot; system/model
+drift/full migration chain checks passed in isolated PostgreSQL. Development
+started with36 migrations/ai.0001 applied,3 Users/2 Sessions and business/AI rows0.
+No migration or fixture is applied to persistent development by this task.
+Final read-only preservation matches all pre-task row fingerprints, schema,
+sequences and history:36 migrations/ai.0001 applied,3 Users/2 Sessions/business0/AI0.
+Targeted40/full662 PostgreSQL tests passed only on isolated databases, with all
+owned resources removed; no persistent schema/data write occurred. See HANDOVER.
+R3's recorded schema
+rollout and historical backup/restore evidence below remain intact.
 
 ## HT-AI-P4-02B-R3 — DEVELOPMENT MIGRATION SUCCESS / OWNER REVIEW — 2026-11-02
 

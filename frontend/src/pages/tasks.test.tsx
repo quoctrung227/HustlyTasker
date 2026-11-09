@@ -26,6 +26,16 @@ vi.mock('../features/tasks/TaskForms', () => ({
     ? <button type="button" onClick={() => { void onStart().then(onSaved).catch(onDenied) }}>Bắt đầu công việc</button> : null,
 }))
 
+// This direct-page harness deliberately isolates child feature boundaries and
+// does not mount application authentication. Keep AI availability disabled here;
+// task-generator.test.tsx exercises the real entry with AuthProvider and both
+// availability states. Do not mock auth globally: the 403 identity test below
+// must continue exercising the actual provider and protected application route.
+vi.mock('../features/ai/GeneratorEntry', () => ({
+  GeneratorEntry: ({ allowed }: { allowed: boolean }) => allowed
+    ? <button type="button" disabled>Tạo công việc bằng AI</button> : null,
+}))
+
 const profileId = '00000000-0000-4000-8000-000000000201'
 const workspaceId = '00000000-0000-4000-8000-000000000202'
 const taskId = '00000000-0000-4000-8000-000000000203'

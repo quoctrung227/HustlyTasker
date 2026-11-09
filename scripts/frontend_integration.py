@@ -31,7 +31,7 @@ def private_test_mailbox(run_id):
 
 
 def install_test_mailbox(run_id):
-    """Copy only locmem-accepted account mail into this disposable container.
+    """Copy only locmem-accepted credential mail into this disposable container.
 
     No HTTP endpoint, deployment setting, mail provider or application email
     service changes. This private bridge lets Node receive delivered test
@@ -53,6 +53,7 @@ def install_test_mailbox(run_id):
     purposes = {
         "Verify your HustlyTasker email": "verification",
         "Reset your HustlyTasker password": "password-reset",
+        "Your HustlyTasker Profile invitation": "invitation",
     }
     original = EmailBackend.send_messages
 
@@ -66,7 +67,8 @@ def install_test_mailbox(run_id):
             if purpose is None or message.to != [recipient]:
                 continue
             parts = message.body.split("\n\n")
-            token = parts[1] if len(parts) > 1 else ""
+            token_index = 2 if purpose == "invitation" else 1
+            token = parts[token_index] if len(parts) > token_index else ""
             if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
                 raise RuntimeError("Unexpected isolated security mail format.")
             lock = os.open(directory / "lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -106,7 +108,7 @@ def consume_test_mail(run_id, recipient_alias, purpose):
     import re
     import stat
 
-    if recipient_alias != "registered" or purpose not in ("verification", "password-reset"):
+    if recipient_alias != "registered" or purpose not in ("verification", "password-reset", "invitation"):
         raise RuntimeError("Unknown isolated mailbox selection.")
     directory = private_test_mailbox(run_id)
     lock = os.open(directory / "lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
@@ -183,6 +185,102 @@ def seed_fixtures(run_id):
             username="fixture_member", email=email, password=password,
             first_name="Thành viên", last_name="Kiểm thử",
         )
+        # FE05: independent first-time identities, intentionally without any
+        # Profile/Workspace membership. Only the owned isolated database is
+        # selected before this seed function; Profile creation itself is UI E2E.
+        for label in ("onboarding", "onboarding_security", "onboarding_keyboard"):
+            User.objects.create_user(
+                username=f"fixture_{label}", email=f"{label}.{run_id}@example.test",
+                password=password, first_name="Người mới", last_name="Kiểm thử",
+            )
+        # Dedicated AI fixture actors/empty Workspaces keep quotas and state
+        # independent. No proposal or Task is seeded in these new scopes.
+        ai_profiles = {}
+        for label in ("ai_manager", "ai_recovery", "ai_keyboard"):
+            actor = User.objects.create_user(
+                username=f"fixture_{label}", email=f"{label}.{run_id}@example.test",
+                password=password, first_name="Quản lý", last_name="Demo",
+            )
+            organization = Profile.objects.create(
+                id=fixture_id(run_id, label + "_profile"), name=f"AI {label} Integration",
+            )
+            ProfileMembership.objects.create(
+                profile=organization, user=actor, role=ProfileMembership.Role.OWNER,
+            )
+            child = Workspace.objects.create(
+                id=fixture_id(run_id, label + "_workspace"), profile=organization,
+                owner=actor, name=f"AI {label} Workspace", period=date(2027, 1, 1),
+            )
+            ai_profiles[label] = (organization, child)
+        ai_profile, ai_workspace = ai_profiles["ai_manager"]
+        for label, role, workspace_role in (
+            ("ai_peer", ProfileMembership.Role.ADMIN, WorkspaceMember.Role.ADMIN),
+            ("ai_viewer", ProfileMembership.Role.MEMBER, WorkspaceMember.Role.VIEWER),
+        ):
+            actor = User.objects.create_user(
+                username=f"fixture_{label}", email=f"{label}.{run_id}@example.test",
+                password=password, first_name="Thành viên", last_name="Demo",
+            )
+            ProfileMembership.objects.create(profile=ai_profile, user=actor, role=role)
+            WorkspaceMember.objects.create(workspace=ai_workspace, user=actor, role=workspace_role)
+        # P4-03C sources exist only in the exact owned isolated database.
+        # Separate tenants keep Generator's empty scopes and prior suites intact.
+        from apps.reviews.models import Deliverable, Review
+        from apps.tasks.models import TaskComment
+        analyzer_owner = User.objects.create_user(
+            username="fixture_analyzer_org_owner", email=f"analyzer_org_owner.{run_id}@example.test",
+            password=password,
+        )
+        analyzer_scopes = {}
+        for label in ("analyzer_manager", "analyzer_privacy", "analyzer_keyboard"):
+            actor = User.objects.create_user(
+                username=f"fixture_{label}", email=f"{label}.{run_id}@example.test",
+                password=password, first_name="Quản lý", last_name="Phản hồi",
+            )
+            organization = Profile.objects.create(
+                id=fixture_id(run_id, label + "_profile"), name=f"Feedback {label} Integration",
+            )
+            ProfileMembership.objects.create(profile=organization, user=analyzer_owner, role="OWNER")
+            ProfileMembership.objects.create(profile=organization, user=actor, role="MEMBER")
+            child = Workspace.objects.create(
+                id=fixture_id(run_id, label + "_workspace"), profile=organization, owner=analyzer_owner,
+                name=f"Feedback {label} Workspace", period=date(2027, 1, 1),
+            )
+            WorkspaceMember.objects.create(workspace=child, user=actor, role="ADMIN")
+            task = Task.objects.create(
+                id=fixture_id(run_id, label + "_task"), workspace=child,
+                created_by=analyzer_owner, title=f"Feedback {label} Task", status="WORKING",
+            )
+            Task.objects.create(
+                id=fixture_id(run_id, label + "_empty_task"), workspace=child,
+                created_by=analyzer_owner, title=f"Feedback {label} Empty Task",
+            )
+            deliverable = Deliverable.objects.create(
+                id=fixture_id(run_id, label + "_deliverable"), task=task, uploaded_by=actor,
+                revision=1, status="REJECTED", file_url="https://example.test/synthetic-feedback-output",
+            )
+            Review.objects.create(
+                id=fixture_id(run_id, label + "_review"), deliverable=deliverable,
+                reviewer=analyzer_owner, status="REQUEST_CHANGE",
+                comment="ANALYZER_SYNTHETIC_REVIEW: kiểm tra phụ đề trong ví dụ giả lập.",
+            )
+            TaskComment.objects.create(
+                id=fixture_id(run_id, label + "_comment"), task=task, user=actor,
+                content="ANALYZER_SYNTHETIC_DISCUSSION: nhận xét minh họa về âm thanh.",
+            )
+            tombstone = TaskComment.objects.create(
+                id=fixture_id(run_id, label + "_deleted_comment"), task=task, user=actor,
+                content="DELETED_ANALYZER_CONTENT_MUST_STAY_HIDDEN",
+            )
+            TaskComment.objects.filter(pk=tombstone.pk).update(deleted_at=datetime.now(timezone.utc))
+            analyzer_scopes[label] = (organization, child)
+        for label, role in (("analyzer_viewer", "VIEWER"), ("analyzer_editor", "MEMBER")):
+            actor = User.objects.create_user(
+                username=f"fixture_{label}", email=f"{label}.{run_id}@example.test", password=password,
+            )
+            organization, child = analyzer_scopes["analyzer_manager"]
+            ProfileMembership.objects.create(profile=organization, user=actor, role="MEMBER")
+            WorkspaceMember.objects.create(workspace=child, user=actor, role=role)
         profile = Profile.objects.create(
             id=fixture_id(run_id, "profile"), name="Studio Integration",
         )
@@ -392,7 +490,7 @@ class ThreadedServer(ThreadingMixIn, WSGIServer):
 
 
 def run(mode, arguments=()):
-    if mode not in ("serve", "expire-sessions", "consume-test-mail"):
+    if mode not in ("serve", "serve-ai", "expire-sessions", "consume-test-mail", "feedback-state"):
         raise ValueError("Unknown integration operation.")
     if mode != "consume-test-mail" and arguments:
         raise ValueError("Unexpected integration arguments.")
@@ -418,6 +516,21 @@ def run(mode, arguments=()):
     system_id = None
     mailbox_cleanup = None
     try:
+        if mode == "feedback-state":
+            select_owned_database(config, maintenance)
+            import hashlib
+            import json
+            from django.apps import apps
+            # Only count/fingerprint state, never print source text or identities.
+            snapshot = {}
+            for model in apps.get_models():
+                rows = list(model.objects.order_by("pk").values())
+                encoded = json.dumps(rows, default=str, sort_keys=True).encode("utf-8")
+                snapshot[model._meta.label] = {
+                    "count": len(rows), "sha256": hashlib.sha256(encoded).hexdigest(),
+                }
+            print(json.dumps(snapshot, sort_keys=True), flush=True)
+            return 0
         if mode == "consume-test-mail":
             if len(arguments) != 2:
                 raise ValueError("Isolated mailbox selection required.")
@@ -451,6 +564,13 @@ def run(mode, arguments=()):
         select_owned_database(config, maintenance)
         call_command("migrate", interactive=False, verbosity=0)
         call_command("migrate", check=True, interactive=False)
+        if mode == "serve-ai":
+            # Only after exact isolated cluster/database ownership checks.
+            # config.test_settings ignores deployment env; no persistent flag.
+            from django.conf import settings
+            if settings.SETTINGS_MODULE != "config.test_settings":
+                raise RuntimeError("AI fixtures require owned test settings.")
+            settings.AI_FIXTURE_ENABLED = True
         seed_fixtures(os.environ["HT_TEST_RUN_ID"])
         mailbox_cleanup = install_test_mailbox(os.environ["HT_TEST_RUN_ID"])
         connections.close_all()

@@ -10,6 +10,7 @@ from .views import (
     ProfileArchiveView,
     ProfileDetailView,
     ProfileListView,
+    ProfileMemberListView,
     ProfileRestoreView,
     WorkspaceArchiveView,
     WorkspaceDetailView,
@@ -42,6 +43,11 @@ urlpatterns = [
         "profiles/<str:profile_id>/",
         ProfileDetailView.as_view(),
         name="profile-detail",
+    ),
+    path(
+        "profiles/<str:profile_id>/members/",
+        ProfileMemberListView.as_view(),
+        name="profile-member-list",
     ),
     path(
         "profiles/<str:profile_id>/archive/",

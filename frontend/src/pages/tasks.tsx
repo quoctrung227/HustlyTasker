@@ -7,6 +7,8 @@ import { PageHeader, dateLabel, periodLabel } from '../components/page'
 import { TaskAssign, TaskCreate, TaskEdit, TaskStart } from '../features/tasks/TaskForms'
 import { useWorkContext } from '../features/workspaces/useWorkContext'
 import { TaskCollaboration } from '../features/collaboration/TaskCollaboration'
+import { GeneratorEntry } from '../features/ai/GeneratorEntry'
+import { FeedbackAnalyzer } from '../features/ai/FeedbackAnalyzer'
 import { workApi, workKeys, taskStatuses, taskPriorities, taskOrderings } from '../services/api/work-management'
 import type { Task, TaskFilters, TaskPriority, TaskStatus, TaskOrdering } from '../services/api/work-management'
 
@@ -88,7 +90,7 @@ function ScopedTasksPage({ profileId, workspaceId }: { profileId: string; worksp
   if (context.profile.isError || context.workspace.isError) return <><PageHeader title="Nội dung không khả dụng" back={{ to: `/profiles/${profileId}/workspaces`, label: 'Không gian làm việc' }} /><ErrorState error={context.profile.error || context.workspace.error} /></>
   if (!context.workspace.data) return <PageSkeleton />
   const visible = tasks.data?.results.filter((task) => task.title.toLocaleLowerCase('vi-VN').includes(pageSearch.trim().toLocaleLowerCase('vi-VN'))) || []
-  return <><PageHeader eyebrow={context.workspace.data.name} title="Công việc" description="Giữ công việc rõ ràng, để cả nhóm cùng tiến về phía trước." back={{ to: base, label: 'Thông tin không gian' }} action={<TaskCreate profileId={profileId} workspaceId={workspaceId} canCreate={context.active && context.capabilities.data?.manageTasks} onCreate={(input, signal) => workApi.createTask(profileId, workspaceId, input, signal)} onSaved={() => { context.invalidate(); setNotice('Đã tạo công việc. Bạn có thể mở chi tiết để phân công.'); }} onDenied={context.denied} />} />
+  return <><PageHeader eyebrow={context.workspace.data.name} title="Công việc" description="Giữ công việc rõ ràng, để cả nhóm cùng tiến về phía trước." back={{ to: base, label: 'Thông tin không gian' }} action={<div className="ai-entry-actions"><TaskCreate profileId={profileId} workspaceId={workspaceId} canCreate={context.active && context.capabilities.data?.manageTasks} onCreate={(input, signal) => workApi.createTask(profileId, workspaceId, input, signal)} onSaved={() => { context.invalidate(); setNotice('Đã tạo công việc. Bạn có thể mở chi tiết để phân công.'); }} onDenied={context.denied} /><GeneratorEntry profileId={profileId} workspaceId={workspaceId} allowed={context.active && context.capabilities.data?.manageTasks === true} /></div>} />
     {!context.active && <Alert>Không gian hoặc tổ chức đã lưu trữ. Công việc được giữ ở chế độ chỉ đọc.</Alert>}
     {notice && <Alert kind="success">{notice}</Alert>}
     <Card className="task-filter-card"><TaskFiltersForm key={search.toString()} initial={filters} onApply={(next) => { setPageSearch(''); setSearch(next) }} /></Card>
@@ -139,5 +141,6 @@ function ScopedTaskDetail({ profileId, workspaceId, taskId, currentUserId }: { p
       {children.isPending ? <PageSkeleton /> : children.isError ? <ErrorState error={children.error} onRetry={() => void children.refetch()} /> : <>{children.data.results.length ? <TaskRows tasks={children.data.results} base={base} /> : <EmptyState title="Chưa có công việc con" description="Chia nhỏ một mục tiêu thành những bước có thể thực hiện. Mỗi công việc con được quản lý độc lập." />}<Pagination page={page} count={children.data.count} onPageChange={setPage} /></>}
     </section><p className="read-note"><ListChecksIcon aria-hidden="true" />Mỗi công việc có sản phẩm và đánh giá riêng, theo quy trình được kiểm tra trên máy chủ.</p>
     {currentUserId && <TaskCollaboration profileId={profileId} workspaceId={workspaceId} task={value} currentUserId={currentUserId} active={context.active && task.isSuccess} canManage={canManage} onChanged={() => context.invalidate()} onDenied={context.denied} />}
+    {currentUserId && <FeedbackAnalyzer profileId={profileId} workspaceId={workspaceId} taskId={taskId} allowed={canManage} onDenied={context.denied} />}
   </>
 }

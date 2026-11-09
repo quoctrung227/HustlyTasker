@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router'
 import { ArrowRightIcon, ArrowUpRightIcon, BuildingsIcon, CalendarDotsIcon, StackIcon, ArrowLeftIcon } from '@phosphor-icons/react'
 import { Alert, Badge, Card, EmptyState, ErrorState, PageSkeleton, Pagination } from '../components/ui'
 import { PageHeader, dateLabel, periodLabel } from '../components/page'
@@ -10,6 +10,7 @@ import { WorkspaceActions } from '../features/workspaces/WorkspaceActions'
 import { WorkspaceMembers } from '../features/workspaces/WorkspaceMembers'
 import { useWorkContext } from '../features/workspaces/useWorkContext'
 import { workApi } from '../services/api/work-management'
+import { ProfileOnboarding } from '../features/profiles/ProfileOnboarding'
 
 function usePage() {
   const [search, setSearch] = useSearchParams()
@@ -25,9 +26,10 @@ function ProfileCard({ profile }: { profile: Profile }) {
 export function ProfilesPage() {
   const { page, setPage } = usePage()
   const query = useQuery({ queryKey: queryKeys.profiles(page), queryFn: ({ signal }) => tenantApi.profiles(page, signal) })
-  return <><PageHeader eyebrow="NHÓM CỦA BẠN" title="Tổ chức" description="Những người cùng mục tiêu. Những không gian cùng làm việc." />
+  return <><PageHeader eyebrow="NHÓM CỦA BẠN" title="Tổ chức" description="Những người cùng mục tiêu. Những không gian cùng làm việc." action={query.isSuccess && query.data.count > 0 ? <Link className="button button--primary" to="/profiles/new">Tạo tổ chức</Link> : undefined} />
+    <p><Link className="text-link" to="/invitations/respond">Tôi có mã lời mời</Link></p>
     <div className="list-toolbar"><p>{query.data ? <><strong>{query.data.count}</strong> tổ chức bạn có thể truy cập</> : 'Danh sách tổ chức'}</p><span className="subtle-label"><ShieldLabel />Chỉ dữ liệu được cấp quyền</span></div>
-    {query.isPending ? <PageSkeleton label="Đang tải tổ chức…" /> : query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : query.data.results.length === 0 ? <EmptyState title="Chưa có tổ chức nào" description="Bạn chưa có quyền truy cập tổ chức nào. Hãy liên hệ người quản trị để được mời tham gia nhóm." /> : <><div className="profile-grid">{query.data.results.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}</div><Pagination page={page} count={query.data.count} onPageChange={setPage} /></>}
+    {query.isPending ? <PageSkeleton label="Đang tải tổ chức…" /> : query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : query.data.count === 0 ? <ProfileOnboarding /> : query.data.results.length === 0 ? <EmptyState title="Trang này không có tổ chức" description="Quay lại trang trước để xem các tổ chức bạn có quyền truy cập." action={<Link className="button button--secondary" to="/profiles">Về trang đầu</Link>} /> : <><div className="profile-grid">{query.data.results.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}</div><Pagination page={page} count={query.data.count} onPageChange={setPage} /></>}
   </>
 }
 
@@ -46,6 +48,7 @@ export function ProfileDetailPage() {
   if (profile.isPending) return <PageSkeleton label="Đang tải thông tin tổ chức…" />
   if (profile.isError) return <><PageHeader title="Nội dung không khả dụng" back={{ to: '/profiles', label: 'Tổ chức' }} /><ErrorState error={profile.error} onRetry={() => void profile.refetch()} /></>
   return <><PageHeader eyebrow="THÔNG TIN TỔ CHỨC" title={profile.data.name} description="Không gian chung cho những đóng góp của cả nhóm." back={{ to: '/profiles', label: 'Tổ chức' }} action={<Badge status={profile.data.status} />} />
+    <div className="work-actions"><Link className="button button--secondary" to={`/profiles/${profileId}/members`}>Thành viên tổ chức</Link><Link className="text-link" to="/invitations/respond">Phản hồi lời mời</Link></div>
     <Card className="metadata-card"><span className="organization-icon"><BuildingsIcon aria-hidden="true" /></span><dl><div><dt>Ngày tạo</dt><dd>{dateLabel(profile.data.created_at)}</dd></div><div><dt>Cập nhật lần cuối</dt><dd>{dateLabel(profile.data.updated_at)}</dd></div><div><dt>Không gian truy cập được</dt><dd>{workspaces.data?.count ?? '—'}</dd></div></dl></Card>
     <section className="section-block"><div className="section-heading"><div><p className="eyebrow">NHỊP LÀM VIỆC HẰNG THÁNG</p><h2>Không gian làm việc</h2></div><Link className="text-link" to={`/profiles/${profileId}/workspaces`}>Xem tất cả<ArrowRightIcon aria-hidden="true" /></Link></div>
       {workspaces.isPending ? <PageSkeleton label="Đang tải không gian…" /> : workspaces.isError ? <ErrorState error={workspaces.error} onRetry={() => void workspaces.refetch()} /> : workspaces.data.results.length === 0 ? <EmptyState title="Chưa có không gian làm việc" description="Các không gian bạn được cấp quyền trong tổ chức sẽ hiển thị tại đây." /> : <WorkspaceRows workspaces={workspaces.data.results.slice(0, 3)} />}
@@ -55,12 +58,14 @@ export function ProfileDetailPage() {
 
 export function WorkspacesPage() {
   const { profileId = '' } = useParams()
+  const location = useLocation()
   const { page, setPage } = usePage()
   const context = useWorkContext(profileId)
   const profile = context.profile
   const query = useQuery({ queryKey: queryKeys.workspaces(profileId, page), queryFn: ({ signal }) => tenantApi.workspaces(profileId, page, signal), enabled: profile.isSuccess })
   return <><PageHeader eyebrow={profile.data?.name || 'TỔ CHỨC'} title="Không gian làm việc" description="Mỗi tháng là một không gian. Giữ cả nhóm trong cùng ngữ cảnh." back={{ to: `/profiles/${profileId}`, label: 'Thông tin tổ chức' }} action={<WorkspaceCreate profileId={profileId} canCreate={context.active && context.capabilities.data?.createWorkspace} onCreate={(input, signal) => workApi.createWorkspace(profileId, input, signal)} onCreated={() => context.invalidate(true)} onDenied={context.denied} />} />
-    {profile.isError ? <ErrorState error={profile.error} onRetry={() => void profile.refetch()} /> : profile.isPending || query.isPending ? <PageSkeleton label="Đang tải không gian…" /> : query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <><div className="list-toolbar"><p><strong>{query.data.count}</strong> không gian truy cập được</p><span className="subtle-label">Bao gồm không gian đã lưu trữ</span></div>{query.data.results.length === 0 ? <EmptyState title="Chưa có không gian làm việc" description="Chưa có không gian nào trong phạm vi truy cập của bạn. Liên hệ người quản trị nếu bạn cần tham gia." /> : <WorkspaceRows workspaces={query.data.results} />}<Pagination page={page} count={query.data.count} onPageChange={setPage} /></>}
+    {profile.isSuccess && location.state?.profileCreated === profileId && <Alert kind="success">Tổ chức đã được tạo. Tạo không gian làm việc đầu tiên để bắt đầu.</Alert>}
+    {profile.isError ? <ErrorState error={profile.error} onRetry={() => void profile.refetch()} /> : profile.isPending || query.isPending ? <PageSkeleton label="Đang tải không gian…" /> : query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : <><div className="list-toolbar"><p><strong>{query.data.count}</strong> không gian truy cập được</p><span className="subtle-label">Bao gồm không gian đã lưu trữ</span></div>{query.data.results.length === 0 ? <EmptyState title="Chưa có không gian làm việc" description={context.capabilities.data?.createWorkspace && context.active ? 'Chọn Tạo không gian để bắt đầu quản lý công việc của nhóm theo tháng.' : 'Chưa có không gian nào trong phạm vi truy cập của bạn. Liên hệ người quản trị nếu bạn cần tham gia.'} /> : <WorkspaceRows workspaces={query.data.results} />}<Pagination page={page} count={query.data.count} onPageChange={setPage} /></>}
     <ReadOnlyNote /></>
 }
 

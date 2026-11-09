@@ -1,5 +1,67 @@
 # Frontend MVP completeness and acceptance — HT-FE-P3-04
 
+## Current bounded follow-up — HT-FE-MEMBERS-01,2026-11-08
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Owner now separately approved
+organization Members/Invitation React integration. Historical FE04/FE05 exclusions
+below do not prohibit this completed slice. Profile creation stays complete.
+New protected Members roster/history and invite/resend/revoke controls consume
+existing Invitation APIs plus minimal GET Profile members. Explicit authenticated
+masked-code accept/decline and safe login/signup return complete recipient flow.
+No token preview, no automatic Workspace grant, no Profile role/remove workflow
+or general Workspace membership candidate UI is claimed.
+
+Fresh frontend801/801, targeted backend51/full839, real Members4+stability4+
+foundation6=14/14 and type/lint/build PASS. Full Python/browser child exits0,
+owned cleanup verified; targeted launcher0/summary retained but separate child
+event unavailable. Four-size keyboard/reflow/axe checks and375/1440 screenshot
+inspection pass. Exact29-table development snapshot is unchanged:36 migrations,
+4 Users,2 Sessions, existing business rows; no Invitation or AI rows created.
+ai.0002 is still UNAPPLIED. No credentials/flags/provider/migration/deployment.
+**REAL EMAIL DELIVERY NOT VERIFIED; AUTOMATED VERIFIED / MANUAL OWNER CHECK
+PENDING.** See FRONTEND_GUIDE for recipient-code workflow and limitations.
+
+## Historical bounded follow-up — HT-FE-P3-05,2026-11-02
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Owner separately authorizes
+Create Profile & First-Time User Onboarding. The earlier FE04 exclusion below
+is historical scope, not a current prohibition. Invitation UI, member-candidate
+API and remaining general membership/onboarding management are still pending
+separate review. HT-AI-P4-02C remains reserved for Generator UI, not FE05.
+
+Source now provides strict authenticated name-only POST /api/v1/profiles/ through
+the existing atomic initial-owner service and protected React /profiles/new.
+Zero-Profile Dashboard/Tổ chức CTAs, existing-user create-another, safe errors/
+pending, list invalidation and URL selection lead to existing Workspace creation.
+No automatic Workspace or unrelated membership is created. Existing Session/
+CSRF/tenant/RBAC boundaries and the design master remain authoritative.
+
+Targeted isolated backend40/40 PASS1.577s/full662/662 PASS245.938s, launcher/
+Python exits0 and cleanup verified. Frontend426/426 PASS28.98s across16files,
+typecheck/lint/build PASS; real isolated onboarding3/3 PASS48.1s and foundation6/6
+PASS42.8s. All remaining real browser regressions passed: work7/7(1.2min),
+collaboration7/7(1.3min), cohesive MVP acceptance1/1(35.1s), account-security1/1
+(23.3s), for **25/25 across six suites**. Every launcher/Playwright/backend exit0,
+owned database/container/network cleanup verified. Four-size empty/form-error
+surfaces have axe0/keyboard/overflow checks; desktop empty/mobile form PNGs were
+inspected. These are automated isolated results, not manual development testing.
+
+The UI journey creates first/second Profile and Workspace through React, selects
+and refreshes Profile URLs and checks cross-user privacy. Direct API assertions
+are only read-back/negative checks; initial synthetic identity fixtures live
+solely in the owned isolated cluster. Authentication, CSRF, injection, session
+expiry, current-identity abort and scoped caching remain covered by current tests.
+
+Final read-only development preservation at2026-11-02T04:37:31Z matches every
+original row fingerprint, schema, sequence and migration history:36 migrations/
+ai.0001 applied,3 Users/2 Sessions/business0/AI0. All52 model/migration/AI hashes
+and19 tested changed-file hashes remain stable; no isolated test resource remains.
+No schema, AI runtime, private .env or persistent development business fixture
+was changed. **AUTOMATED VERIFIED / MANUAL OWNER CHECK PENDING.** Stop at the
+Owner review gate; the guide lists the real website steps for the Owner.
+
+## Historical FE04 acceptance matrix and evidence
+
 Date: 2026-10-27. Status: **COMPLETE / OWNER REVIEW GATE**. This matrix audits the implemented
 team-work MVP, not completion of every target requirement/business domain.
 Current runtime evidence belongs in HANDOVER.md. Historical485 backend/356

@@ -1753,3 +1753,305 @@ Physical purge and shared multi-worker quota limitations are unchanged. Proposed
 HT-FE-P3-05 fixture preview/edit/confirmation UI remains **RECOMMENDED, NOT
 APPROVED**; no live provider/Analyzer/onboarding task starts automatically.
 See HANDOVER/readiness for evidence. **STOP AT OWNER REVIEW GATE.**
+
+---
+
+# HT-FE-P3-05 — Create Profile & First-Time User Onboarding — ACCEPTED SCOPE 2026-11-02
+
+The Owner explicitly approves first-party Profile creation for an active
+authenticated User, including a User with zero existing Profile memberships.
+This task ID is onboarding only. **HT-AI-P4-02C** stays reserved for Generator
+preview/edit/confirm UI; R3's earlier suggested HT-FE-P3-05 AI name was a
+recommendation and is superseded, without rewriting the historical R3 evidence.
+
+Approved implementation boundary:
+
+- POST the existing /api/v1/profiles/ collection with validated name only.
+  request.user supplies initial ownership; no client-supplied owner/user ID,
+  membership/role/status/tenant field or unrelated authority.
+- Reuse unchanged create_profile_with_owner: Profile, active OWNER membership
+  and safe membership audit commit atomically. Creating a new tenant does not
+  join any existing tenant and does not bypass invitation consent.
+- Reuse current Profile read DTO, membership/tenant checks, SessionAuthentication
+  and CSRF. Existing nonunique names/multiple Profiles remain valid; independent
+  POSTs create distinct Profiles. No new global constraint or idempotency scheme.
+- React zero-Profile CTAs and protected /profiles/new form select the new Profile
+  through the current URL and cache conventions, then offer existing Workspace
+  creation. No second selection store, automatic Workspace or Django Admin step.
+- Tests may mutate only owned isolated PostgreSQL. No model/migration/AI
+  change, persistent development fixture, secret inspection, commit or push.
+
+Source is **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**. Current
+targeted isolated backend40/40 PASS1.577s/full662/662 PASS245.938s, actual
+launcher/Python exits0 and owned cleanup verified. Frontend426/426, typecheck/
+lint/build and all six real isolated browser suites25/25 passed; every launcher/
+Playwright/backend exit0 and owned cleanup verified. Final read-only development
+comparison matches every starting row fingerprint/schema/sequence/history:
+36 migrations/ai.0001 applied,3 Users/2 Sessions/business0/AI0. All52 model/
+migration/AI and19 tested changed-file hashes are stable; no test resources remain.
+These are current-task results; historical643/395/22 retain their original scope.
+Manual Owner website acceptance is pending; no development UI mutation was tested.
+
+Invitation UI, general membership onboarding/candidate API, AI/live providers,
+Project, production and another migration rollout remain outside this scope.
+Stop at **HT-FE-P3-05 OWNER REVIEW GATE**; no automatic follow-on implementation.
+
+---
+
+# HT-AI-P4-02C — fixture React UI and optional synthetic brief — ACCEPTED SCOPE 2026-11-02
+
+Owner authorizes the existing Generator API's React preview/edit/explicit-confirm
+workflow and safe additive migration-free integration. Live providers, billing,
+persistent development fixture enablement, schema changes, Analyzer and another
+task remain excluded. Preserve all33 dirty FE05 files and completed R3 evidence.
+
+Source discovery found CASE B editing already implemented: confirmation accepts
+the full edited payload, revalidates actor/tenant/revision/expiry and creates
+Tasks through existing atomic services. No PATCH-save or ordinary Task POST
+fallback is introduced; local edits are not server-saved until confirmation.
+
+Owner separately selected the proposed optional synthetic brief extension:
+maximum6000 characters, valid/nonblank Unicode without NUL, no raw brief database
+storage/logging/API echo, same-key/body replay bound to the brief HMAC. Existing
+scenario-only requests preserve their canonical form and idempotency behavior.
+The fixture still uses server-owned scenario IDs and fixed synthetic output;
+it does not analyze the entered text. UI must disclose this explicitly and must
+not present it as live AI. Real customer/private-data policy remains unapproved.
+
+Permission-checked read-only OPTIONS availability on the existing collection
+is a minimal additive integration contract; no new role, endpoint or schema.
+OPTIONS must not consume POST generation quota, while POST3/minute20/day stays
+unchanged. No feature toggle on persistent development is authorized.
+Implementation/tests are IN PROGRESS; this is approval scope, not a PASS claim.
+
+---
+
+# HT-AI-P4-03A — Delegated stateless fixture Analyzer scope — ACCEPTED 2026-11-02
+
+The Owner explicitly authorizes source-backed domain/security audit and a safe
+migration-free fixture backend where existing access rules, typed contracts and
+isolated verification suffice. Routine bounded technical choices are delegated;
+this is not approval for live/private provider egress, paid usage, schema rollout,
+frontend, persistence redesign, production or broader product functionality.
+
+The engineering choice is a stateless advisory POST for selected Review.comment
+and nondeleted TaskComment.content within one authorized Task, using existing
+active manager/internal-review authority, existing FeedbackAnalysis/citation
+validation and the fixed offline adapter. No new role or self-review privilege;
+actual Task/Deliverable/Review decisions retain all original service checks.
+
+AiProposal/AiOperation remain Generator-specific. This no-write/no-cost fixture
+slice does not require a durable analysis/idempotency ledger: repeated requests
+recompute and reauthorize. That limited choice supersedes the older generic
+future unsafe-AI idempotency proposal only here, not Generator confirmation or
+any later live/persisted analysis. No raw feedback artifact, analysis history,
+confirm/apply endpoint or domain/Audit/Notification mutation is authorized.
+Existing validation bounds, process-cache attempt throttles and development/
+nonproduction fixture guard are reused; no persistent flag is enabled.
+
+The delegated technical choice is now implemented and verified as **HT-AI-P4-03A
+— DESIGN AND FIXTURE BACKEND COMPLETE / OWNER REVIEW GATE**. AI215/215 PASS15.272s
+(43 new Analyzer tests), full isolated719/719 PASS217.696s, actual launcher/Python
+exits0 and owned cleanup verified. Development row/schema/history preservation
+is exact; no schema, flag or data write. This is not blanket approval of older
+AI-D01–AI-D10 proposals or live/private processing. Source/authority checks are
+optimistic pre/post checks, not serializable locking/delivered-response revocation;
+process-local quotas are not shared production budgets. Fixed output cites the
+first selected source without semantic interpretation. No UI/history/replay/apply
+implementation or next-task authorization. FE05 and P4-02C manual Owner website
+acceptance remain unverified.
+
+# Permanent pre-deployment Owner readiness gate — ACCEPTED 2026-11-02
+
+The Owner explicitly requires a stop before any production deployment, hosting
+setup that publishes the website, production database migration, public release
+or externally accessible rollout. Ask exactly:
+
+> Website HustlyTasker đã hoàn thiện đúng ý bạn chưa? Bạn có muốn chỉnh sửa giao diện, chức năng hoặc quy trình nào trước khi deploy không?
+
+Do not deploy until the Owner explicitly confirms website readiness and
+authorizes deployment. Automated test success cannot bypass this requirement.
+Current task authority remains local development and isolated testing only;
+there is no deployment approval. This permanent instruction is also retained
+in root AGENTS.md for future sessions.
+
+---
+
+# HT-AI-P4-04A — Live integration readiness scope and explicit provider gate — 2026-11-08
+
+**ACCEPTED SCOPE:** source-backed engineering audit, privacy/cost/contract design,
+existing fixture compatibility verification and documentation. A safe default-off
+adapter is authorized only where compatible with approved provider/architecture
+decisions. The current task's section7 explicitly requires a technical proposal
+and stop if no approved provider choice exists. No model requests, keys, billing,
+real-content egress, unapproved schema/infrastructure or production is authorized.
+
+**SOURCE FINDING, NOT A NEW BUSINESS DECISION:** AI-D01/D05/D09/D10 still approve
+only fixture/no-network operation and zero live budget. Historical Gemini/OpenAI
+recommendations are not a selected provider/model. Existing exact fixture adapter
+gate, hardcoded provenance/zero usage and strict React parsers cannot truthfully
+serve live output unchanged. Scoped confirmation prevents duplicate committed
+Tasks but not concurrent duplicate paid dispatches; no durable budget/claim exists.
+
+**DESIGN READY / PROVIDER IMPLEMENTATION BLOCKED:**
+[current proposal](AI_ARCHITECTURE_DESIGN.md#ht-ai-p4-04a--live-provider-readiness-2026-11-08).
+No runtime/adapter/settings/model/migration changes are made to bypass this gate.
+
+**ALREADY APPROVED, NOT REOPENED:** current manager tenant authority, human preview/
+edit/explicit atomic confirmation through existing Task services, idempotent
+confirmation, stateless advisory Analyzer, strict hierarchy/domain validation,
+no raw brief in proposal/operation/logs and no automatic Review/domain actions.
+
+**RECOMMENDED BUT NOT APPROVED:** one shared provider port with a named stable
+text model, separated minimal prompt data, strict output parsing, truthful mode/
+provenance/usage, no invisible fallback, bounded I/O and default-off live config;
+minimal durable dispatch/budget/provenance design before paid runtime integration.
+An offline named-provider adapter slice can be the next task after provider
+selection, still without live requests or activation. No extra mock feature added.
+
+**OWNER DECISION REQUIRED:** provider/model/API and synthetic versus private-data
+mode; permitted content and account terms/region/retention (including confidential
+derived proposal text); explicit cost/concurrency limits and enforceable shared
+accounting; proposed provenance/dispatch contract and any minimum schema scope.
+No numeric live budget, provider/model, physical retention or schema is marked
+accepted here. Separate approval remains required for schema rollout, live smoke,
+paid/data activation and production. Existing exact predeployment gate remains.
+
+Official documentation was checked2026-11-08 with public GET only; it does not
+establish this Owner's account tier, regional retention, pricing or model quality.
+No .env/credentials were inspected. Manual Owner FE05/Generator/Analyzer website
+acceptance remains PENDING. Tests/preservation evidence are in HANDOVER and do
+not grant provider/data/billing/production approval.
+
+---
+
+# HT-AI-P4-04B — OpenAI Responses offline adapter target — ACCEPTED SCOPE 2026-11-08
+
+**OWNER-APPROVED IMPLEMENTATION TARGET:** OpenAI API, `gpt-5.4-mini`, Responses
+API and strict Structured Outputs using JSON Schema where compatible with the
+existing domain contracts. Execution is **offline fake/in-memory transport only**,
+with real API budget USD0. This resolves P4-04A's missing provider choice only
+for the adapter implementation; it does not activate billable inference or
+approve private-data transmission.
+
+The Owner delegates routine class organization/configuration/transport choices
+within that boundary. Implement under the existing StructuredProvider port and
+preserve FixtureAdapter, current Generator/Analyzer HTTP services, proposal and
+confirmation/idempotency semantics, SessionAuthentication/CSRF and tenant RBAC.
+No new provider framework, arbitrary tool execution or automatic domain mutation
+is authorized. Model configuration must be server-controlled and changeable only
+through a later approved configuration decision, not a browser request override.
+
+**NOT AUTHORIZED:** real model requests/keys, billing, customer-data egress,
+persistent development feature changes, models/migrations, schema rollout,
+infrastructure expansion or production. A key's presence cannot auto-enable the
+adapter. Missing/disabled configuration fails closed; no silent fixture fallback
+may be presented as live AI. No API credential is needed or requested for tests.
+
+**DESIGN AUTHORIZED, NOT SCHEMA APPROVAL:** a minimal truthful provenance and
+shared dispatch/accounting proposal may specify candidate fields/constraints,
+scoped claim uniqueness, budget reservation and unknown-completion recovery.
+AiProposal/AiOperation remain unchanged. Existing atomic confirmation prevents
+duplicate committed Tasks, not duplicate paid dispatch; locmem/provider rate
+limits do not prove hard global spending enforcement. A future migration needs
+separate review, inventory/backfill/backup/rehearsal and rollout authorization.
+
+**LIVE ACTIVATION STILL BLOCKED:** approved private-data classes/account terms/
+retention, truthful persisted/public provenance, compatible frontend contract,
+enforceable shared dispatch/budget controls and separately authorized capped live
+smoke are required. `store:false` is not proof of no provider retention. Manual
+Owner FE05/Generator/Analyzer website acceptance remains PENDING. No deployment
+is approved, and the Owner's permanent predeployment review gate remains.
+
+Current status: **HT-AI-P4-04B — OFFLINE OPENAI ADAPTER COMPLETE / OWNER REVIEW
+GATE**. Actual implementation is isolated openai_adapter.py plus its deterministic
+test module under the existing provider port; no HTTP/business/React dispatch
+is rewired. Fresh focused55/55 PASS0.038 seconds and apps.ai270/270 PASS13.347
+seconds, both launcher/actual Python0, checks/cleanup and source/development
+preservation are verified in [HANDOVER](HANDOVER.md). All245 pre-existing source
+files remain byte-identical and current development retains36 migrations/
+4 Users/2 Sessions with no AI rows. This evidence completes the offline slice,
+not live activation, paid dispatch protection, privacy approval or manual website
+acceptance. Full backend719/frontend675/browser36 remain historical, not rerun.
+
+The latest P4-04B instruction requires this exact question before any future
+public deployment, production migration, hosting publication or release:
+
+> Website HustlyTasker đã hoàn thiện đúng ý bạn chưa? Có giao diện hoặc chức năng nào cần sửa hoặc bổ sung trước khi deploy không?
+
+This records the current task's wording without rewriting the earlier decision
+or AGENTS history. No deployment action is included or authorized now.
+
+---
+
+# HT-AI-P4-04C — Durable governance implementation — ACCEPTED ISOLATED SCOPE 2026-11-08
+
+The Owner explicitly authorizes routine engineering choices for additive durable
+provenance, shared dispatch deduplication, atomic budget reservation/concurrency,
+unknown-outcome handling and safe usage/reconciliation, with candidate migrations
+tested on isolated PostgreSQL only. This supersedes P4-04B's no-schema restriction
+only within this new task. It does **not** authorize persistent development apply,
+live OpenAI requests/keys/billing, customer-data transfer, production or automatic
+business mutations. Existing dirty source, fixture behavior and authentication/
+tenant/RBAC/confirmation rules must be preserved.
+
+**CHOSEN WITHIN DELEGATED ENGINEERING SCOPE — OFFLINE VERIFIED:** append
+AiDispatch, AiBudgetBucket and AiDispatchReservation; candidate ai.0002 contains
+only CreateModel operations and no legacy data mapping/backfill. Existing
+AiProposal/AiOperation/ai.0001 remain unchanged. Optional proposal references are
+PROTECT and do not themselves authorize associating unrelated tenant records.
+
+Dispatch identity is actor/Profile/Workspace/feature/execution mode/key digest;
+input and full provider/model/configuration/pricing policy join keyed HMACs.
+Stable lifetime GLOBAL/Profile/User bucket identities are not split by model,
+policy version or date. Their limits/counters are authoritative shared database
+state; policy disagreement fails closed rather than resetting or expanding a lane.
+The consistent lock graph is existing tenant locks→GLOBAL/Profile/User budgets→
+dispatch. No database transaction is held across fake transport execution.
+
+The independent lifecycle is RESERVED→DISPATCHING→SUCCEEDED or OUTCOME_UNKNOWN;
+RESERVED can fail before dispatch, while OUTCOME_UNKNOWN requires explicit
+evidence-idempotent reconciliation. A committed dispatch marker means possible
+remote execution even if a worker dies before receiving a result. Timeouts,
+post-dispatch failures, unknown usage and persistence failure do not release
+reserved exposure or in-flight capacity automatically. Existing Task confirmation
+idempotency is not misrepresented as paid-dispatch deduplication.
+
+Current callable implementation is gated by missing/default-false
+AI_GOVERNANCE_ENABLED, explicit policy.enabled and existing fixture environment
+checks; OPENAI_LIVE remains refused. Only preserved OpenAI offline adapter/fake
+transport can be called. Amounts/token observations remain simulated/estimated,
+billed cost remains NULL, and actual invoices are never invented. No raw brief,
+feedback, focus, canonical body or reconciliation evidence is stored in accounting.
+Analyzer stays stateless from the user's perspective; receipts do not save or
+reconstruct analysis content, create a proposal or bypass human confirmation.
+
+**NOT APPROVED:** development/production migration rollout; production budget
+values or true billing upper bounds; live-data/retention/provider-account policy;
+actual billing reconciliation; automatic physical purge/reset or a new operator
+role; live HTTP/React contracts and external activation. Internal current-actor
+authority can leave revoked-user holds unresolved; any operational recovery
+workflow beyond this scope needs separate review. Provider monitoring/limits
+remain supplementary defenses, not proof of absolute billing prevention.
+
+Current status: **HT-AI-P4-04C — OFFLINE GOVERNANCE IMPLEMENTATION READY /
+DEVELOPMENT MIGRATION PENDING**. Focused52/52 PASS15.286 seconds and full isolated
+PostgreSQL826/826 PASS231.558 seconds; launcher/actual Python exits0 and checks/
+owned cleanup verified. Final READ ONLY10:21:26Z development comparison exactly
+preserves all29 tables' row/schema/sequence/history/cluster fingerprints, still
+36 applied migrations/4 Users2 Sessions/1 Profile/membership/Workspace/Task/
+3 AuditLogs/AI0. Candidate0002 remains UNAPPLIED. Evidence and initial test-fixture
+corrections belong in [HANDOVER](HANDOVER.md). Passing isolated tests does not
+grant rollout/live/privacy approval. Source/migration work remains default-gated;
+arbitrary parent hard-delete/AdminCollector can traverse unapplied PROTECT
+relations and is not covered by current authorized app-path compatibility.
+Manual Owner website acceptance remains PENDING. No subsequent task starts
+automatically.
+
+The latest P4-04C instruction requires this exact question before any public
+deployment, hosting publication, production database rollout or external release:
+
+> Website HustlyTasker đã hoàn thiện đúng ý bạn chưa? Có giao diện hoặc chức năng nào cần chỉnh sửa trước khi deploy không?
+
+This task-specific wording is recorded without rewriting prior decision history
+or AGENTS. No deployment is included or authorized in P4-04C.

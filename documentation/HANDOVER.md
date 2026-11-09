@@ -1,6 +1,1287 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-11-02 — HT-AI-P4-02B-R3 DEVELOPMENT MIGRATION SUCCESS
+## Current checkpoint — 2026-11-08 — HT-FE-MEMBERS-01 OWNER REVIEW GATE
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Manual Owner website acceptance
+and real email delivery remain unverified. No next task or rollout has started.
+
+Owner authorizes React organization Members/Invitation integration and a minimal
+migration-free additive API only if needed. Preserve all existing dirty work on
+main/32ccad220bee20540ba7a0e0f6f532250139d48c. Initial757 file hashes/status are
+Git-ignored in .local_backups/HT-FE-MEMBERS-01/. Original development identity/
+volume/loopback verified; read-only baseline29 tables/36 migrations/4 Users/
+2 Sessions/1 Profile/membership/Workspace/Task/3 AuditLogs/0 Invitations or AI.
+No .env/credential or development write. ai.0002 remains UNAPPLIED; no AI04D,
+new schema/migration, provider flag/call or deployment authorized.
+
+AUDIT DONE: existing Invitation list/create/detail/resend/revoke/accept/decline
+are real, session+CSRF protected, role/tenant/recipient checked. No Profile roster
+API, recipient inbox/preview or Profile membership role/remove API existed.
+Profile Owner can invite ADMIN/MEMBER; Profile Admin only MEMBER; no OWNER invite.
+Workspace Admin is not Profile governance. Recipient must be the current active,
+unique normalized email identity and possess a sent/unexpired secret; global
+email verification is independent, not required for current accept/decline.
+Accept additionally revalidates original inviter authority; decline does not.
+
+IMPLEMENTED AND VERIFIED:
+- Backend4 source files add GET/HEAD/OPTIONS /api/v1/profiles/{id}/members/,
+  sanitized paginated same-Profile membership roster and current invitation
+  capability envelope. Existing Owner/Admin management authority reused;
+  ordinary Member403, outsider404, archived readonly. No membership write/newrole.
+  New test_profile_members_api.py13 tests; no model/migration/AI changes.
+- New members.ts/test strict DTOs and User/Profile cache keys; API75/75 PASS3.36s
+  (fresh), not a whole frontend/backend PASS. Invalid route keys are opaque;
+  HTTP helpers still validate IDs. Token never enters a key/cache/storage/URL.
+- OrganizationMembers.tsx/test adds roster/history, invitation form, explicit
+  revoke confirmation and resend for PENDING/EXPIRED. Backend flags/role ceilings,
+  truthful QUEUED/SENT/FAILED delivery, normal-refetch draft preservation,
+  scope/user aborts, CSRF recovery and real permission-loss handling.
+- New pages/members.tsx/test provides protected /invitations/respond manual
+  masked-token form, explicit accept/confirmed decline and generic409. Profile
+  pages expose Members/response links; login/signup carry only the fixed response
+  path, never a token, and registration still does not auto-login. Query/fragment
+  credentials are not ingested. Existing stable AuthProvider remains unchanged.
+- Pagination gains an optional accessible label, client gains two static safe
+  field messages. Existing test runner gains members suite; private locmem-only
+  mailbox bridge adds invitation purpose for fixed synthetic acceptance identity.
+  New real browser spec4/4 PASS38.6s; captures token only in Node memory and never
+  external mail. No real email delivery claim.
+
+VERIFIED CHECKPOINT: targeted backend51/51 PASS56.587s; full isolated PostgreSQL
+839/839 PASS245.158s (one run), dependency/Django/drift/graph/full-chain/cleanup
+checks PASS. Both launchers0; full Python child0 independently recorded. The
+targeted child's Docker exit event was not retained; do not infer independent
+child-exit proof from its successful launcher/51-test summary. Final frontend
+801/801 PASS23.61s; focused142/142 PASS13.73s, API75/75 PASS. Typecheck/Biome/build
+exit0. Members Chromium4/4 PASS38.6s and Task stability4/4 PASS20.9s; respective
+runs ff576a67eb2a483397844103d1eb18c8 / 3c516c63055f4dc8a47238b1120fd5c9.
+Each browser launcher/Playwright/backend0 with owned database/resources removed.
+Members375/768/1440/812x375 reflow/keyboard/axe PASS;375/1440 PNGs inspected.
+Full UI skill/master read and focused offline confirmation/async-cleanup searches
+applied. No new style/tokens. Independent read-only security review found no
+material defect. Historical689/21/826 are not current results.
+
+Foundation6/6 PASS36.0s, run07e121e66e6d4fd4a55542c2706761d5, completes14/14
+current real-browser tests; launcher/Playwright/backend0 with owned DB removal.
+Only deliberate negative probes/read-back use direct API calls; management,
+registration/login, accept/decline/resend/revoke use real React interactions.
+Invitation codes are extracted only in memory from the private locmem test bridge.
+No external mail/provider or persistent development write is involved.
+
+### Final evidence and preservation
+
+- Ignored .local_backups/HT-FE-MEMBERS-01 holds per-check stdout/stderr and
+  retained-process exit receipts; Backend-child-exits.json independently records
+  full backend Python0. PostgreSQL137 is intentional isolated cleanup, not a
+  Django test failure. The targeted child's independent event is unavailable.
+- First targeted frontend run140/142 failed only on two inaccurate split-label
+  assertions; corrected to actual scoped role/status text and pending-until-server
+  semantics. Initial lint2 errors/3 warnings fixed with semantic focus Button,
+  equivalent NUL validation and explicit test guards. No policy/assertion
+  suppression. attempt-1-Targeted / attempt-1-Lint evidence remains retained.
+- Final full839 run includes all13 new roster tests, Authentication/Invitation,
+  Workspace/RBAC/Task/Review and existing AI regressions. pip check, Django check,
+  makemigrations --check --dry-run and isolated graph/full-chain checks pass.
+  Development migrate --check is not claimed: candidate ai.0002 is intentionally
+  pending and was applied only by the isolated test migration chain.
+- At14:48:54Z the final READ ONLY snapshot exactly matches all original29-table
+  row fingerprints/schema/constraints/indexes/sequences/history/cluster properties,
+  excluding transient connections.36 migrations/4 Users/2 Sessions/1 Profile/
+  membership/Workspace/Task/3 AuditLogs retained; WorkspaceMember0, Invitation0,
+  AI0. ai.0002 unapplied and its three tables absent. Same original container,
+  docker_postgres_data and127.0.0.1:5432 verified. See preservation-result.json.
+- Original757-file comparison:0 deleted/missing,0 unexpected changes; only12
+  existing code files+10 affected docs intentionally changed,8 new code/test
+  files. All20 tested source hashes match; AI/model/migration/AuthProvider,
+  AGENTS/README and all other pre-existing work unchanged by this task.
+- Cleanup-result.json verifies0 labelled containers/networks across both backend
+  and all three browser runs. No development service/volume was restarted or
+  deleted. No .env/credential/AI flag read/change, live call, commit or push.
+- Documentation consistency/local links and git diff --check are checked at final
+  handoff; the actual validation receipt is documentation-check-result.json.
+
+### Files changed by this task
+
+Existing backend: apps/workspace/{access,serializers,views,urls}.py only.
+New backend: apps/workspace/test_profile_members_api.py (13 tests).
+Existing frontend: src/app/App.tsx; src/pages/{auth,account-security,tenants}.tsx;
+src/services/api/client.ts; src/components/ui.tsx. New frontend:
+src/services/api/members.ts + members.test.ts;
+src/features/members/OrganizationMembers.tsx + OrganizationMembers.test.tsx;
+src/pages/members.tsx + members.test.tsx; e2e/members.spec.ts.
+Existing test infrastructure: scripts/frontend_integration.py and
+scripts/test-frontend-integration.ps1. No package/dependency or design-token change.
+Docs: HANDOVER,PROGRESS,PROJECT_ROADMAP,REQUIREMENT_STATUS,CHANGELOG,
+API_DOCUMENTATION,RBAC_DESIGN,FRONTEND_GUIDE,PROJECT_CONTEXT,FRONTEND_MVP_ACCEPTANCE.
+Other dirty/untracked files in git status were already present; do not revert them.
+
+### Remaining limits and exact continuation
+
+**REAL EMAIL DELIVERY NOT VERIFIED.** Current email contains an opaque code,
+not an application link. No recipient inbox/token-preview or Profile role/remove
+API exists. Missing safe mail configuration returns503 before creation;
+post-commit delivery failure can return503 with a PENDING/delivery FAILED record.
+SENT means backend acceptance, not mailbox receipt. No automatic retries or
+delivery setup was added. Process-local DRF throttles are not a multi-worker
+production guarantee; existing durable invitation quotas remain unchanged.
+Profile MEMBER acceptance adds no Workspace membership; Owner/Admin authority
+over child Workspaces still follows the existing approved RBAC. No generalized
+Workspace direct-add/candidate UI was implemented. Existing large bundle warning
+remains, with no unrelated split/refactor. No production readiness is claimed.
+
+No implementation blocker remains in this approved scope. Owner next reviews
+the manual steps in FRONTEND_GUIDE (Members section): open selected Profile,
+inspect roster/allowed roles, invite an intended recipient only with configured
+mail, recipient signs in using that email and explicitly enters/responds to code.
+These real website writes were not performed by the agent. Recommended later
+frontend priority is separately scoped Workspace membership candidate/management
+integration, not AI04D/ai.0002 rollout. Await a new Owner instruction; do not rerun
+unchanged tests or start another task automatically.
+
+**STOP: HT-FE-MEMBERS-01 — OWNER REVIEW GATE.**
+
+---
+
+## Historical checkpoint — 2026-11-08 — HT-FE-STABILITY-01 OWNER REVIEW GATE
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** The reproduced source of
+periodic UI flicker/Task-create dismissal is fixed and verified on final source.
+Owner manual website acceptance is still PENDING. No deployment, AI04D,
+development migration, provider activation or next task has started.
+
+### Root cause, correction and security boundary
+
+- Before fix: focus/visibility/60-second auth polling set checking/user:null;
+  ProtectedRoute replaced the Outlet with SessionState. This unmounted local
+  TaskCreate/TaskForm state even when /me returned the same User. Pre-fix real
+  React route tests fail on the lost node/input. No route navigation or full
+  reload is needed; StrictMode/HMR/button types are not the demonstrated cause.
+- Routine pending/successful same-User checks preserve the mounted subtree and
+  draft. Successful routine checks explicitly refresh active authority/data
+  queries, preserving the revocation checks formerly incidental to remounting.
+  A protected403 identity probe does not invalidate the denied query again.
+- Initial/recovery checks still block. Confirmed different User/failure hides
+  private content and cancels/clears cache; User-keyed Outlet also resets local
+  drafts for same-tenant identity changes. Actual lost tenant authority removes
+  the form; automatic polling does not interrupt checking/logout states.
+- Login-required redirect now explains that unsent input is not saved. /me
+  network/server failure retains existing fail-closed unavailable/recovery
+  handling; no persistent draft recovery is promised. No localStorage autosave,
+  new auth provider, CSRF/RBAC bypass or form/page redesign.
+- Full UI UX Pro Max skill/master read; actual offline loading-flicker UX and
+  React stable-key searches inform stable layout/focus/identity boundaries.
+  Existing teal/neutral tokens, labels and native dialogs are unchanged.
+
+### Fresh verification on final source
+
+| Check | Actual result |
+|---|---|
+| Focused regression |147/147 PASS19.97s; final full suite below also covers the subsequent test-only focus-effect synchronization |
+| Final frontend unit/contract |689/689 PASS27.24s,21 files; includes14 new auth/route cases vs675 baseline |
+| TypeScript/Biome/build | All exit0; Biome74 files, Vite build6.51s. Advisory main chunk532.26kB remains; no unrelated bundle refactor |
+| Real Chromium task-stability |4/4 PASS19.9s, runac6e04be1fb74ac4bb497a3e20785fe4 |
+| Real Auth/CSRF/tenant foundation |6/6 PASS35.6s, runff1a14ff2d7546aea76c63723202b59c |
+| Real Workspace/Task/Start |7/7 PASS58.6s, run876d739e9ae94869a40f5c0f0b33673d |
+| Real fixture Generator |4/4 PASS32.4s, run77372f5f5bcb415bb5ff1503c8f5cdd9 |
+| Browser aggregate / exit proof |21/21 PASS; each launcher, Playwright and isolated backend exit0; owned database removal confirmed |
+| Cleanup | All five task browser attempts/runs have0 owned containers/networks; temporary HMR module removed without changing existing source |
+| Responsive/accessibility |375/768/1440/812×375, keyboard/focus/Escape return, reflow and zero axe violations; actual HMR update without navigation/remount;375/1440 PNGs visually inspected |
+| Documentation/source checks | Seven affected documents synchronized,40 local Markdown file paths valid, git diff --check exit0; all eight tested source hashes unchanged |
+
+Browser scheduling forwards actual unchanged Django GET/POST responses. One
+intentional network abort occurs BEFORE the first POST reaches Django; retry
+uses real CSRF/server201 and increases Task count by exactly1 while pending
+prevents duplicate submission. Real session expiry uses the ownership-checked
+isolated helper. No persistent-development writes or manual Owner login occurred.
+Timer60s is exercised with Playwright clock, not claimed as a real60s wall wait.
+The HMR test changes only a new self-accepted module under ignored
+frontend/playwright-report; it does not prove arbitrary application-boundary
+edits/full reload preserve local state. No HMR cause for the original bug is claimed.
+
+Failed attempts remain in ignored evidence: auth RED6fail/15pass21; route RED3
+expected dismissal failures plus1 scheduled-observer fixture error/3passes7.
+First after-fix focused145 had140passes/5 fixture errors; a later147 run had
+146passes/1 immediate focus-effect assertion race. Unobserved hook cache entries
+auto-collected with gcTime0 were corrected to test explicit auth clearing,
+RTL-only role option types were corrected, and focus assertions now wait for
+their post-commit effect while retaining the same requirement. First browser
+run247d999... had3/4 PASS then timed out capturing a full-page modal screenshot
+after genuine HMR/initialaxe succeeded; compositor cause unproven. Bounded
+viewport capture with unchanged assertions passed all four on rerun. No test
+assertion/security policy was weakened. Earlier687/pre-synchronization689 runs
+are not substituted for the final689 result above.
+
+### Development, source and exact continuation
+
+Read-only pre/post snapshots match all29-table data/schema/FK/index/sequence/
+migration/cluster fingerprints at13:51:43Z (20:51:43 Vietnam), connections excluded.
+Original container49ef93152944/docker_postgres_data/127.0.0.1:5432,
+hustlytasker_db/PG16.14 remains36 migrations/4 Users/2 Sessions/1 Profile/
+membership/Workspace/Task/3 AuditLogs/AI0. ai.0002 is UNAPPLIED, its three tables
+absent. No .env/secret, persistent flag, schema or data change. Existing isolated
+fixtures/bootstrap run only in owned disposable PostgreSQL.
+
+Branch main/32ccad220bee20540ba7a0e0f6f532250139d48c preserved. Initial755 file
+hashes/status, final8 tested source hashes, current receipts/logs/screenshots,
+cleanup-proof and development/source preservation proofs are Git-ignored under
+.local_backups/HT-FE-STABILITY-01/. Backend/AI/config/migrations and all unrelated
+source are byte-identical to start; no reset/revert/stash/commit/push.
+
+Changed code/tests/scripts: AuthProvider.tsx/AuthProvider.test.tsx,
+app/App.tsx, pages/auth.tsx, features/tasks/TaskForms.test.tsx,
+new app/session-stability.test.tsx, new e2e/task-stability.spec.ts and
+scripts/test-frontend-integration.ps1 (dedicated suite/artifact mapping only).
+Docs: HANDOVER, FRONTEND_GUIDE, PROGRESS, CHANGELOG, PROJECT_ROADMAP,
+REQUIREMENT_STATUS and PROJECT_CONTEXT. No API/schema/design-master change.
+
+Commands executed sequentially:
+
+```powershell
+npm.cmd --prefix frontend test
+npm.cmd --prefix frontend run typecheck
+npm.cmd --prefix frontend run lint
+npm.cmd --prefix frontend run build
+.\scripts\test-frontend-integration.ps1 -Suite task-stability
+.\scripts\test-frontend-integration.ps1 -Suite foundation
+.\scripts\test-frontend-integration.ps1 -Suite work-management
+.\scripts\test-frontend-integration.ps1 -Suite ai-generator
+```
+
+Full backend826 and other browser suites are historical/not rerun for unchanged
+backend. No live provider, production or manual development verification is claimed.
+
+No implementation blocker remains for this verified cause. Owner's next safe
+action is manual website review: open Create Task, type values, leave beyond60s,
+switch tabs/focus and return; verify Cancel and normal server-confirmed save.
+Use existing local startup in FRONTEND_GUIDE; do not migrate or seed to test.
+Network/identity failure, explicit context navigation and full reload are not
+durable draft recovery.04C remains OFFLINE GOVERNANCE IMPLEMENTATION READY /
+DEVELOPMENT MIGRATION PENDING; any rollout/live task needs separate approval.
+**STOP: HT-FE-STABILITY-01 — OWNER REVIEW GATE.**
+
+---
+
+## Historical checkpoint — 2026-11-08 — HT-FE-STABILITY-01 IN PROGRESS
+
+Owner authorizes targeted investigation/fix of UI flicker and Task-create draft
+loss, with isolated browser mutations only. Preserve prior dirty work and the
+completed04C offline governance/candidate ai.0002 UNAPPLIED; no AI/backend/
+migration/.env/production changes. main/32ccad220bee20540ba7a0e0f6f532250139d48c.
+Initial755 tracked/untracked file hashes and status are ignored under
+.local_backups/HT-FE-STABILITY-01/. Development target/container/volume/loopback
+verified before read-only inventory; no mutation or credential output.
+
+REPRODUCED in real-component tests before runtime edits: AuthProvider.revalidate
+cleared user/status to checking on focus/visibility/60-second polling; ProtectedRoute
+replaced the whole Outlet with SessionState. TaskCreate/TaskForm unmounted and
+lost local input even though /me then returned the same User. No navigation or
+HMR is necessary. main.tsx already disables TanStack focus refetch; Task-list
+loading is below the create header, stable tenant keys and Dialog/button types
+are not the positive-refetch cause. HMR/full-reload cause is not yet demonstrated.
+
+RED evidence: auth6failed/15passed21; real-route3 expected dismissal failures
+plus1 modal-background assertion error/3passes7. After minimal runtime changes,
+focused145 has140passes/5 fixture-assertion errors: four unobserved hook-cache
+entries were auto-collected by gcTime0; one link query ignored modal background
+inertness. Fixtures are being corrected without weakening draft/security checks.
+No final PASS yet. Root handles all runners; do not duplicate clusters.
+
+Implemented, pending final verification: routine authenticated checks keep the
+subtree mounted, initial/recovery checks still block, identity change/failure
+clears private cache; authenticated Outlet keyed by User prevents same-tenant
+draft carryover. Automatic checks do not interrupt checking/logout. Existing
+login page explains login-required/unsaved form state. No localStorage draft.
+Native form/layout/teal tokens unchanged. Full skill read; actual offline searches
+loading flicker UX (stable layout/focus) and React stable keys guide the fix.
+
+Currently changed: AuthProvider.tsx/AuthProvider.test.tsx, App.tsx, pages/auth.tsx,
+new app/session-stability.test.tsx and launcher task-stability suite mapping.
+Browser agent owns new e2e/task-stability.spec.ts, still being authored; it must
+use isolated fixture DB, real API responses, labeled network scheduling/fault
+injection and an owned ignored module for actual Vite HMR (never rewrite an
+existing source file). No runtime AI/backend edit. Root owns docs and test runs.
+
+Latest verified checkpoint: final frontend689/689 PASS27.24s,21 files; TypeScript,
+Biome74 files and build6.51s exit0. Focused147/147 PASS19.97s preceded a small
+test-only focus-effect wait correction, then the final full suite above covers
+it. An earlier unobserved cache GC/assertion fixture and RTL role exact option
+were corrected, no security assertions removed. One existing focus assertion
+was synchronized with its post-commit effect (not a production form change).
+
+To preserve authority refresh previously incidental to remounting, routine
+same-user /me success explicitly invalidates active queries; Forbidden probes
+do not. Two new tests verify lost Profile access removes the draft without
+logging out a valid User, and a Task403 probe does not create a refetch loop.
+Runtime/test/script source8 files is frozen in tested-source.json. Build retains
+the advisory532.26kB main chunk warning; no unrelated bundle refactor.
+
+Browser first run247d999c92b441deb2778e1848c5e9d5:3/4 PASS (real query/focus/
+visibility/60s continuity, injected pre-backend network failure→real201 retry,
+actual session expiry). HMR4th received a genuine update and passed initial
+draft/axe checks, then full-page screenshot hung90s after fonts loaded. No PNG
+was written; exact Chromium cause unknown. Actual Playwright/launcher1, backend0,
+owned cleanup confirmed. Screenshot-only capture changed to viewport/animations
+disabled/caret hidden/5s timeout, with same-document/draft checks retained.
+
+Current browser runner session10228 is RUNNING isolated task-stability,
+foundation, work-management and ai-generator suites sequentially, no parallel
+clusters. Do not launch a duplicate. Next safe step: inspect its actual result,
+fix only demonstrated issues, collect exit/cleanup/screenshots, final source and
+read-only development preservation and finish docs. No further full backend test
+run is needed for unchanged backend/AI source. Stop at HT-FE-STABILITY-01 OWNER
+REVIEW GATE; no deployment or04D.
+
+---
+
+## Historical checkpoint — 2026-11-08 — HT-AI-P4-04C OWNER REVIEW GATE
+
+**OFFLINE GOVERNANCE IMPLEMENTATION READY / DEVELOPMENT MIGRATION PENDING.**
+Owner-approved additive candidate schema and offline governance are implemented
+and verified. No persistent development migration, live transport/key/billing,
+data egress, frontend change or production action is authorized or performed.
+Manual Owner website acceptance remains pending. No next task has started.
+
+### DONE — actual implementation
+
+- Source-backed audit distinguishes confirmation idempotency from pre-transport
+  dispatch deduplication. Old fixture Generate/Confirm and stateless Analyzer
+  remain unchanged; their successful atomic confirmation is not a paid-call lock.
+- `backend/apps/ai/models.py` appends AiDispatch, AiBudgetBucket and
+  AiDispatchReservation. Candidate `ai.0002_dispatch_governance` contains three
+  CreateModel operations only; no old-table alteration, data backfill or inferred
+  tenant/provenance mapping. Old models and applied ai.0001 remain byte-equivalent.
+- New `governance.py` implements reserve/get/begin/fail-before-dispatch/unknown/
+  reconciliation and Generator/Analyzer offline execution wrappers. Three stable
+  lifetime GLOBAL/Profile/User buckets atomically enforce shared cost exposure,
+  request count and in-flight limits across features. No daily rollover or reset.
+- Lock order: existing tenant manager context → GLOBAL/Profile/User buckets →
+  dispatch/reservations. One RESERVED→DISPATCHING claim commits before fake
+  transport; a concurrent equivalent request receives the durable receipt without
+  another invocation. No database transaction remains open across transport.
+- Scoped idempotency binds actor/Profile/Workspace/feature/mode; keyed body and
+  policy fingerprints bind actual input/provider/model/config/rates/token bounds.
+  Changed input/config conflicts. Key rotation supports Django fallback secrets.
+  No raw brief/feedback/provider response is saved in the new accounting tables.
+- Pre-dispatch failure releases cost/inflight, retaining request count. Timeout,
+  crash, bad usage/output or post-dispatch persistence failure retains holds as
+  OUTCOME_UNKNOWN, or DISPATCHING if writing UNKNOWN itself fails. No automatic
+  retry, timeout refund or transition back to RESERVED. Explicit simulated
+  reconciliation is original-actor/current-authority scoped and idempotent.
+- Fake provenance stays generated_by_ai:false; simulated usage/estimated debit
+  is distinct from actual billed_cost (NULL). Existing adapter is unchanged.
+  Analyzer reuses actual selected Review/Comment authorization and source
+  revalidation, remains advisory, and creates no user-facing history/domain rows.
+
+### Fresh checks — final frozen source
+
+Commands executed through the existing shared runner (isolated PostgreSQL):
+
+```powershell
+.\scripts\test-backend.ps1 -TestLabel apps.ai.test_governance,apps.ai.test_governance_migrations
+.\scripts\test-backend.ps1
+```
+
+| Check | Actual result / evidence |
+|---|---|
+| Focused services/concurrency/migrations | 52/52 PASS,15.286s;46 service tests including two real independent-connection races and6 migration tests; run b9026ca5aa714cf0a7d8ea45c38ae42b |
+| Full PostgreSQL regression | 826/826 PASS,231.558s; run13acfbc5330d42c4bccb5dd9423bc7e7, completed10:18:52Z; includes existing fixture/confirmation/adapter/tenant/auth and business regressions |
+| Process exits | Final focused and full launcher0 and actual Python0 independently verified by Docker die events; PostgreSQL137 is intentional owned-container cleanup after tests |
+| Dependency/Django/schema checks | pip check, system check, model drift/graph/history and full isolated migration chain PASS; empty/legacy-related forward/reverse and constraint/index/FK tests included |
+| Cleanup | Owned test databases removed; all six task-run containers/networks remaining0; no persistent volume selected |
+| Source preservation |247 originals checked:246 exact; only intended models.py append differs, old model prefix hash matches. All five final tested files unchanged after full run |
+| Documentation |12 affected documents synchronized;157 local Markdown file paths checked,0 broken; git diff --check exit0 |
+
+Evidence is Git-ignored under `.local_backups/HT-AI-P4-04C/`:
+Focused/Full stdout+stderr logs, process receipts, child-exits/cleanup-proof JSON,
+source-before/tested-source/source-proof and development-before/after/
+preservation-proof JSON. No raw rows or secrets appear in these reports.
+
+Earlier failures are retained, not presented as passing runs: first focused52
+failed with45 setup/negative-fixture errors (duplicate blank User emails and
+overlength invalid enum); a second focused run had47 passes/5 setup errors
+(TaskComment test used author instead of the actual user FK). Only synthetic
+fixtures were corrected; no assertion, production User policy or runtime logic
+was weakened. Bounded reruns2/2 and5/5 passed before the final52/826 runs above.
+Historical04B55/270 and earlier frontend/browser counts below are not new runs.
+Frontend/browser, live billing/provider and persistent-development write flows
+were not tested in04C. No new HTTP integration or live quality claim is made.
+
+### Development / Git preservation
+
+Branch main, HEAD32ccad220bee20540ba7a0e0f6f532250139d48c; all earlier dirty and
+untracked work retained. No reset/revert/stash/commit/push. Original development
+container49ef93152944, volume docker_postgres_data, loopback127.0.0.1:5432,
+database hustlytasker_db, PostgreSQL16.14/Engine29.8.2 independently identified.
+Read-only snapshots09:53:41Z→10:21:26Z match all29 tables' row fingerprints,
+columns/FKs/CHECKs/indexes/sequences/migration history/system identity; ephemeral
+connections excluded. Still36 migrations,4 Users,2 Sessions,1 Profile,
+1 ProfileMembership,1 Workspace,1 Task,3 AuditLogs and0 Review/Comment/AI rows.
+`ai.0001_initial` remains applied; candidate0002 is UNAPPLIED and its three
+tables absent. No .env/credential read, persistent flag or data/schema write.
+
+### Pending / limitations / exact safe continuation
+
+- Governance is disabled before new-table queries unless literal
+  AI_GOVERNANCE_ENABLED plus trusted enabled GovernancePolicy plus existing
+  nonproduction fixture guard pass. The setting is not added to settings.py or
+  the environment loader; enabled settings in tests do not enable development.
+  OPENAI_LIVE is always rejected, even if a key exists externally.
+- Provenance modes/fields for future live usage are staged schema, not live
+  functionality. Configured token exposure/rates are simulation assumptions,
+  not proven bounds on real model billing. Reconciliation evidence is a trusted
+  caller's simulated assertion, not independently verified provider billing.
+- No result text is retained/recovered on duplicate calls, no proposal linking
+  is wired, no shared-ledger HTTP endpoint or React DTO is introduced. Existing
+  fixture routes remain unchanged. No auto fallback or user-facing analysis
+  history is added.
+- Lifetime counters have no operator reset/window/purge workflow. Unknown holds
+  stay indefinitely; revoked actors cannot reconcile. Any future operator role,
+  price/window administration or real billing evidence needs separate review.
+- Authorized current HTTP/fixture/startup paths do not touch candidate tables.
+  Generic ORM hard-delete/AdminCollector maintenance may follow new PROTECT
+  relations and requires the candidate schema; do not perform it on development
+  before rollout. No hard delete is authorized or claimed compatible here.
+- Current code files: models.py, governance.py, migrations/0002_dispatch_governance.py,
+  test_governance.py, test_governance_migrations.py. Docs changed: HANDOVER,
+  AI_ARCHITECTURE_DESIGN, AI_PERSISTENCE_REVIEW, DATABASE_SCHEMA, API_DOCUMENTATION,
+  DECISION_LOG, FEEDBACK_ANALYZER_FOUNDATION, PROGRESS, PROJECT_ROADMAP,
+  REQUIREMENT_STATUS, CHANGELOG and PROJECT_CONTEXT.
+- Next proposed task: separately authorize controlled ai.0002 development
+  migration readiness, fresh inventory/backup and isolated restore rehearsal.
+  Read this checkpoint and candidate migration first; do not regenerate or apply
+  it automatically. Actual rollout requires its own Owner approval after safety
+  evidence. Live HTTP/proposal integration, data/privacy, billing monitoring and
+  bounded live smoke each remain separately gated. Project remains pending.
+
+**STOP: HT-AI-P4-04C — OWNER REVIEW GATE.**
+
+---
+
+## Historical checkpoint — 2026-11-08 — HT-AI-P4-04B OFFLINE OPENAI ADAPTER COMPLETE / OWNER REVIEW GATE
+
+Owner approves actual OpenAI adapter code for gpt-5.4-mini + Responses API +
+strict Structured Outputs, OFFLINE FAKE TRANSPORT ONLY. This supersedes04A's
+provider-selection blocker for this implementation target only. No live request,
+key, billing, data egress, schema, persistent flag or production is authorized.
+Manual Owner website acceptance and live provenance/accounting/data gates remain.
+
+Read AGENTS/current instructions, source/provider/contracts/validation, current
+Generator brief/confirm and stateless Analyzer, fixture guards and prior docs.
+Existing main/32ccad220bee20540ba7a0e0f6f532250139d48c dirty work is preserved.
+245 original source hashes/status are ignored in .local_backups/HT-AI-P4-04B/.
+Actual read-only preflight09:23:04Z confirms PG16.14/Engine29.8.2, original
+container49ef93152944/docker_postgres_data/loopback5432,hustlytasker_db,
+36 migrations/29 tables/4 Users/2 Sessions/1 Profile/membership/Workspace/Task/
+3 AuditLogs/AI0. No .env/credential or development data/flag write.
+
+Official OpenAI model page and Structured Outputs documentation fetchedNov8
+confirm the exact target supports Responses/strict output. API-reference HTML
+was too large and Markdown content is unsupported by the web tool; use the
+official guide/approved reference schema, not an invented Chat Completions DTO.
+No provider request or API key lookup is part of documentation retrieval.
+
+DONE: new openai_adapter.py and focused test_openai_adapter.py. Actual
+boundary: existing StructuredProvider.generate→explicit enabled offline config→
+injected in-memory transport only→bounded Responses envelope→existing domain
+parser→ProviderResult marked openai_offline/offline_simulated, unknown monetary
+cost. No SDK/network implementation/default transport, env loading or HTTP route
+wiring. Current Generator/Analyzer fixture services and React contracts stay.
+Default-disabled config, tools empty, nonstreaming/store:false, bounded tokens/
+timeouts/bytes, static errors/refusal/incomplete handling and no automatic retry.
+RequestControl cancellation is cooperative, never a refund/billing guarantee.
+
+OpenAIConfig(enabled=False,model='gpt-5.4-mini',timeout_seconds=30.0,
+max_output_tokens=4096,max_response_bytes=131072) is code-owned, not a settings
+flag. Validated caps: timeout≤120s/tokens≤32768/envelope≤1MiB; outbound≤64KiB and
+existing domain response≤64KiB. Explicit enabled and trusted transport.offline
+literally True are required. Missing/invalid config fails without dispatch.
+No key/header/env/SDK/network implementation exists, so no key is requested.
+Response must be completed, no contradictory error/incomplete fields, allowed
+model and exactly one assistant text message; tools/refusal/bad JSON and invalid
+domain fields/graphs/dates/citations are denied. Existing pure parsers are reused.
+Generator/Analyzer minimal projections never emit internal tenant/source IDs.
+Analyzer's zero-UUID actor slot is only local pure-validator correlation, never
+an identity/authorization grant. Future Django wiring must authorize/revalidate.
+
+Upstream401/403 map PROVIDER_UNAVAILABLE, preserving caller RBAC distinction;
+429→RATE_LIMITED, timeout→PROVIDER_TIMEOUT, refusal→AI_REFUSED, malformed or
+incomplete→INVALID_PROVIDER_RESPONSE, cooperative cancel→CANCELLED. Raw errors
+are suppressed, no retry/fallback. Fake token counts are validated and labelled
+offline_simulated, monetary cost remains None; no actual inference is claimed.
+
+### Current verification and preservation
+
+Focused adapter **55/55 PASS0.038 seconds**, run34e57d879f494390bac559ab92d54142.
+Final apps.ai **270/270 PASS13.347 seconds** (55 new +215 existing),
+runa4ea8e5170b04d059576f881633e3166. No failures/errors/skips in these runs.
+Both launcher and actual Python container exits0 independently verified by
+retained receipts/Docker die events; PG137 is deliberate disposable cleanup.
+pip check/Django check/model drift/graph/history/full isolated migration chain
+and owned DB removal PASS;0 run-owned containers/networks remain. Evidence:
+Focused/AiTargeted stdout/stderr/process receipts and child-exit-events.json in
+.local_backups/HT-AI-P4-04B/. The frozen two-file hashes still match.
+
+Tests exercise request/response schemas, config/errors/deadlines/cancellation,
+no-network/no-DB/no-domain guards, privacy/canaries, fixture compatibility and
+existing authorization/confirmation/idempotency/rollback. No real model, provider
+timeout, account/billing or semantic quality result is claimed. Historical215
+took16.523 seconds (~16.5s), not16,523 seconds; comma notation caused ambiguity.
+Full backend719/frontend675/browser36 and frontend type/lint/build are historical
+and not rerun: all245 original runtime/test/config files are byte-identical and
+the new adapter is not wired into application/React. No duplicate heavy runner.
+
+Final READ ONLY snapshot2026-11-08T09:31:40.7320302Z matches preflight exactly:
+all29 tables' row fingerprints, schema/columns/FKs/constraints/indexes, sequences,
+migrations and cluster identity (ephemeral connections excluded). Still36
+migrations/4 Users/2 Sessions/1 Profile/membership/Workspace/Task/3 AuditLogs,
+Review/Comment/AiProposal/AiOperation0. Original container/volume unchanged;
+ai.0001 already applied, untouched. Proof: ignored preservation-proof.json.
+No business fixtures, .env read, credentials, live/fixture flag, schema/data write,
+commit/push/reset/clean/stash or next task. Final git diff --check exits0 and136
+local Markdown paths across affected documents resolve with0 broken links.
+
+Code changed: NEW backend/apps/ai/openai_adapter.py and test_openai_adapter.py
+only. Independent source/security review found no concrete blocker; input config
+overflow and contradictory completed/error envelope were hardened before tests.
+Documentation: AI_ARCHITECTURE_DESIGN, AI_PERSISTENCE_REVIEW,
+FEEDBACK_ANALYZER_FOUNDATION, API_DOCUMENTATION, DECISION_LOG, PROGRESS,
+PROJECT_ROADMAP, REQUIREMENT_STATUS, CHANGELOG, PROJECT_CONTEXT and HANDOVER.
+Future exact provenance/dispatch/budget schema is PROPOSED only; no model or
+migration is created. Analyzer remains stateless, Generator fixture persistence
+and confirmation unchanged. Store:false is not Zero Data Retention; synchronous
+cooperative cancellation does not prove stopped billing or preempt arbitrary
+trusted callback code. There is no production HTTP transport or spending ledger.
+
+NEXT: STOP AT04B OWNER REVIEW GATE. Recommended separate next task is Live
+Provenance & Shared Dispatch/Accounting Contract/Schema Review, then separately
+approved implementation/isolated validation before paid wiring. Live data/terms,
+cost controls, capped live smoke, migration rollout and production each remain
+gated. Manual Owner website acceptance stays PENDING. Latest task-specific
+predeployment question is recorded in DECISION_LOG; no deployment authorized.
+
+---
+
+## Historical checkpoint — 2026-11-08 — HT-AI-P4-04A DESIGN READY / PROVIDER IMPLEMENTATION BLOCKED
+
+Active task: Live AI Integration Readiness & Secure Provider Foundation. The
+Owner permits a safe default-off adapter only if approved provider/architecture
+choices allow it. Task section7 explicitly says proposal+stop if no provider
+choice is approved. Source/DECISION_LOG audit confirms only fixture approval;
+Gemini/OpenAI/model/data mode/live budget/provenance accounting remain pending.
+No adapter/SDK/runtime/models/migrations/settings/frontend/provider call is added.
+This status is not PROVIDER FOUNDATION READY or a live-AI PASS.
+
+Preserve all existing dirty FE05/02C/03A/03C work on
+main/32ccad220bee20540ba7a0e0f6f532250139d48c. Initial245 source hashes and Git
+status are ignored in .local_backups/HT-AI-P4-04A/. The current readiness proposal
+is [AI_ARCHITECTURE_DESIGN](AI_ARCHITECTURE_DESIGN.md#ht-ai-p4-04a--live-provider-readiness-2026-11-08),
+including all15 engineering questions, compatibility/privacy/cost gaps and exact
+next approval scope. Historical reports below are preserved, not reused as new tests.
+
+### DONE — source audit and design
+
+- Existing StructuredProvider.generate/request/result/control port is reusable,
+  but only FixtureAdapter exists; application orchestration rejects other adapter
+  types, Generator constructs it directly, and backend/React require synthetic
+  mode/false provenance/zero usage. No approved live selector exists.
+- Optional validated brief actually reaches ProviderRequest when supplied;
+  only absence uses scenario text. The fixture ignores semantic content. Raw
+  brief stays transient, bound through stored HMAC only. A real generated plan
+  could copy confidential input, so derived-output retention needs approval too.
+- Strict task/feedback parsers already enforce exact versions/fields,20 total
+  nodes/3 child levels, enums, aware dates, byte/string bounds and authorized
+  citations. Future provider-native JSON must still pass them.
+- Current manager/tenant/session/CSRF boundaries and explicit atomic human
+  confirmation are preserved. Same-key overlapping generation can dispatch
+  twice before one durable winner; confirmation safety does not prove no duplicate
+  provider charges. No in-flight dispatch or shared spend reservation exists.
+- Analyzer source resolution uses selected Review.comment/nondeleted Comments
+  for one authorized Task and repeated current checks. Preserve stateless advisory
+  behavior. Future outbound projection must send only {ref,text}+focus, stripping
+  FeedbackSource's internal tenant/task IDs, source DB IDs, identity, URLs and secrets.
+- Cooperative RequestControl is not wired to HTTP disconnect/deadline or actual
+  network timeout/retry. Browser abort prevents stale UI, not remote charges.
+  Proposed HTTPS transport uses bounded I/O, static errors, no silent fallback
+  and no automatic retry until safe provider/cost semantics are approved.
+- Default-false fixture flag is unchanged. New live config names in design are
+  PROPOSED ONLY; no .env or secret/config value was read, added or changed.
+- Official OpenAI structured-output/data docs fetched using OpenAI Docs; Google
+  official Markdown terms/schema/rate docs fetched by public HTTP GET after the
+  browser tool's content-type failure. Access date2026-11-08; no model requests.
+  Provider/account/model quality/terms applicability remain unverified; do not
+  infer private-data approval from a free tier, paid account or API key.
+- Manual website checklist added to FRONTEND_GUIDE. FE05/Generator/Analyzer
+  manual Owner acceptance remains PENDING; fixture-disabled UI is expected.
+  Original requirements/reference audit provide business context, not approved
+  current SRS/HLD or approval to add Project/client/media functionality.
+
+### Current tests actually run
+
+Exactly one .\scripts\test-backend.ps1 -TestLabel apps.ai run:
+**215/215 PASS16.523s**, run3be0225ea26140d0b82b145d60a09879. Launcher0 and actual
+Python container0 verified from process receipt and Docker die events. PG137 was
+deliberate disposable cleanup, not a test failure. pip check, Django check,
+makemigrations drift, graph/history and full isolated migration chain PASS.
+Owned test database removed;0 run-labelled containers/networks remain.
+Evidence: AiTargeted.stdout.log/stderr.log/process.json and ai-exit-events.json
+under the ignored task directory. No current tests failed/skipped in this suite.
+
+These tests verify existing fixture contracts, no-network/error/injection-data
+checks, current tenant/CSRF/source controls, no Analyzer domain writes and
+Generator confirm/replay/concurrency/rollback. They do not prove live adapter,
+provider timeout/billing cancellation, shared budget or model prompt-injection
+resistance. Those adapter tests are NOT IMPLEMENTED/NOT RUN because provider
+selection is blocked; no extra synthetic feature was added just to increase counts.
+Full backend719/frontend675/browser36/type/lint/build below are historical,
+not rerun: no runtime/test changes justify repeating them. No manual website,
+provider smoke, production or remote CI result is claimed.
+
+### Persistent development and final checks
+
+Read-only preflight2026-11-08T09:00:49.5785442Z confirms original
+container49ef9315294450710e2c71eefb1559993c821aff94531e79541d9811534ebbbe,
+docker_postgres_data,127.0.0.1:5432,hustlytasker_db,PostgreSQL16.14,Engine29.8.2.
+There are36 applied migrations/29 tables, **4 Users**,2 Sessions,
+1 Profile/1 ProfileMembership/1 Workspace/1 Task/3 AuditLogs,AI rows0. Four Users
+is the new legitimate starting state; never delete one to match historical3.
+No .env read, development login/mutation/fixtures, migration or fixture/live flag
+change occurred. ai.0001_initial is already applied and never reapplied.
+
+Final READ ONLY comparison at2026-11-08T09:08:21.9174345Z matches all29 tables'
+row fingerprints, schema/columns/FKs/constraints/indexes, sequences, migration
+history and cluster identity exactly; ephemeral connection counts are excluded.
+Still4 Users/2 Sessions/36 migrations/1 Profile/membership/Workspace/Task/
+3 AuditLogs;Review/Comment/AI rows0. Proof and before/after snapshots are ignored
+under .local_backups/HT-AI-P4-04A/preservation-proof.json. All245 runtime/test/
+config source hashes remain identical, preserving every pre-existing dirty edit.
+git diff --check exits0;132 local Markdown paths resolve with0 broken links.
+No run-owned test container/network remains. No operational blocker is present;
+the unresolved dependency is the explicit provider/data/cost/contract approval.
+Safe continuation is Owner review only, not another test runner or live code.
+
+### Files and approval dependency
+
+Documentation only: AI_ARCHITECTURE_DESIGN, AI_PERSISTENCE_REVIEW,
+FEEDBACK_ANALYZER_FOUNDATION, API_DOCUMENTATION, FRONTEND_GUIDE, PROGRESS,
+PROJECT_ROADMAP, REQUIREMENT_STATUS, CHANGELOG, DECISION_LOG, PROJECT_CONTEXT
+and this HANDOVER. All runtime/untracked prior work remains preserved.
+
+OWNER DECISION REQUIRED: named provider/model/API/data mode; permitted content,
+terms/region/provider and derived-output retention; budget/concurrency limits and
+durable enforcement; reviewed Generator provenance/dispatch-accounting contract
+and minimum schema scope. Existing manager RBAC/human confirmation/stateless
+Analyzer/tenant/task hierarchy rules are ALREADY APPROVED and are not reopened.
+Recommended next task after approval is a named-provider offline adapter slice,
+followed by separate accounting/schema review before any migration/paid wiring.
+Live synthetic smoke, private data, billing and production require explicit
+separate approval. No next task begins automatically; preserve the permanent
+exact predeployment Owner question in AGENTS.
+
+---
+
+## Historical checkpoint — 2026-11-02 — HT-AI-P4-03C IMPLEMENTATION COMPLETE / OWNER REVIEW GATE
+
+Owner-approved active task is Feedback Analyzer React integration and isolated
+E2E validation. P4-03B durable analysis persistence is not needed for the current
+stateless fixture MVP and is not implemented. Preserve all existing FE05,
+P4-02C and P4-03A dirty work on main/32ccad220bee20540ba7a0e0f6f532250139d48c.
+Their implementation/tests are historical; manual Owner FE05/02C acceptance
+remains pending. No live provider, persistent flag/schema/data write or deployment.
+
+Before coding, actual source confirms POST nested Task ai/feedback-analysis/
+accepts1..20 sources[{kind:review|comment,id:UUID}] +optional focus≤1000. The
+ai.v1 READY fixture envelope contains exact ai.feedback.v1 payload, ordered
+S1..Sn source manifest, generated_by_ai:false,persisted:false and zero usage.
+It has no operation/proposal/confirmation/history semantics. Existing authorized
+Deliverable reads expose singular review:{id,comment,...}; current Comment reads
+expose id/content/is_deleted. No backend bridge or expanded visibility is needed.
+
+Chosen integration: lightweight section after existing TaskCollaboration in
+Task Detail, no route redesign. Current active manageTasks capability gates UI;
+existing permission-checked aiApi.availability OPTIONS reuses the shared flag.
+Paginated existing Review/Comment reads provide eligible IDs. Only selected
+source refs/focus go in POST; original text stays distinct from fixed suggestions.
+Result is local only, current User/Profile/Workspace/Task keyed, aborts on exit,
+explicit Analyze/no automatic retry/no generator idempotency/no Apply buttons.
+
+DONE: source/contract audit, strict feedback-analysis.ts transport/tests,
+FeedbackAnalyzer component/tests, TaskDetail integration, source selection,
+validation/citations and clear-on-observed-drift. Existing client gains only
+static sources/focus localized errors. Backend runtime/models/migrations/flags
+are unchanged. Isolated-only seed scopes/snapshot helper and two browser suites
+extend the existing runner, preserving Generator empty fixtures.
+
+UI UX Pro Max/master were read in full. Actual offline searches were
+`checkbox group error summary --domain ux` and
+`async request cleanup race --stack react`. Their web-appropriate guidance is
+applied through semantic checkbox groups, linked/focused errors, pending/cancel
+controls and scope-bound async cleanup; existing teal/neutral tokens and shared
+components remain. No design-system replacement or dependency was added.
+
+Read-only development inventory at2026-11-02T06:52:44Z confirms original
+49ef93152944/docker_postgres_data/127.0.0.1:5432,hustlytasker_db,PG16.14,
+36 migrations,3 Users/2 Sessions,1 Profile/Workspace/Task,Review/Comment/AI0.
+238 original source SHA256s and snapshots are ignored under
+.local_backups/HT-AI-P4-03C/. No .env read or development mutation.
+Current Windows venv --version really exits103 (configured Python312 missing);
+do not recreate it. Node20.17/npm10.8.2 and existing Docker Python3.12 runner are
+used. Old719/537/30 results are not current P4-03C evidence.
+
+### Recovery inventory and work completed
+
+The interrupted work already included the transport, React section, Task Detail
+integration, strict contracts, isolated fixtures/browser specs and tests. Recovery
+checked actual files/hashes/receipts rather than restarting implementation. The
+last saved checkpoint lagged behind the completed tests: the sequential browser
+pipeline had finished all ten suites; no duplicate runners were started.
+
+An initial Analyzer browser run was4/5 (43.6s, run14e4d15515f1479e980b823eac458082):
+the helper wrongly expected Dashboard after legitimate return-to navigation.
+The helper now explicitly opens Dashboard. Independent review also found a real
+direct-GET→shared-cache-write race that could restore an unselected deleted
+Comment. Selected-page refresh now uses tracked exact-key fetchQuery cancellation
+and rejects an aborted query even when TanStack resolves it with reverted cache
+data. A focused regression verifies redacted content cannot reappear or trigger
+Analyze. Preserve attempt-1 evidence; final results below follow these fixes.
+
+| Recovery requirement | Final status/evidence |
+|---|---|
+| 1. API transport | DONE — existing nested POST, shared client |
+| 2. Request/response types | DONE — exact bounded DTO/provenance/citations |
+| 3. Session/CSRF | DONE — shared client + real enforcement tests |
+| 4. Task entry | DONE — section after TaskCollaboration, no new route |
+| 5. Authorization visibility | DONE — current manager capability; server rechecks |
+| 6. Eligible reads | DONE — existing paginated Deliverable.review/Comments |
+| 7. Selection | DONE — unique Review/Comment refs, selected-page refresh |
+| 8. Source bounds | DONE —1..20 and≤12000 aggregate characters |
+| 9. Optional focus | DONE —≤1000 valid characters, no raw logging/storage |
+| 10. Request lifecycle | DONE — explicit submit, pending lock/cancel, no POST retry |
+| 11. Synthetic results | DONE — honest fixed fixture/no semantic AI claim |
+| 12. Citations | DONE — ordered authorized manifest; fixed example cites S1 |
+| 13. Errors | DONE — Vietnamese validation/disabled/auth/rate-limit responses |
+| 14. Disabled mode | DONE — real browser test, no Analyze POST |
+| 15. Context isolation | DONE — User/Profile/Workspace/Task key, abort/unmount/reset |
+| 16. Domain preservation | DONE — all installed isolated model fingerprints unchanged |
+| 17. Unit/contracts | DONE —675/675 full frontend tests |
+| 18. Real browser | DONE —36/36 across10 isolated suites |
+| 19. Responsive/accessibility | DONE —4 viewports, keyboard, reduced motion, axe0 |
+| 20. Documentation | DONE — synchronized source/test/preservation checkpoint |
+
+No implementation PARTIAL/TODO/BLOCKED remains. Durable history, live AI and
+Apply Suggestions are NOT APPLICABLE to this stateless advisory contract.
+
+### Final current verification (not historical baselines)
+
+Transport focused153/153 PASS1.80s (106new+47client); component32/32 PASS13.29s,
+including the cache-redaction race. Full frontend675/675 PASS27.31s in20 files;
+launcher exit0. TypeScript, Biome and production build exit0, build7.58s.
+The existing bundle-size advisory remains (531.77kB JS,153.77kB gzip); no unrelated
+splitting/refactor is included.
+
+| Real isolated Chromium suite | Result | Launcher / Playwright / backend exits |
+|---|---|---|
+| feedback-analyzer |5/5,45.8s|0 /0 /0|
+| feedback-disabled |1/1,9.9s|0 /0 /0|
+| ai-generator |4/4,32.2s|0 /0 /0|
+| ai-disabled |1/1,8.1s|0 /0 /0|
+| onboarding |3/3,31.6s|0 /0 /0|
+| foundation |6/6,36.7s|0 /0 /0|
+| work-management |7/7,1.0m|0 /0 /0|
+| collaboration |7/7,1.1m|0 /0 /0|
+| acceptance |1/1,33.8s|0 /0 /0|
+| account-security |1/1,21.1s|0 /0 /0|
+
+Total36/36. Every suite logs owned database removal and container/network cleanup.
+Final Docker inspection finds0 repository-labelled FE containers/networks and0
+targeted backend containers. Analyze itself is exercised through React source
+selection/focus/button and actual Django/PostgreSQL. Denial checks and the
+separate source-deletion/session-expiry setup use API/private isolated helpers;
+the delayed-response test holds a real backend response, not invented JSON.
+No mock test is called live-provider or UI E2E evidence.
+
+Real Analyze's before/after snapshots compare every installed model's row count
+and fingerprint; all match, with only the intended Analyze unsafe request.
+No Task/Review/Comment/Notification/AiProposal/AiOperation write occurs. Disabled
+mode likewise preserves state. Responsive375/768/1440 and812×375 landscape,
+keyboard Space/Enter/result focus, reduced motion and axe WCAG2/2.1AA pass with0
+violations. Root visually inspected final375/1440 screenshots. Evidence is ignored
+under `.local_backups/HT-AI-P4-03C/screenshots/69fd94a56faa40508b3e0fc68cbe31c3/`.
+
+Fresh current backend apps.ai215/215 PASS16.494s, run09360a4dc2124ce988db57b246499e92,
+launcher/actual Python exits0, dependency/Django/model-drift/full migration chain
+and owned cleanup PASS. All160 backend source files are unchanged. Full719 is
+historical and not rerun for this frontend-only change. No live provider, manual
+Owner browser acceptance or production test is claimed.
+
+Final read-only development comparison at2026-11-02T09:24:35.6407031Z matches
+all29 tables' row fingerprints, columns/FKs/constraints/indexes, sequences,
+migration history and cluster identity exactly (ephemeral connection counts
+excluded). Still36 migrations/3 Users/2 Sessions/1 Profile/1 ProfileMembership/
+1 Workspace/1 Task/3 AuditLogs; Reviews/Comments/AiProposal/AiOperation0.
+Original container49ef93152944/volume docker_postgres_data/loopback5432 remains.
+`ai.0001_initial` is already applied and untouched; no migration was created or
+applied in P4-03C. Proof: `.local_backups/HT-AI-P4-03C/preservation-proof.json`.
+All33 final tested source hashes match. Of238 original source files, only the
+five intended existing frontend/test-infrastructure files differ; all other233
+and all160 backend files remain byte-identical. Existing dirty work is preserved.
+Final `git diff --check` exits0;85 local Markdown links across the affected
+documentation/README resolve with0 broken links. Recovery reused the actual
+passing test receipts on this exact source rather than restarting finished suites.
+
+### Files changed by P4-03C
+
+- New frontend: src/features/ai/FeedbackAnalyzer.tsx and its test;
+  src/services/api/feedback-analysis.ts and its test;
+  e2e/feedback-analyzer.spec.ts, feedback-disabled.spec.ts, feedback-helpers.ts.
+- Existing runtime: frontend/src/pages/tasks.tsx (section), styles.css (scoped
+  existing-token styles), services/api/client.ts (two static localized fields).
+- Isolated infrastructure: scripts/frontend_integration.py and
+  scripts/test-frontend-integration.ps1; no production/development fixture change.
+- Documentation: HANDOVER, PROGRESS, PROJECT_ROADMAP, REQUIREMENT_STATUS,
+  CHANGELOG, PROJECT_CONTEXT, FRONTEND_GUIDE, API_DOCUMENTATION,
+  FEEDBACK_ANALYZER_FOUNDATION, design-system/hustlytasker/MASTER and README.
+  Unrelated pre-existing dirty files belong to earlier tasks, not this change.
+
+### Limits, manual acceptance and safe next step
+
+This is fixed offline synthetic output: it does not understand selected text,
+video or audio. Results disappear on reload/navigation and cannot be applied.
+The source reads/rechecks are optimistic; they cannot retract content already
+delivered or detect unobserved server changes. Shared process-local3/minute20/day
+quota is approximate, not a distributed budget; repeated requests are recomputed,
+not durable/idempotent recovery. Persistence/live provider require separate scope.
+
+Manual Owner FE05, Generator and Analyzer acceptance remains PENDING. With the
+current persistent flag disabled, an authorized Manager can open Task Detail and
+verify the honest unavailable state plus unchanged Review/Comments. Do not enable
+the persistent fixture flag merely to test this task. For the complete synthetic
+flow without development data writes, run from root:
+`.\scripts\test-frontend-integration.ps1 -Suite feedback-analyzer`, then
+`-Suite feedback-disabled` sequentially. Enabled isolated fixtures cover selecting
+Review/Comment→optional focus→Analyze→synthetic result/citations→reload/reset;
+Viewer/Editor/CSRF/foreign scope/session expiry are verified independently.
+
+NEXT: STOP AT HT-AI-P4-03C OWNER REVIEW GATE. No implementation blocker remains.
+Owner reviews UI/limits and decides a separate future task; do not auto-start
+P4-03B, live provider, apply-suggestions, another module or deployment. The exact
+permanent predeployment question in AGENTS and explicit authorization remain
+mandatory before any public/production rollout.
+
+---
+
+## Historical checkpoint — 2026-11-02 — HT-AI-P4-03A DESIGN AND FIXTURE BACKEND COMPLETE
+
+Active Owner-approved task: Feedback Analyzer domain/security audit and safe
+fixture backend foundation. Routine technical choices are delegated; no frontend,
+live provider, persistent fixture enablement, schema or development mutation.
+Preserve all existing FE05/P4-02C dirty work on main/32ccad220bee20540ba7a0e0f6f532250139d48c.
+Their implementation/test completion is historical; Owner manual acceptance of
+FE05 and P4-02C is still pending, not inferred from existing business rows.
+
+### Source-backed decisions before implementation
+
+- Actual feedback: reviews.Review.comment through Deliverable→Task, plus
+  tasks.TaskComment.content. Exclude deleted/tombstone and null/blank sources.
+  Deliverable.file_url is only a URL locator, never fetched or treated as media.
+  A legacy clients.Client model exists, but no Client Portal/video/transcript
+  source is authorized for this task. Project remains pending separately.
+- Reuse current can_manage_workspace_tasks: active Profile/Workspace Owner/Admin
+  or Profile Member+Workspace Admin. No Editor/Viewer/staff shortcut. Re-resolve
+  current actor and nested Task, and selected source IDs. Existing Review decision
+  restrictions remain unchanged; history/self-authored feedback can be read for
+  advisory analysis without granting self-review or latest-revision approval.
+- Existing FeedbackAnalysis/FeedbackInput/FixtureApplicationService.analyze already
+  validate bounded text, citations and pre/post authorization/source changes.
+  Reuse them and the offline fixed subtitle fixture. AiProposal/AiOperation are
+  Generator-specific; no analysis store or fake confirmation is introduced.
+- Chosen stateless POST:
+  /api/v1/profiles/{P}/workspaces/{W}/tasks/{T}/ai/feedback-analysis/.
+  Body: sources:[{kind:review|comment,id:UUID}],1..20 unique selections, optional
+  focus≤1000 Unicode chars. Server assigns S1..Sn in request order. Raw source text,
+  arbitrary identity/provider/roles/tenant metadata are not accepted from client.
+- Response: ai.v1, status READY (transient response, not persisted lifecycle),
+  mode fixture_demo, generated_by_ai false, persisted false, fixture.v1, source
+  manifest ref/kind/id only, payload ai.feedback.v1, zero fixture usage. No raw
+  source/author/URL/prompt or fake proposal/analysis ID/expiry/retrieval route.
+- Reuse existing source≤12000 aggregate,20/request32KiB/output64KiB bounds,
+  strict parser, existing fixture-disabled/dev-only guard, shared approximate
+ 3/minute20/day/user generation quota. Stateless repeats reauthorize/recompute;
+  no durable idempotency, operation rows, audit or notifications are written.
+
+Read-only development inventory at2026-11-02T06:13:16Z: Docker29.8.2, original
+container49ef93152944/docker_postgres_data,loopback5432,hustlytasker_db/PG16.14,
+36 applied migrations,29 tables,3 Users/2 Sessions,1 Profile/1 membership/
+1 Workspace/1 Task; Review/Comment/AI rows0. Snapshot/235 original source hashes
+are ignored .local_backups/HT-AI-P4-03A/ artifacts. No .env access or write.
+
+DONE: repo/domain/AI audit, read-only identity/inventory and source snapshot;
+new feedback_services.py/feedback_api.py, additive errors.NOT_FOUND and URL;
+43 focused test methods in test_feedback_api.py. Existing services.py changes
+only its orchestration docstring; logic is unchanged. No models, migrations,
+settings, provider or Generator service/contract change. Runtime/tests are frozen.
+
+Current apps.ai215/215 PASS15.272s, run9477db811e2c45d0873341d7762ac124, includes
+43 new Analyzer and172 existing AI regression tests. Launcher/actual Python exits0
+verified (Docker events); PG137 is deliberate owned cleanup. pip check, Django,
+model drift/graph/full isolated migration chain and owned DB removal all PASS.
+232/235 original source files remain byte-identical; only intended errors.py/
+urls.py additive changes and services.py docstring differ. All frontend files,
+models/migrations/settings/provider and Generator implementation are preserved.
+Full backend719/719 PASS217.696s, rund9a4b96be82a4c4c81de1a6332d4fdfd;
+launcher and actual Python container exits0 independently verified through Docker
+events. All Auth/Invitation/RBAC/Workspace/Task/Subtask/Review/Comment/Notification/
+Generator regressions are included. Owned test databases were removed; final
+inspection finds0 target/full owned containers and0 networks. No full test skipped.
+Frontend537/browser30 below are historical P4-02C, not run in this backend task.
+
+The existing Owner Windows venv py_compile attempt exited103 (its configured
+Python312 interpreter is missing). No venv/credential was recreated. The shared
+Docker Python3.12/PostgreSQL runner works and provides real current test results.
+Final read-only development comparison at2026-11-02T06:34:34.1216245Z matches all
+29 tables' row fingerprints, schema/FKs/indexes, sequences, migration history and
+cluster identity exactly. Still36 migrations/3 Users/2 Sessions/1 Profile/
+1 membership/1 Workspace/1 Task; Review/Comment/AI rows0. Preservation proof and
+before/after snapshots remain Git-ignored in .local_backups/HT-AI-P4-03A/.
+All6 tested file hashes are stable and232 unrelated original source files unchanged.
+
+No implementation blocker remains. This completes only the design and fixture
+backend foundation, not the complete Feedback Analyzer product. Checks are
+optimistic reads/re-reads, not locks/serializable snapshots or a guarantee to
+revoke responses already delivered. The shared locmem3/minute20/day limits are
+approximate, not distributed quotas. The fixed fixture cites the first selected
+source but does not understand feedback/media. No persistence/history/recovery/
+confirmation/apply-suggestions, live/private provider or Analyzer frontend.
+
+Files changed by P4-03A: new backend/apps/ai/feedback_services.py,
+feedback_api.py,test_feedback_api.py; additive errors.py/urls.py; services.py
+docstring only. AGENTS.md adds only the permanent predeployment gate. Docs:
+FEEDBACK_ANALYZER_FOUNDATION.md, API_DOCUMENTATION.md, AI_ARCHITECTURE_DESIGN.md,
+DECISION_LOG.md, PROJECT_CONTEXT.md, REQUIREMENT_STATUS.md, PROJECT_ROADMAP.md,
+CHANGELOG.md, DATABASE_SCHEMA.md, PROGRESS.md, HANDOVER.md and related README.
+All prior FE05/P4-02C changes remain intact; no commit/push/reset/clean/stash.
+
+Reproduce current checks from root: .\scripts\test-backend.ps1 -TestLabel apps.ai
+and .\scripts\test-backend.ps1. Exact native process receipts/stdout/stderr and
+actual Python exit events are in the ignored task directory. No fixture/source
+selection was POSTed to persistent development. git diff --check and doc links
+pass. No frontend/browser tests run in P4-03A because no frontend source changed.
+
+Next: STOP AT HT-AI-P4-03A OWNER REVIEW GATE. Proposed separate P4-03B could
+integrate the existing fixture endpoint with React, after explicit authorization.
+Live/private-data, persistence/retention and any apply-suggestion mutation need
+their own approved scope; do not auto-start P4-03B/C or any deployment.
+
+Permanent deployment gate is added to AGENTS.md from the explicit Owner request:
+before any public/production rollout, ask the specified readiness question and
+wait for explicit approval. No deployment is authorized or being attempted.
+
+---
+
+## Historical checkpoint — 2026-11-02 — HT-AI-P4-02C IMPLEMENTATION COMPLETE / OWNER REVIEW GATE
+
+Owner now approves the fixture-only React Smart Task Generator preview/edit/
+confirm integration. Preserve all33 pre-existing dirty FE05 files on
+main/32ccad220bee20540ba7a0e0f6f532250139d48c. FE05/R3 remain completed historical
+checkpoints below; manual Owner development acceptance is still unverified.
+No live provider, persistent fixture flag change, migration or development test
+mutation is authorized. Backend172/172 targeted and676/676 full PostgreSQL tests
+have run and PASS; launcher/Python exits0 are independently verified. The
+first AI browser attempt is NOT PASS (2 passed/2 failed): exact priority label
+selection failed and axe was interrupted during a source reload. Tiny UI
+label/target-revision guards are fixed and frozen; stable-source rerun4/4 PASS.
+The ignored operational wrapper initially masked the Playwright failure as0;
+the actual runner printed FRONTEND_PLAYWRIGHT_EXIT_CODE=1. Failed evidence is
+retained under .local_backups/HT-AI-P4-02C/failed-attempt-1-*. The helper now uses
+PowerShell -File for reliable launcher propagation; no production harness rewrite.
+
+### Source-backed integration map — before UI coding
+
+Base: /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/ai/task-proposals/.
+Every operation requires current active same-tenant manager authority; read/
+confirm/replay also require the original proposal actor. SessionAuth/CSRF remains.
+
+| Contract | Actual source behavior |
+|---|---|
+| Generate POST base |scenario_id: subtitle-check-v1 or task-tree-v1, plus Owner-approved optional synthetic brief≤6000; Idempotency-Key UUID header;201 first/200 replay. Saves proposal/operation, never raw brief or Tasks/AuditLog|
+| Read GET {proposal_id}/ |Current scoped original actor only; returns proposal/recovery, no list endpoint|
+| Confirm POST {proposal_id}/confirm/ |Literal confirmed:true, proposal_revision and full edited payload; separate scoped UUID key;201 first/200 same-key/body replay|
+| Editing |CASE B: confirm validates the edited plan, then creates topologically using existing Task service in one atomic transaction. No separate draft-save endpoint; local edits are not server-saved before confirm|
+| Payload |ai.task-plan.v1;1–20 flat nodes with local_ref/parent_ref, max3 child edges; title255/description2000/notes500; LOW/MEDIUM/HIGH/URGENT; nullable timezone-aware deadline; assumptions/warnings≤10×300|
+| Lifecycle |AVAILABLE→CONFIRMED or derived EXPIRED.30-minute preview; confirmation clears payload; created_tasks maps local refs to Task UUIDs;30-day recovery; logical expiry is not physical purge|
+| Safety/provenance |mode fixture_demo, generated_by_ai:false, persisted:true; zero usage/cost; no live adapter; feature default false and always refused in production|
+| Recovery |Known proposal GET after ambiguous confirm; same generate key/body explicit retry can recover lost generation response. Never ordinary Task POST or a fresh blind confirmation key|
+| Errors |Shared frontend client now retains only allowlisted sanitized AI codes; typed expiry410/conflict409/throttle429/disabled503/permission403/tenant-safe404 handling, no raw provider error|
+
+TEXT BRIEF DECISION RESOLVED: Owner explicitly selected the bounded optional
+synthetic brief extension during P4-02C. Implement max6000 valid Unicode/nonblank,
+no raw storage/logging/response echo, body-bound HMAC idempotency, fixed-output
+fixture disclosure. Preserve old scenario-only request canonicalization/replay.
+No real customer data, live provider, billing or fixture flag enablement on
+persistent development is approved. This supersedes only the prior HTTP brief
+rejection within the synthetic demo scope; no Task/schema/lifecycle redesign.
+
+Fresh READ ONLY development inventory differs from FE05 history and is preserved:
+PostgreSQL16.14, original container49ef93152944/docker_postgres_data/loopback,
+36 migrations,3 Users/2 Sessions,1 Profile/1 ProfileMembership/1 Workspace/1 Task,
+AI rows0. Do not infer how these records were created or delete them to match
+older0-row snapshots. Manual Owner website acceptance remains unverified.
+Ignored evidence .local_backups/HT-AI-P4-02C/development-before.json and45
+protected model/migration/settings/provider/validator/business-service hashes.
+
+Implemented additive availability: retain existing permission-checked
+OPTIONS base response and add ai metadata(enabled/mode/scenarios/limits), no
+new endpoint/permission/schema. OPTIONS does not consume POST generation quota.
+Transport uses UUID-only Idempotency-Key and allowlisted AI error codes
+through the existing API client; no parallel client/auth store.
+
+IMPLEMENTED: permission-checked OPTIONS metadata, brief/body-bound digest,
+strict shared transport, scoped entry/page, local supported edits, native explicit
+confirmation and GET recovery. No model/migration/provider/business-service edit.
+Final component27/27, combined Tasks/Generator51/51 and frontend537/537 across18
+files PASS24.35s; typecheck/Biome/build exit0(build8.97s). The first full frontend
+attempt527/537 failed because old direct TasksPage tests lacked the new child's
+auth context. A boundary mock in that test harness preserves all original
+Task/cache/RBAC assertions and the real AuthProvider403 test. Failure logs retained.
+
+| New current-source verification | Result / run |
+|---|---|
+| Targeted AI backend |172/172 PASS12.169s; c3841cf24120422ca99d584d6d687a9a|
+| Full PostgreSQL |676/676 PASS213.712s;75c0d99a663e4d6faed6ed0596df9728|
+| AI enabled browser |4/4 PASS49.5s;71178bfad5c24cefac78ec063cd54897|
+| AI disabled browser |1/1 PASS8.4s;4edb6ba5399a4416b55b02043a150156|
+| Onboarding browser |3/3 PASS43.4s;721e264a15414462a6ce797980bca286|
+| Auth/CSRF/tenant browser |6/6 PASS43.6s;0f7a6fa8b7214139acb12691ec6bf24f|
+| Workspace/Task browser |7/7 PASS1.2m;ebbf5ff548ca47b6bf6da51a623473e4|
+| Collaboration browser |7/7 PASS1.3m;1113feb3287b401fa05e5b8e6da467cd|
+| Whole MVP browser |1/1 PASS34.2s;26221457d5694003b2ec6acb3f5392a0|
+| Account lifecycle browser |1/1 PASS23.2s;fde86d5ab20946bca133b5b418e5b6a0|
+
+AI browser tests perform Generate/Edit/Confirm through real React and Django,
+assert0 Tasks before confirm,2 PENDING parent/child Tasks only after confirm,
+edit persistence, same-key replay/no duplicates, lost-response GET recovery,
+actor/tenant/Viewer/CSRF denial and ordinary Task creation. PostgreSQL fixtures
+and feature enablement exist only in owned isolated server mode serve-ai.
+Four-size375/768/1440/812×375 preview/dialog axe0, keyboard/Escape/focus/overflow
+and reduced motion PASS. Eight PNGs retained; root viewed preview1440/confirm375.
+This is automated isolated verification, not manual development acceptance.
+
+Read-only development comparison at2026-11-02T05:25:34.4313966Z exactly matches
+29 tables' row fingerprints, schema/constraints/indexes, sequences, migration
+history and PostgreSQL identity. Still36 migrations/3 Users/2 Sessions/1 Profile/
+1 membership/1 Workspace/1 Task/AI0. Protected45 source SHA256s unchanged;
+tested33 source hashes unchanged before the additional tested harness mock.
+Receipt: .local_backups/HT-AI-P4-02C/preservation-proof.json. No .env access,
+persistent migration/fixture/flag write or provider call.
+Post-all-tests read-only recheck at2026-11-02T05:31:20Z also matches exactly;
+final receipts are development-final-after.json and preservation-final-proof.json
+in that same ignored task directory. All34 final tested-source hashes are stable.
+
+All eight real isolated browser suites30/30 PASS. Every launcher, Playwright and
+backend exit0 is recorded; owned test database removal is confirmed per run.
+Final read-only Docker check05:28:55Z finds0 owned frontend/backend containers
+and0 networks. No development volume is mounted by tests. Final tested-source
+manifest has34 files (the additional TasksPage harness change is test-only).
+Normal repository-configured git diff --check and new-file whitespace checks pass.
+
+Next: OWNER REVIEW ONLY. No runtime work or implementation blocker remains;
+documentation is synchronized. Do not auto-start Analyzer, live provider or
+another task. Retain build advisory(>500kB bundle)
+and local-draft limitation: in-app links/beforeunload prompt; SPA Back/Forward may
+discard edits, and refresh recovers original proposal rather than local edits.
+
+### P4-02C files, commands and acceptance boundary
+
+Task-owned backend changes: apps/ai/api.py, durable_services.py, test_api.py and
+new test_frontend_contract.py. React additions: services/api/ai.ts + ai.test.ts,
+features/ai/GeneratorEntry.tsx, pages/task-generator.tsx + test; integration in
+app/App.tsx, pages/tasks.tsx, pages/tasks.test.tsx, services/api/client.ts and
+styles.css. New browser specs ai-helpers.ts, ai-generator.spec.ts, ai-disabled.spec.ts;
+scripts/frontend_integration.py and test-frontend-integration.ps1 extend only
+the isolated fixture mode/suite selection. No dependency/models/migrations/settings
+or protected Task/Review/Comment/Notification business-service change.
+
+Docs affected: HANDOVER, PROGRESS, ROADMAP, REQUIREMENT_STATUS, CHANGELOG, API,
+FRONTEND_GUIDE, PROJECT_CONTEXT, DATABASE_SCHEMA, DECISION_LOG, AI_ARCHITECTURE_DESIGN,
+AI_PERSISTENCE_REVIEW, design-system MASTER and README. Earlier dirty FE05 source
+and documentation are retained, not claimed as newly implemented AI work.
+
+Reproduce from repository root using the existing shared launchers:
+
+```powershell
+.\scripts\test-backend.ps1 -TestLabel apps.ai
+.\scripts\test-backend.ps1
+.\scripts\test-frontend-integration.ps1 -Suite ai-generator
+.\scripts\test-frontend-integration.ps1 -Suite ai-disabled
+cd frontend
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+Other browser suites: onboarding, foundation, work-management, collaboration,
+acceptance and account-security. Each runner uses a fresh owned database and
+records Playwright/backend exit and safe cleanup. Ignored logs/process receipts
+are under .local_backups/HT-AI-P4-02C/; screenshots remain Git-ignored.
+
+Owner manual website check: start the existing backend and Vite using FRONTEND_GUIDE,
+log in and select an authorized Profile→Workspace→Tasks. Manual Create Task remains
+available. With fixture disabled, AI entry/direct page must explain unavailability;
+this is expected. Do not turn on the persistent flag or create an AI proposal on
+Owner's behalf. Full enabled preview/edit/confirm was verified only in isolated
+automated mode serve-ai (AI_FIXTURE_ENABLED=True after ownership/test-settings
+checks), using synthetic input. A manual development enabled-demo configuration
+requires separate Owner authorization. No live provider/manual Owner development
+acceptance, SMTP, remote CI or production verification is claimed.
+
+---
+
+## Historical checkpoint — 2026-11-02 — HT-FE-P3-05 IMPLEMENTATION COMPLETE
+
+**IMPLEMENTATION COMPLETE — HT-FE-P3-05 OWNER REVIEW GATE.** All scoped
+implementation, isolated backend/frontend/browser checks and development
+preservation checks pass. No manual development login/create was performed.
+
+Owner approved **Create Profile & First-Time User Onboarding**. This task ID is
+for onboarding, not AI UI. Keep **HT-AI-P4-02C** reserved for Generator preview/
+edit/confirm. The older R3 recommendation below was a proposal and is superseded
+by this explicit scope; no AI, Invitation UI or membership-candidate work.
+
+Starting evidence: main/32ccad220bee20540ba7a0e0f6f532250139d48c, clean Owner
+commit before this task. Existing R1/R2/R3 evidence retained. Read-only development
+inventory confirms original container49ef93152944, docker_postgres_data,
+hustlytasker_db/127.0.0.1:5432, PostgreSQL16.14,36 migrations,ai.0001 applied,
+3 Users/2 Sessions and0 Profile/Workspace/Task/AI rows. No development mutations.
+Safe metadata baseline in ignored .local_backups/HT-FE-P3-05/development-before.json;
+52 model/migration/AI source hashes saved separately for preservation comparison.
+
+Discovery DONE: existing create_profile_with_owner is atomic, creates an ACTIVE
+Profile, active OWNER membership for the supplied User and safe membership audit.
+Profile only needs name(max255), with no global name uniqueness. Existing API
+was GET-only /api/v1/profiles/. React has no creation form or global active-Profile
+store: current tenant is the /profiles/:profileId URL and scoped query keys.
+Workspace create already uses the selected route's Profile plus current backend
+permission hints. No schema/migration/service rewrite is needed.
+
+IMPLEMENTED: strict authenticated name-only POST on existing Profile collection,
+reusing that service and read DTO; protected /profiles/new page, useful Dashboard/
+Profiles empty CTA, existing URL selection and Workspace creation integration.
+The form is keyed by current User identity, aborting old requests/drafts even
+when quiet authentication revalidation changes User without leaving the route.
+
+Current-source verification (not historical643/395/22): targeted backend
+40/40 PASS1.577s; full isolated PostgreSQL662/662 PASS245.938s, native launcher
+and actual Python container exit0 independently verified through Docker events.
+The disposable PG137 exit is intentional owned cleanup, not a test failure.
+Dependency/Django/model-drift/full migration chain and owned DB cleanup PASS.
+Frontend full426/426 PASS28.98s/16 files; focused54/54 PASS13.22s. TypeScript,
+Biome and build gate exit0. No dependencies/settings/models/migrations changed.
+
+Real isolated onboarding browser3/3 PASS48.1s, launcher/Playwright/backend exits0
+and owned DB/container/network cleanup PASS. Actual UI first/second Profile,
+Workspace creation, selected URL refresh, cross-user privacy, missing CSRF,
+injection and session expiry verified. Keyboard/reduced-motion/no-overflow/axe
+checked empty/form errors at375/768/1440/812×375;8 PNGs Git-ignored under
+.local_backups/HT-FE-P3-05/screenshots/5c76bc72ce04486ba4b953b3d4b17a8e/.
+Root inspected desktop empty/mobile form PNGs; not a manual development login.
+All six real isolated Chromium suites now pass **25/25**:
+
+| Suite | Result | Run ID |
+|---|---|---|
+| Onboarding |3/3 PASS48.1s|5c76bc72ce04486ba4b953b3d4b17a8e|
+| Auth/CSRF/tenant foundation |6/6 PASS42.8s|4d5dfb6c08864af18eb48134fb74637d|
+| Workspace/Task/Start |7/7 PASS1.2m|422da94c66514827a28409e12b5762d3|
+| Collaboration/Notifications |7/7 PASS1.3m|33f650b84e9e41f98908d0d03b8759e7|
+| Whole Task→Deliverable→changes→resubmit→approve |1/1 PASS35.1s|e15a0cdab307467a826f55255cd2590a|
+| Registration/verification/recovery/session |1/1 PASS23.3s|ffc5a52b1a824dbfb24b4f8ec88a8493|
+
+Each suite records launcher/Playwright/backend exits0, owned DB removal and
+container/network cleanup. Backend targeted run2e0ba346095840bd92cef8908f766c44;
+full run00041f815e944843a08747702f32b8e8. Full includes current Auth/Invitation/
+RBAC/Task/Review/AI regressions, concurrent Profile creates and migration tests.
+No full test was skipped or represented using a historical baseline. An initial
+targeted launcher invocation rejected comma-joined labels before setup; corrected
+array invocation passed40 tests. Initial focused mock selector failure was fixed
+by selecting the correct success region, without weakening security assertions.
+
+UI UX Pro Max full skill/master read; local focused empty-state onboarding UX
+and React async form error searches executed. Apply helpful CTA, visible label,
+linked/focused errors, pending duplicate guard and existing teal/neutral tokens.
+Do not create another Profile context, auth client, design system or dependency.
+
+### API and behavior contracts
+
+POST /api/v1/profiles/ accepts exactly a text name, trimmed/nonblank/max255,
+rejects invalid Unicode/NUL and client identity/role/status/tenant fields. Owner
+is request.user. Existing service atomically creates Profile+active OWNER
+membership+safe audit; failure leaves no orphan. Response201 uses the existing
+five fields id/name/status/created_at/updated_at, with no User/membership PII.
+Current active identity, SessionAuthentication/CSRF and GET pagination remain.
+Names are not unique; distinct valid/retried POSTs may create distinct Profiles.
+No new idempotency/constraint/quota is introduced. After an ambiguous network
+result, check the Profile list before deliberately creating again.
+
+React /profiles/new is protected; Dashboard/Profiles show the actionable zero
+state and existing Users have create-another in the list header. A successful
+response seeds only the new detail, invalidates Profile list pages and selects
+/profiles/{id}/workspaces. Existing server OPTIONS/current tenant context gates
+Workspace creation. No Workspace is created automatically, no localStorage or
+second active-Profile context. Server still enforces all permissions at mutation.
+
+### Development and source preservation
+
+Final read-only comparison at2026-11-02T04:37:31Z matches the pre-task snapshot
+exactly: every row fingerprint, schema object, sequence and migration record.
+Still36 migrations/ai.0001 applied,3 Users/2 Sessions,0 business/AI rows. Original
+container/volume continues running. No persistent test/demo Profile, Workspace,
+Task, AI state, User or Session write; no .env inspection/loading or credential
+change; no migration or production action. All52 model/migration/AI files and
+19 changed runtime/test file hashes remain stable. No test container/network
+remains; no unrelated resource or process was stopped or removed.
+
+Evidence is Git-ignored under .local_backups/HT-FE-P3-05/: before/after inventory,
+preservation-report.json, schema-ai-before.json, final-runtime-tested.json,
+native process receipts/logs and backend Python die-event receipts. Logs contain
+synthetic test context only; no secret/environment/legacy row values. Existing
+R1/R2/R3 archives/reports remain untouched. No new backup or migration required.
+
+### Changed files and review steps
+
+Backend: workspace/serializers.py,views.py,test_api.py,new
+test_profile_creation_api.py. Existing service/models/permissions/URLs unchanged.
+Frontend source: app/App.tsx,App.test.tsx; pages/overview.tsx,tenants.tsx,
+profile-create.tsx,profile-create.test.tsx; features/profiles/ProfileOnboarding.tsx;
+services/api/queries.ts,types.ts,profile-create.test.ts; styles.css.
+Browser/test-only integration: e2e/onboarding.spec.ts,account-security.spec.ts;
+scripts/frontend_integration.py,test-frontend-integration.ps1 (new Suite onboarding).
+Docs: README plus HANDOVER,PROGRESS,PROJECT_ROADMAP,REQUIREMENT_STATUS,CHANGELOG,
+API_DOCUMENTATION,DATABASE_SCHEMA,PROJECT_CONTEXT,DECISION_LOG,RBAC_DESIGN,
+FRONTEND_GUIDE,FRONTEND_MVP_ACCEPTANCE and design-system/hustlytasker/MASTER.md.
+No dependency/settings/authentication/AI edit, commit/push/reset/stash/revert.
+
+No implementation blocker remains. Manual Owner development browser acceptance
+is pending; production, real email delivery and remote CI remain unverified.
+Invitation UI/general membership onboarding/candidate API and Project remain
+separately gated; physical AI purge/shared quotas retain their prior limitations.
+See FRONTEND_GUIDE for two-terminal startup and exact manual React steps:
+login→Tổ chức→Tạo tổ chức→name→submit→Tạo không gian→name/month→submit→refresh/
+open Workspace→Xem công việc. All successful automated mutations ran in isolation.
+Owner should restart an already-running backend in their own terminal before
+manual acceptance because start-backend-dev.ps1 uses --noreload; then run the
+existing backend/frontend two-terminal commands. The agent stopped no Owner app.
+
+**Exact continuation: STOP AT HT-FE-P3-05 OWNER REVIEW GATE.** Owner reviews and
+tests the real React flow; do not create their development organization for them,
+repeat completed tests/code, reapply AI migration or begin HT-AI-P4-02C/another
+task automatically. Final quality PASS:33 changed files (19 runtime/tests,
+14 documentation),49 local Markdown/source links valid/0 missing, new-file
+whitespace0, runner PowerShell parse0 and git diff --check exit0. HEAD and all
+52 protected/19 tested hashes preserved. quality-report.json/final-report.json
+retain this evidence; no further code or required verification remains.
+
+---
+
+## Historical checkpoint — 2026-11-02 — HT-AI-P4-02B-R3 DEVELOPMENT MIGRATION SUCCESS
 
 **DEVELOPMENT MIGRATION SUCCESS — OWNER REVIEW GATE.** Owner's R3 request
 conditionally authorized exactly `ai.0001_initial` on development. All gates

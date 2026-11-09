@@ -34,6 +34,7 @@ _SCENARIOS = {
 }
 _HMAC_PURPOSE = "hustlytasker.ai.fixture-request.v1"
 _LIMITS = ValidationLimits()
+_BRIEF_UNSET = object()
 
 
 def _enabled():
@@ -43,6 +44,30 @@ def _enabled():
         or getattr(settings, "IS_PRODUCTION", True)
     ):
         raise AIError(ErrorCode.AI_DISABLED)
+
+
+def fixture_metadata():
+    """Public synthetic configuration only; no provider, persistence or secrets."""
+    try:
+        _enabled()
+        enabled = True
+    except AIError as error:
+        if error.code is not ErrorCode.AI_DISABLED:
+            raise
+        enabled = False
+    labels = {
+        "subtitle-check-v1": "Kiểm tra phụ đề — mẫu giả lập",
+        "task-tree-v1": "Task và Subtask — mẫu giả lập",
+    }
+    return {
+        "contract_version": "ai.v1", "enabled": enabled,
+        "mode": "fixture_demo", "generated_by_ai": False,
+        "scenarios": [{"id": key, "label": labels[key], "brief": value[1]}
+                      for key, value in _SCENARIOS.items()],
+        "limits": {"max_brief_chars": _LIMITS.max_brief_chars,
+                   "max_tasks": _LIMITS.max_tasks, "max_depth": _LIMITS.max_depth,
+                   "max_request_bytes": _LIMITS.max_request_bytes},
+    }
 
 
 def _manager(*, actor, profile_id, workspace_id):
@@ -180,12 +205,21 @@ def _edited_plan(payload):
     return plan, _plan_json(plan)
 
 
-def generate_proposal(*, actor, profile_id, workspace_id, scenario_id, idempotency_key):
+@sensitive_variables("canonical", "canonical_input", "brief", "validated", "validated_input")
+def generate_proposal(*, actor, profile_id, workspace_id, scenario_id, idempotency_key,
+                      brief=_BRIEF_UNSET):
     _enabled()
     if type(scenario_id) is not str or scenario_id not in _SCENARIOS:
         raise AIError(ErrorCode.VALIDATION_ERROR, fields=("scenario_id",))
     key = _key_digest(idempotency_key)
-    canonical = _canonical({"scenario_id": scenario_id, "contract_version": TASK_PLAN_VERSION})
+    canonical_input = {"scenario_id": scenario_id, "contract_version": TASK_PLAN_VERSION}
+    validated = None
+    if brief is not _BRIEF_UNSET:
+        validated = validate_generator_input({"brief": brief}, _LIMITS)
+        canonical_input["brief"] = validated.brief
+    # Preserve the exact old scenario-only fingerprint when the field is absent.
+    # Provided synthetic text is body-bound, never stored as raw proposal content.
+    canonical = _canonical(canonical_input)
     # First short authorization/replay transaction; never call the adapter here.
     with transaction.atomic():
         workspace = _manager(actor=actor, profile_id=profile_id, workspace_id=workspace_id)
@@ -206,10 +240,12 @@ def generate_proposal(*, actor, profile_id, workspace_id, scenario_id, idempoten
         # transaction/lock boundaries; real non-atomic behavior is tested using
         # TransactionTestCase and PostgreSQL below the HTTP boundary.
         raise AIError(ErrorCode.VALIDATION_ERROR)
-    scenario, brief = _SCENARIOS[scenario_id]
-    validated = validate_generator_input({"brief": brief}, _LIMITS)
+    scenario, scenario_brief = _SCENARIOS[scenario_id]
+    validated_input = validated if validated is not None else validate_generator_input(
+        {"brief": scenario_brief}, _LIMITS,
+    )
     result = FixtureAdapter(environment="development", scenario=scenario).generate(
-        ProviderRequest(Feature.TASK_PLAN, validated, _LIMITS), RequestControl(),
+        ProviderRequest(Feature.TASK_PLAN, validated_input, _LIMITS), RequestControl(),
     )
     plan = parse_task_plan(result.raw_json, _LIMITS)
     payload = _plan_json(plan)

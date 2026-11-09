@@ -105,3 +105,14 @@ instructions.
   Owner's current instructions, approved scope, and this agreement's security
   and architecture rules. Skill use does not authorize backend/database changes,
   expanded functionality, or replacement of Django SessionAuthentication/CSRF.
+
+## Mandatory Owner gate before public or production rollout
+
+- Before any production deployment, hosting setup that publishes the website,
+  production database migration, public release, or externally accessible
+  rollout, stop and ask the Owner exactly:
+  "Website HustlyTasker đã hoàn thiện đúng ý bạn chưa? Bạn có muốn chỉnh sửa giao diện, chức năng hoặc quy trình nào trước khi deploy không?"
+- Do not deploy or publish until the Owner explicitly confirms readiness and
+  authorizes that deployment. Automated tests passing do not replace this gate.
+- Local development and isolated testing authorization does not authorize a
+  public rollout. Preserve any additional task-specific review gates.

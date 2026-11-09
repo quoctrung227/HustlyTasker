@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Link, Navigate } from 'react-router'
+import { Link, Navigate, useLocation } from 'react-router'
 import { Brand } from '../components/brand'
 import { PageHeader } from '../components/page'
 import { Alert, Button, Card, FormField, Input } from '../components/ui'
@@ -48,18 +48,20 @@ function Feedback({ action, prefix, fields }: { action: ReturnType<typeof useAcc
   return <>{action.failure && <div className="form-summary" tabIndex={-1} ref={summary}><Alert kind="error" title="Chưa thể hoàn tất"><p>{action.failure.message}</p><ul>{fields.filter((field) => action.failure?.fields[field]).map((field) => <li key={field}><a href={`#${prefix}${field}`} onClick={(event) => { event.preventDefault(); document.getElementById(`${prefix}${field}`)?.focus() }}>{action.failure?.fields[field]}</a></li>)}</ul></Alert></div>}{action.success && <Alert kind="success">{action.success}</Alert>}</>
 }
 
-function PublicAccountPage({ title, description, children }: { title: string; description: string; children: ReactNode }) {
-  return <main className="status-page" id="main-content"><Brand /><Card><PageHeader title={title} description={description} /><div className="work-form">{children}<Link className="text-link" to="/login">Về đăng nhập</Link></div></Card></main>
+function PublicAccountPage({ title, description, children, invitationReturn = false }: { title: string; description: string; children: ReactNode; invitationReturn?: boolean }) {
+  return <main className="status-page" id="main-content"><Brand /><Card><PageHeader title={title} description={description} /><div className="work-form">{children}<Link className="text-link" to="/login" state={invitationReturn ? { from: '/invitations/respond' } : undefined}>Về đăng nhập</Link></div></Card></main>
 }
 
 export function RegisterPage() {
   const auth = useAuth()
+  const location = useLocation()
+  const invitationReturn = Boolean(location.state && typeof location.state === 'object' && 'from' in location.state && location.state.from === '/invitations/respond')
   const action = useAccountAction()
   const [input, setInput] = useState<RegisterInput>({ email: '', username: '', first_name: '', last_name: '', password: '', password_confirm: '' })
   const [created, setCreated] = useState(false)
   const fields = ['email', 'username', 'first_name', 'last_name', 'password', 'password_confirm'] as const
   if (auth.status === 'checking' || auth.status === 'unavailable') return <SessionState />
-  if (auth.status === 'authenticated') return <Navigate to="/account" replace />
+  if (auth.status === 'authenticated') return <Navigate to={invitationReturn ? '/invitations/respond' : '/account'} replace />
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const errors: Fields = {}
@@ -71,7 +73,7 @@ export function RegisterPage() {
     if (input.password !== input.password_confirm) errors.password_confirm = 'Vui lòng nhập lại mật khẩu giống nhau.'
     void action.run(errors, (signal) => authApi.register({ ...input, email: input.email.trim(), username: input.username.trim() }, signal), () => { setCreated(true); setInput({ email: '', username: '', first_name: '', last_name: '', password: '', password_confirm: '' }) }, 'Tài khoản đã được tạo. Hãy đăng nhập để xác minh email và truy cập các tổ chức đã mời bạn.')
   }
-  return <PublicAccountPage title="Đăng ký tài khoản" description="Tạo tài khoản cá nhân. Quyền tham gia tổ chức được cấp qua lời mời."><Feedback action={action} prefix="register-" fields={[...fields]} />{!created && <form className="work-form" noValidate onSubmit={submit} aria-label="Đăng ký tài khoản" aria-busy={action.busy || undefined}>
+  return <PublicAccountPage invitationReturn={invitationReturn} title="Đăng ký tài khoản" description="Tạo tài khoản cá nhân. Quyền tham gia tổ chức được cấp qua lời mời."><Feedback action={action} prefix="register-" fields={[...fields]} />{!created && <form className="work-form" noValidate onSubmit={submit} aria-label="Đăng ký tài khoản" aria-busy={action.busy || undefined}>
     {fields.map((field) => <FormField key={field} id={`register-${field}`} label={({ email: 'Email', username: 'Tên đăng nhập', first_name: 'Tên (không bắt buộc)', last_name: 'Họ (không bắt buộc)', password: 'Mật khẩu', password_confirm: 'Xác nhận mật khẩu' })[field]} error={action.failure?.fields[field]} hint={field === 'password' ? 'Từ 8 đến 128 ký tự. Tránh mật khẩu phổ biến, toàn số hoặc giống thông tin cá nhân.' : undefined}><Input type={field === 'email' ? 'email' : field.startsWith('password') ? 'password' : 'text'} name={field} value={input[field]} autoComplete={field === 'email' ? 'email' : field.startsWith('password') ? 'new-password' : field === 'username' ? 'username' : field === 'first_name' ? 'given-name' : 'family-name'} maxLength={field === 'email' ? 254 : field.startsWith('password') ? 128 : 150} required={!['first_name', 'last_name'].includes(field)} disabled={action.busy} onChange={(event) => setInput({ ...input, [field]: event.target.value })} /></FormField>)}
     <Button type="submit" busy={action.busy}>Tạo tài khoản</Button>
   </form>}</PublicAccountPage>

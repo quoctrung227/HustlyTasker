@@ -10,11 +10,19 @@ export type ApiErrorKind =
   | 'network'
   | 'invalid-response'
 
+const aiErrorCodes = ['AI_DISABLED', 'PERMISSION_DENIED', 'NOT_FOUND', 'VALIDATION_ERROR',
+  'IDEMPOTENCY_CONFLICT', 'ALREADY_CONFIRMED', 'STALE_PROPOSAL', 'STALE_CONTEXT',
+  'EXPIRED', 'RECOVERY_EXPIRED', 'RATE_LIMITED', 'BUDGET_EXCEEDED', 'PROVIDER_UNAVAILABLE',
+  'PROVIDER_TIMEOUT', 'INVALID_PROVIDER_RESPONSE', 'CANCELLED'] as const
+export type AiErrorCode = typeof aiErrorCodes[number]
+
 export class ApiError extends Error {
   readonly status: number
   readonly kind: ApiErrorKind
   readonly fieldErrors: Readonly<Record<string, string>>
   readonly retryAfterSeconds: number | null
+  /** Allowlisted machine code only; provider/server detail is never retained. */
+  readonly code: AiErrorCode | null
 
   constructor(
     status: number,
@@ -22,6 +30,7 @@ export class ApiError extends Error {
     message: string,
     fieldErrors: Readonly<Record<string, string>> = {},
     retryAfterSeconds: number | null = null,
+    code: AiErrorCode | null = null,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -29,6 +38,7 @@ export class ApiError extends Error {
     this.kind = kind
     this.fieldErrors = fieldErrors
     this.retryAfterSeconds = retryAfterSeconds
+    this.code = code
   }
 }
 
@@ -50,6 +60,8 @@ export interface ApiRequestOptions {
   signal?: AbortSignal
   /** Only tenant-data requests use this; auth/me never calls back recursively. */
   protected?: boolean
+  /** UUID key for the existing scoped AI POST contract; not arbitrary headers. */
+  idempotencyKey?: string
 }
 
 type ForbiddenHandler = (() => void | Promise<void>) | null
@@ -84,6 +96,8 @@ function safeFieldErrors(payload: unknown): Record<string, string> {
   if ('email' in payload) fields.email = 'Vui lòng nhập địa chỉ email hợp lệ.'
   if ('password' in payload) fields.password = 'Vui lòng kiểm tra mật khẩu.'
   const managementFields: Record<string, string> = {
+    recipient_email: 'Vui lòng nhập địa chỉ email người nhận hợp lệ.',
+    requested_role: 'Vai trò này không nằm trong quyền mời của bạn. Hãy tải lại quyền hiện tại.',
     username: 'Tên đăng nhập chưa hợp lệ hoặc không khả dụng. Vui lòng kiểm tra lại.',
     first_name: 'Tên không được vượt quá 150 ký tự.',
     last_name: 'Họ không được vượt quá 150 ký tự.',
@@ -102,6 +116,14 @@ function safeFieldErrors(payload: unknown): Record<string, string> {
     priority: 'Vui lòng chọn mức ưu tiên được hỗ trợ.',
     parent_id: 'Quan hệ cha/con phải cùng không gian, không có vòng lặp và tối đa 3 cấp con.',
     target_profile_membership_id: 'Thành viên này chưa đủ điều kiện nhận việc. Hãy tải lại danh sách và chọn Editor hợp lệ.',
+    brief: 'Nhập yêu cầu giả lập hợp lệ từ 1 đến 6.000 ký tự.',
+    sources: 'Chọn từ 1 đến 20 nguồn phản hồi hợp lệ thuộc công việc hiện tại.',
+    focus: 'Nhập trọng tâm tối đa 1.000 ký tự Unicode hợp lệ, không chứa ký tự NUL.',
+    scenario_id: 'Vui lòng chọn mẫu mô phỏng được hỗ trợ.',
+    payload: 'Đề xuất chưa hợp lệ. Vui lòng kiểm tra nội dung, cấu trúc và thời hạn.',
+    proposal_revision: 'Phiên bản đề xuất đã thay đổi. Vui lòng tải lại.',
+    confirmed: 'Cần xác nhận rõ ràng trước khi tạo công việc.',
+    idempotency_key: 'Không thể xác minh lần gửi này. Vui lòng kiểm tra trạng thái đề xuất.',
   }
   for (const [field, message] of Object.entries(managementFields)) {
     if (field in payload) fields[field] = message
@@ -112,6 +134,8 @@ function safeFieldErrors(payload: unknown): Record<string, string> {
 }
 
 function errorFor(response: Response, payload: unknown, unsafe: boolean): ApiError {
+  const code = record(payload) && aiErrorCodes.some((item) => item === payload.code) ? payload.code as AiErrorCode : null
+  const fields = record(payload) && record(payload.fields) ? safeFieldErrors(payload.fields) : safeFieldErrors(payload)
   const detail = record(payload) && typeof payload.detail === 'string' ? payload.detail : ''
   const csrf = response.status === 403 && unsafe && (
     !response.headers.get('content-type')?.includes('application/json') ||
@@ -122,23 +146,25 @@ function errorFor(response: Response, payload: unknown, unsafe: boolean): ApiErr
   }
   switch (response.status) {
     case 400:
-      return new ApiError(400, 'validation', 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.', safeFieldErrors(payload))
+      return new ApiError(400, 'validation', 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.', fields, null, code)
     case 401:
-      return new ApiError(401, 'authentication', 'Vui lòng đăng nhập lại để tiếp tục.')
+      return new ApiError(401, 'authentication', 'Vui lòng đăng nhập lại để tiếp tục.', {}, null, code)
     case 403:
-      return new ApiError(403, 'forbidden', 'Bạn không có quyền thực hiện thao tác này.')
+      return new ApiError(403, 'forbidden', 'Bạn không có quyền thực hiện thao tác này.', {}, null, code)
     case 404:
-      return new ApiError(404, 'not-found', 'Không tìm thấy nội dung hoặc bạn không có quyền truy cập.')
+      return new ApiError(404, 'not-found', 'Không tìm thấy nội dung hoặc bạn không có quyền truy cập.', {}, null, code)
     case 409:
-      return new ApiError(409, 'conflict', 'Dữ liệu đã thay đổi. Vui lòng tải lại trước khi tiếp tục.')
+      return new ApiError(409, 'conflict', 'Dữ liệu đã thay đổi. Vui lòng tải lại trước khi tiếp tục.', {}, null, code)
+    case 410:
+      return new ApiError(410, 'conflict', 'Đề xuất hoặc thời hạn khôi phục đã hết hạn. Vui lòng tạo đề xuất mới.', {}, null, code)
     case 429: {
       const value = response.headers.get('retry-after')
       const seconds = value && /^\d+$/.test(value) ? Number(value) : null
       return new ApiError(429, 'throttled', 'Bạn đã thao tác quá nhanh. Vui lòng thử lại sau.', {},
-        seconds !== null && Number.isSafeInteger(seconds) ? seconds : null)
+        seconds !== null && Number.isSafeInteger(seconds) ? seconds : null, code)
     }
     default:
-      return new ApiError(response.status, 'server', 'Không thể xử lý yêu cầu lúc này. Vui lòng thử lại sau.')
+      return new ApiError(response.status, 'server', 'Không thể xử lý yêu cầu lúc này. Vui lòng thử lại sau.', {}, null, code)
   }
 }
 
@@ -188,6 +214,15 @@ export class ApiClient {
     const unsafe = method !== 'GET' && method !== 'OPTIONS'
     throwIfAborted(options.signal)
     const headers: Record<string, string> = { Accept: 'application/json' }
+    if (options.idempotencyKey !== undefined) {
+      const entity = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+      const aiPost = new RegExp(`^/api/v1/profiles/${entity}/workspaces/${entity}/ai/task-proposals/(?:${entity}/confirm/)?$`, 'i')
+      if (method !== 'POST' || !aiPost.test(normalizedPath) ||
+          typeof options.idempotencyKey !== 'string' || !new RegExp(`^${entity}$`, 'i').test(options.idempotencyKey)) {
+        throw new TypeError('Idempotency keys require the scoped AI POST contract and a UUID.')
+      }
+      headers['Idempotency-Key'] = options.idempotencyKey.toLowerCase()
+    }
     if (unsafe) {
       headers['X-CSRFToken'] = await this.initializeCsrf()
       headers['Content-Type'] = 'application/json'

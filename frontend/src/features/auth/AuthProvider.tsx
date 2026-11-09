@@ -27,32 +27,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     cache.clear()
   }, [cache])
 
-  const verifyIdentity = useCallback(async (quiet = false) => {
+  const verifyIdentity = useCallback(async (quiet = false, refreshPrivate = false) => {
     if (quiet && current.current.status !== 'authenticated') return
     const ticket = ++generation.current
     pending.current?.abort()
     const controller = new AbortController()
     pending.current = controller
     const previousUser = current.current.user?.id
-    // No stale private screen remains visible while identity is uncertain.
-    // A permission403 probes identity without remounting the denied query.
-    // Otherwise a valid /me followed by a stale refetch can loop forever.
+    // Initial/recovery checks block rendering. Routine checks keep an already
+    // authenticated subtree mounted until an actual failure or identity change.
+    // Replacing it with a loading screen would discard every local form draft.
     if (!quiet) setState({ status: 'checking', user: null, error: null })
     try {
       const user = await authApi.me(controller.signal)
       if (ticket !== generation.current) return
-      if (previousUser !== user.id) await clearPrivate()
-      if (ticket === generation.current) setState({ status: 'authenticated', user, error: null })
+      if (previousUser !== user.id) {
+        setState({ status: 'checking', user: null, error: null })
+        await clearPrivate()
+      }
+      if (ticket === generation.current) {
+        setState({ status: 'authenticated', user, error: null })
+        // Refresh current tenant permissions/data without destroying local forms.
+        // A permission-403 probe must NOT refetch the query that triggered it.
+        if (refreshPrivate && previousUser === user.id) void cache.invalidateQueries({ refetchType: 'active' })
+      }
     } catch (error) {
       if (ticket !== generation.current || controller.signal.aborted) return
+      setState({ status: 'checking', user: null, error: null })
       await clearPrivate()
       if (ticket !== generation.current) return
       const anonymous = isApiError(error) && (error.status === 401 || error.status === 403)
       setState({ status: anonymous ? 'anonymous' : 'unavailable', user: null, error })
     }
-  }, [clearPrivate])
+  }, [cache, clearPrivate])
 
-  const revalidate = useCallback(() => verifyIdentity(), [verifyIdentity])
+  const revalidate = useCallback(() => {
+    const authenticated = current.current.status === 'authenticated'
+    return verifyIdentity(authenticated, authenticated)
+  }, [verifyIdentity])
   const verifyForbidden = useCallback(() => verifyIdentity(true), [verifyIdentity])
 
   const signIn = useCallback(async (input: LoginInput) => {
@@ -85,7 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void revalidate()
     const check = () => {
-      if (document.visibilityState !== 'hidden' && current.current.status !== 'unavailable') void revalidate()
+      // Never abort an in-progress login/logout with a periodic identity probe.
+      if (document.visibilityState !== 'hidden' && current.current.status === 'authenticated') void revalidate()
     }
     const visibility = () => { if (document.visibilityState === 'visible') check() }
     window.addEventListener('focus', check)

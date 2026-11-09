@@ -53,11 +53,13 @@ class FixtureOutcome:
 
 
 class FixtureApplicationService:
-    """Opt-in internal fixture runner; not reachable from Django routes/settings.
+    """Opt-in fixture runner with fail-closed access until explicitly integrated.
 
     No confirmation method, proposal ID, database store or live provider. Numeric
     limits here describe only an offline fixture contract, not approved budgets.
     Cancellation is cooperative; no promise to undo later live provider charges.
+    The Feedback Analyzer HTTP slice supplies a current tenant-scoped access port;
+    construction without that port still denies every operation.
     """
 
     def __init__(self, *, environment: str, enabled: bool = False,

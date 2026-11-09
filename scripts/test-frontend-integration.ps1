@@ -2,7 +2,7 @@
 param(
     [ValidateRange(1024,65535)]
     [int]$BackendPort = 8001,
-    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security')]
+    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members')]
     [string]$Suite = 'foundation'
 )
 
@@ -29,6 +29,13 @@ $htCreatedPg = $false
 $htCreatedServer = $false
 $htServerReady = $false
 $htSpec = switch ($Suite) {
+    'members' {'e2e/members.spec.ts'}
+    'task-stability' {'e2e/task-stability.spec.ts'}
+    'feedback-analyzer' {'e2e/feedback-analyzer.spec.ts'}
+    'feedback-disabled' {'e2e/feedback-disabled.spec.ts'}
+    'ai-generator' {'e2e/ai-generator.spec.ts'}
+    'ai-disabled' {'e2e/ai-disabled.spec.ts'}
+    'onboarding' {'e2e/onboarding.spec.ts'}
     'account-security' {'e2e/account-security.spec.ts'}
     'acceptance' {'e2e/mvp-acceptance.spec.ts'}
     'collaboration' {'e2e/collaboration.spec.ts'}
@@ -36,6 +43,13 @@ $htSpec = switch ($Suite) {
     default {'e2e/real-api.spec.ts'}
 }
 $htArtifactTask = switch ($Suite) {
+    'members' {'HT-FE-MEMBERS-01'}
+    'task-stability' {'HT-FE-STABILITY-01'}
+    'feedback-analyzer' {'HT-AI-P4-03C'}
+    'feedback-disabled' {'HT-AI-P4-03C'}
+    'ai-generator' {'HT-AI-P4-02C'}
+    'ai-disabled' {'HT-AI-P4-02C'}
+    'onboarding' {'HT-FE-P3-05'}
     'account-security' {'HT-FE-P3-04'}
     'acceptance' {'HT-FE-P3-04'}
     'collaboration' {'HT-FE-P3-03'}
@@ -226,6 +240,9 @@ try {
         Start-Sleep -Seconds 1
     }
     if (-not $htReady) {throw 'Isolated PostgreSQL readiness timeout.'}
+    # Fixture enablement exists only in the ownership-checked isolated server.
+    # No deployment flag or local environment file is consumed or changed.
+    $htServeMode = if ($Suite -in @('ai-generator','feedback-analyzer')) {'serve-ai'} else {'serve'}
     Invoke-CheckedDocker @('create','--name',$htServer,'--network',$htHttpNetwork,
         '--publish',"127.0.0.1:${BackendPort}:8000",'--workdir','/workspace/backend',
         '--mount',"type=bind,source=$htRepository,target=/workspace,readonly",
@@ -233,7 +250,7 @@ try {
         '--env','HT_FRONTEND_TEST_EMAIL','--env','HT_FRONTEND_TEST_OWNER_EMAIL','--env','HT_FRONTEND_TEST_PASSWORD',
         '--env','PYTHONPATH=/workspace/backend:/workspace/scripts',
         '--label',$htLabelRun,'--label',$htLabelRepo,'--label','org.hustlytasker.fe-purpose=backend',
-        'hustlytasker-backend-tests:local','python','/workspace/scripts/frontend_integration.py')
+        'hustlytasker-backend-tests:local','python','/workspace/scripts/frontend_integration.py',$htServeMode)
     $htCreatedServer = $true
     Assert-OwnedContainer $htServer 'hustlytasker-backend-tests:local' 'backend'
     Invoke-CheckedDocker @('network','connect',$htNetwork,$htServer)

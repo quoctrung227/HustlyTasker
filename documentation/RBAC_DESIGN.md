@@ -1,12 +1,84 @@
 # HT-RBAC-DESIGN-P0-01
 
+## HT-FE-MEMBERS-01 — Existing governance exposed through React (2026-11-08)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** The Owner authorizes migration-free
+organization member/invitation integration, not a second membership system or
+new role policy. Current source adds only the missing authenticated manager
+roster read; existing Invitation services retain transaction/consent/role rules.
+
+| Profile-scoped action | Owner | Admin | Profile Member / Workspace-only role |
+|---|---|---|---|
+| Read sanitized Profile roster/inactive history | Allowed | Allowed | Denied |
+| Invite MEMBER | Active Profile only | Active Profile only | Denied |
+| Invite ADMIN | Active Profile only | Denied | Denied |
+| Invite OWNER | Denied | Denied | Denied |
+| Read Invitation metadata | ADMIN/MEMBER records | MEMBER records only | Denied |
+| Revoke/resend eligible invitation | Within existing ceiling/state; active Profile | MEMBER ceiling/state; active Profile | Denied |
+| Profile role/remove/Owner writes through new UI API | Not added | Not added | Denied |
+
+The new GET /api/v1/profiles/{profile_id}/members/ projects membership UUID,
+Profile UUID, safe display label, Profile role, membership is_active and joined_at.
+It omits email/global User IDs/credentials. Read capability never grants access
+to another Profile. Managers of archived Profiles can read, but capability flags are false
+and allowed_invitation_roles empty. Active flags/allowed roles are server hints,
+recomputed from current context; every mutation still rechecks existing services.
+A Workspace Admin with Profile MEMBER does not gain Profile governance.
+
+Acceptance creates/reactivates only a compatible non-Owner Profile membership;
+it never assigns a Workspace, upgrades an active membership or bypasses consent.
+Unique current email/bound identity plus SENT, usable token are required even
+for existing Users; account email_verified alone grants no inbox or authority.
+Legacy/new unverified Users retain the reviewed acceptance compatibility. Accept
+also revalidates the original inviter's current authority; decline uses the
+common recipient/token/Profile checks and does not require that granting check.
+
+React must preserve current User+Profile cache/draft lifetime and the stabilized
+same-User refresh behavior; no token URL/query-key/browser-storage persistence,
+inbox, direct membership grant or fake email success is added. Post-commit mail
+failure may leave a PENDING invitation with FAILED delivery despite503; SENT is
+not mailbox proof. **REAL
+EMAIL DELIVERY NOT VERIFIED.** Current isolated verification: backend targeted
+51/51 PASS56.587s (launcher0; targeted Python event unavailable), full839/839
+PASS245.158s (launcher/actual Python0 and cleanup); frontend targeted142/142
+PASS13.73s/final801/801 PASS23.61s, TypeScript/Biome/build0; real Members
+Chromium4/4 PASS38.6s, launcher/Playwright/backend0 and owned cleanup. The real
+locmem invitation→new-user registration→explicit React acceptance flow grants
+only server-authorized membership; no real external email delivery is inferred.
+Task-stability4/4 PASS20.9s and Auth/CSRF/tenant foundation6/6 PASS36.0s complete
+the current14/14 real-browser regression aggregate, all launcher/Playwright/
+backend exits0 with owned database/resource cleanup. Four viewports/axe/keyboard
+pass;375/1440 screenshots visually inspected by root. The14:48:54Z read-only
+development comparison preserves all29-table data/schema/index/sequence/history/
+cluster fingerprints:36 migrations/4 Users/2 Sessions and existing business rows,
+0 Invitation/AI rows; ai.0002 remains UNAPPLIED with its tables absent. No schema,
+credential, persistent fixture or AI activation change is part of this task.
+Historical stability/AI counts are not current results; manual Owner website
+acceptance remains pending. No follow-on task/deployment is authorized by this
+verification. Stop at **HT-FE-MEMBERS-01 — OWNER REVIEW GATE**.
+
 ## Capability Matrix, Tenant-Scoped Access, and Invitation Contract
 
 Status: `COMPLETE — APPROVED BY OWNER DELEGATION`
 
 Date: 2026-10-18
 
-Last implementation reconciliation: 2026-10-26
+Last implementation reconciliation: 2026-11-02
+
+**HT-FE-P3-05 onboarding reconciliation:** Owner approves active authenticated
+User creation of a new Profile using a name-only collection POST, with the
+current User becoming its initial active OWNER through the existing atomic
+service. No membership in a pre-existing tenant is required to create a new
+tenant. SessionAuthentication/CSRF and current User checks remain mandatory;
+creation grants no access to other Profiles. This resolves the creation API
+eligibility question in section4.3 only, without approving general Profile edit,
+membership management, quotas, AI authority or an authentication change.
+HT-FE-P3-05 is **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**: targeted
+isolated API40/40/full backend662, frontend426 and all six real isolated browser
+suites25/25 passed; actual launcher/Python/Playwright/backend exits0 and owned
+cleanup verified. Development data/schema/sequences/history and52 model/
+migration/AI hashes are preserved. Manual Owner website acceptance remains
+pending; no persistent development mutation was used for verification.
 
 The owner delegated the remaining RBAC decisions to the Technical Advisor on
 2026-10-17. That approval first authorized `HT-RBAC-P1-03` Tenant Access
@@ -18,7 +90,8 @@ four Profile/Workspace reads, canonical-month Workspace creation/metadata
 update, Profile/Workspace archive/restore, manager-only Workspace-member
 list/direct-add/role-update/soft-revoke/reactivation, and the bounded Profile
 Invitation management/recipient actions described in section 7. General
-Profile CRUD and downstream domain APIs remain unavailable. Additive
+Profile update/delete and downstream domain APIs remain unavailable; the
+Owner-approved bounded creation API is described above. Additive
 `workspace.0003` completed its separately authorized controlled development
 rollout in `HT-DB-P1-06`; production and all other persistent environments
 remain behind separate approval gates. Owner then authorized the dedicated
@@ -296,11 +369,12 @@ Profile and does not automatically make that manager a contributor/assignee.
 | Edit Profile settings/branding | P: Owner only | DENY | DENY | DENY | DENY | DENY |
 | Archive/restore Profile | A: Owner only | DENY | DENY | DENY | DENY | DENY |
 | Read full Profile roster/PII | R/P | R/P | DENY | DENY | DENY | Self only |
+| Read sanitized Profile governance roster (no contact/account IDs) | A: verified current API | A: verified current API | DENY | DENY | DENY | DENY |
 | List effective Workspace assignments (no User PII) | A | A | A: assigned Workspace | DENY | DENY | DENY |
 | Invite Profile `MEMBER` | A | A | DENY | DENY | DENY | DENY |
 | Invite Profile `ADMIN` | A: Owner only | DENY | DENY | DENY | DENY | DENY |
 | Promote/deactivate Profile `ADMIN` | P: Owner only | DENY | DENY | DENY | DENY | DENY |
-| List/revoke/reinvite pending invitations | DEFER: Invitation API | DEFER: `MEMBER` ceiling | DENY | DENY | DENY | DENY |
+| List/revoke/reinvite pending invitations | A: existing Invitation API/state checks | A: `MEMBER` ceiling/state checks | DENY | DENY | DENY | DENY |
 | Appoint/demote/deactivate Profile `OWNER` | A: Owner only + lock | DENY | DENY | DENY | DENY | DENY |
 | Remove/deactivate Profile Member | R/P | P: `MEMBER` only | DENY | DENY | DENY | DENY |
 | Leave Profile voluntarily | P: only if another active Owner membership remains | P: self | P: self Profile membership | P: self Profile membership | P: self Profile membership | P: self |
@@ -367,15 +441,16 @@ explicitly reviewed. `HT-RBAC-P1-03` itself opened no endpoint; the later
 Two operations occur before the normal active-membership context and must not
 be mistaken for tenant access:
 
-- **Profile creation — [CURRENT; API POLICY OPEN]:** the approved schema
-  foundation already provides a service that atomically creates a Profile and
-  its initial Owner. This bootstrap is not an exception to joining an existing
-  Profile: the tenant does not exist before the transaction. If the owner
-  approves self-service `POST /api/v1/profiles/`, an eligible active
-  authenticated User acts in a creation-only bootstrap context and becomes the
-  first Owner; invitation is not applicable because no existing Profile is
-  being joined. Eligibility, quotas, abuse controls, and whether creation is
-  staff-mediated remain **[OPEN]**.
+- **Profile creation — [APPROVED; IMPLEMENTED HT-FE-P3-05]:** an active
+  authenticated User may POST a validated name to /api/v1/profiles/ in a
+  creation-only bootstrap context. The existing service creates an ACTIVE
+  Profile, its initial active OWNER membership and safe membership audit in one
+  transaction. request.user supplies identity; ownership/role/status/tenant
+  fields are never client-controlled. Invitation is not applicable because no
+  existing Profile is being joined. Existing multi-Profile/nonunique-name rules
+  remain; no quota, new idempotency protocol or staff requirement is invented.
+  Separate valid creates produce separate legitimate tenants. This context
+  grants no access to an existing tenant or permanent mutation authority.
 - **Invitation recipient — [PROPOSED]:** an active authenticated User without
   Profile membership may use only an `InvitationRecipientContext` for their
   sanitized inbox and accept/decline operation after token/account binding.
@@ -655,10 +730,13 @@ or reactivates exactly one compatible inactive non-Owner row, and atomically
 soft-revokes stale active WorkspaceMember rows so Profile rejoin never restores
 Workspace access.
 
-Create/revoke/resend/accept/decline use Profile-first locking, revalidate the
-manager/original inviter, write AuditLog in the state transaction, and allow
+Create/revoke/resend/accept/decline use Profile-first locking, write AuditLog
+in the state transaction, and allow
 one terminal winner under concurrency. Resend creates a replacement and rotates
-the credential; replay fails. Delivery runs on commit, refuses console/dummy/
+the credential; replay fails. Management actions revalidate current manager
+authority/role ceiling; acceptance additionally checks the original inviter.
+Decline performs the common recipient/token/Profile checks without requiring
+original-inviter grant authority. Delivery runs on commit, refuses console/dummy/
 file backends, records failures honestly, and recovers through scoped manager
 discovery plus resend. Durable PostgreSQL issuance limits enforce five per
 normalized recipient/24h and 30 per inviter/24h; cache throttles are additional
@@ -726,6 +804,11 @@ service, endpoint, token, or delivery flow. Bullets still labeled
   later, but it must not hide or bypass the Profile-consent transition.
 
 ### 7.2 Authority and requested role
+
+The approved role/consent ceilings below remain current. The original DEFER
+and verified-email dependency wording is retained as design history only;
+current Invitation implementation and HT-AUTH-P1-02 reconciliations above
+supersede those unresolved-status statements without changing the approved roles.
 
 - **[REQUIREMENT]** The outsource assigns invitation sending to Owner/Admin.
   It described a Workspace invitation; the later approved consent boundary
@@ -882,8 +965,9 @@ All routes use global SessionAuthentication and `IsAuthenticated`; no tenant
 route receives `AllowAny`. `HT-API-P1-04` supplies the four reads and
 `HT-WORK-P2-02` supplies the bounded Workspace write/member-manager and
 Profile/Workspace lifecycle operations marked current below. Every unsafe
-method requires CSRF. General Profile CRUD/membership APIs, hard delete, and
-self-leave remain unavailable behind their own gates. `HT-INV-P2-04` adds the
+method requires CSRF. HT-FE-P3-05 now adds the approved name-only Profile
+bootstrap described in4.3. Profile metadata edit/general membership APIs, hard
+delete and self-leave remain behind their own gates. `HT-INV-P2-04` adds the
 bounded authenticated Invitation routes in section 8.3; `workspace.0004`
 remains unapplied to development.
 
@@ -966,10 +1050,10 @@ Current Workspace write-validation contract:
   generic `404`, and duplicate active assignment or Profile/month uses `409`.
   Nested IDs and serializer checks are never authorization evidence.
 
-Profile creation/update and Profile membership mutation remain proposed, not
-implemented. Future Profile creation may accept approved mutable fields such
-as `{name}` with creator/initial Owner server-set through the bootstrap service,
-but self-service eligibility remains open.
+Profile creation is now the bounded HT-FE-P3-05 name-only bootstrap API above.
+Profile metadata update and general Profile membership mutation remain outside
+this consumer scope. Existing Invitation consent/identity rules are unchanged;
+creating a new tenant is not a bypass for joining any existing tenant.
 
 ### 8.2 Task and internal Review workflow
 

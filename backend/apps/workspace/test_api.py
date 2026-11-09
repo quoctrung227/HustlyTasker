@@ -696,7 +696,7 @@ class ProfileWorkspaceReadApiTests(APITestCase):
             "audit_logs": AuditLog.objects.count(),
         }
         method_urls = (
-            ("POST", self.profile_list_url()),
+            ("PUT", self.profile_list_url()),
             ("PUT", self.profile_detail_url(self.profile.id)),
             ("PATCH", self.profile_detail_url(self.profile.id)),
             ("DELETE", self.profile_detail_url(self.profile.id)),
@@ -747,14 +747,14 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         client = APIClient(enforce_csrf_checks=True)
         client.force_login(self.owner)
 
-        denied_response = client.post(
+        denied_response = client.put(
             self.profile_list_url(),
             {},
             format="json",
         )
         csrf_response = client.get(reverse("accounts:csrf"))
         self.assertEqual(csrf_response.status_code, status.HTTP_200_OK)
-        allowed_response = client.post(
+        allowed_response = client.put(
             self.profile_list_url(),
             {},
             format="json",
@@ -775,7 +775,7 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         cases = (
             (
                 self.profile_list_url(),
-                {"GET", "HEAD", "OPTIONS"},
+                {"GET", "POST", "HEAD", "OPTIONS"},
             ),
             (
                 self.profile_detail_url(self.profile.id),

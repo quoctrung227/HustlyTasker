@@ -11,13 +11,17 @@ import { ProfileDetailPage, ProfilesPage, WorkspaceDetailPage, WorkspacesPage } 
 import { TaskDetailPage, TasksPage } from '../pages/tasks'
 import { NotificationsPage } from '../pages/notifications'
 import { AccountPage, ForgotPasswordPage, RegisterPage, ResetPasswordPage } from '../pages/account-security'
+import { CreateProfilePage } from '../pages/profile-create'
+import { TaskGeneratorPage } from '../pages/task-generator'
+import { InvitationRespondPage, ProfileMembersPage } from '../pages/members'
 
 function ProtectedRoute() {
   const auth = useAuth()
   const location = useLocation()
   if (auth.status === 'checking' || auth.status === 'unavailable') return <SessionState />
-  if (auth.status === 'anonymous') return <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />
-  return <Outlet />
+  if (auth.status === 'anonymous') return <Navigate to="/login" state={{ from: location.pathname === '/invitations/respond' ? location.pathname : location.pathname + location.search, authenticationRequired: true }} replace />
+  // A verified identity change must reset local drafts even in the same tenant.
+  return <Outlet key={auth.user?.id} />
 }
 
 function StatusPage({ forbidden = false }: { forbidden?: boolean }) {
@@ -47,10 +51,14 @@ export function AppRoutes() {
       <Route path="/account" element={<AccountPage />} />
       <Route path="/notifications" element={<NotificationsPage />} />
       <Route path="/profiles" element={<ProfilesPage />} />
+      <Route path="/profiles/new" element={<CreateProfilePage />} />
+      <Route path="/invitations/respond" element={<InvitationRespondPage />} />
       <Route path="/profiles/:profileId" element={<ProfileDetailPage />} />
+      <Route path="/profiles/:profileId/members" element={<ProfileMembersPage />} />
       <Route path="/profiles/:profileId/workspaces" element={<WorkspacesPage />} />
       <Route path="/profiles/:profileId/workspaces/:workspaceId" element={<WorkspaceDetailPage />} />
       <Route path="/profiles/:profileId/workspaces/:workspaceId/tasks" element={<TasksPage />} />
+      <Route path="/profiles/:profileId/workspaces/:workspaceId/tasks/generate" element={<TaskGeneratorPage />} />
       <Route path="/profiles/:profileId/workspaces/:workspaceId/tasks/:taskId" element={<TaskDetailPage />} />
     </Route></Route>
     <Route path="/403" element={<StatusPage forbidden />} />

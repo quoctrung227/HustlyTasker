@@ -5,12 +5,56 @@ React/TypeScript frontend consuming the existing SessionAuthentication API.
 
 ## Frontend MVP
 
-HT-FE-P3-04 is **COMPLETE / OWNER REVIEW GATE**. The approved MVP includes account
+HT-AI-P4-03C **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE** integrates the
+stateless synthetic Feedback Analyzer into Task Detail. Authorized managers can
+select existing Review/Comment feedback and optional focus, then view an honest
+fixture result with source citations. It does not interpret feedback with live
+AI, persist analysis or apply suggestions. The persistent fixture flag remains
+unchanged. Fresh frontend675/675, real isolated Chromium36/36 (including six new
+Analyzer enabled/disabled cases), targeted PostgreSQL AI215/215 and quality checks
+pass; exits and isolated cleanup are verified. Backend source and all29 development
+tables' fingerprints/schema/history are preserved. Manual Owner acceptance
+remains pending. See [HANDOVER](documentation/HANDOVER.md) for files, evidence,
+limits and safe isolated commands; no follow-on task/deployment is authorized.
+
+HT-AI-P4-02C **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE** adds the scoped
+Smart Task Generator fixture preview/edit/confirm integration. This is a fixed synthetic demo,
+not a live AI service. Generation never creates Tasks; explicit confirmation
+uses the existing atomic backend service. The persistent fixture flag is not
+enabled by this task. See [Frontend Guide](documentation/FRONTEND_GUIDE.md) and
+[HANDOVER](documentation/HANDOVER.md) for isolated verification and limitations.
+P4-02C isolated backend676/676, frontend537/537 and real browser30/30 PASS;
+typecheck/lint/build and read-only development preservation pass. No live AI
+provider or persistent fixture flag is enabled by this task.
+
+HT-AI-P4-03A **DESIGN AND FIXTURE BACKEND COMPLETE — OWNER REVIEW GATE** adds a
+Task-scoped stateless Feedback Analyzer endpoint using existing internal Review
+comments and nondeleted Task Comments. Output is a fixed offline fixture with
+source citations, never live AI or an automatic Task/Review action. Current
+isolated AI215/215 and full PostgreSQL719/719 pass; frontend/browser counts above
+belong to P4-02C and were not rerun for this backend-only slice. Source/schema/data
+preservation and the permanent predeployment Owner gate are in
+[HANDOVER](documentation/HANDOVER.md) and [AGENTS.md](AGENTS.md).
+
+HT-FE-P3-05 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE** adds Create Profile
+& First-Time User Onboarding. An authenticated User can choose **Tạo tổ chức**,
+create a name-only Profile, become its active Owner, then create a monthly
+Workspace through React. No Django Admin, manual Owner ID or automatic Workspace
+creation is required. Active Profile selection continues to use its route URL.
+See [HANDOVER](documentation/HANDOVER.md) for current evidence and review gate.
+Historical FE05 isolated backend662/662, frontend426/426 and real browser25/25 PASS;
+typecheck/lint/build and development preservation checks pass. The Owner's
+manual real-website acceptance remains pending; no production readiness claim.
+Invitation UI and broader membership onboarding remain separately pending;
+`HT-AI-P4-02C` is the separate AI Generator preview/edit/confirm UI task above.
+
+Historical HT-FE-P3-04 is **COMPLETE / OWNER REVIEW GATE**. Its approved MVP includes account
 lifecycle and the existing Workspace/Task/Review/Comment/Notification flows.
 Invitation UI, Profile Creation and broader membership onboarding remain
-OUT OF CURRENT TASK SCOPE / PENDING OWNER REVIEW, not removed product goals.
+outside that earlier task's scope. FE05 separately approves Profile creation;
+these other product goals are not removed.
 
-Current frontend395/395 and all five real isolated browser suites22/22 PASS;
+Historical FE04 frontend395/395 and five real isolated browser suites22/22 PASS;
 typecheck/lint/build, responsive/axe and local non-mutating startup/connectivity
 checks pass. Manual Owner browser, real email delivery, remote CI and production
 remain unverified. No backend/schema change or automatic next task is included.
@@ -23,8 +67,9 @@ npm ci
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. Authorized Workspace/Task management, assignment and
-current-assignee Start are implemented; Profile metadata remains read-only.
+Open http://127.0.0.1:5173. First-time Profile creation, authorized Workspace/Task
+management, assignment and current-assignee Start are implemented. Existing
+Profile metadata edit/delete remains unavailable outside explicit lifecycle APIs.
 Task detail shows revision/Review history, capability-based Deliverable Submit
 and Review decisions, and authorized existing Comment edit/soft-delete actions;
 personal Notifications support feed/count/mark-read. The approved API extension

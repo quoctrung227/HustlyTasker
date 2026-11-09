@@ -19,6 +19,7 @@ export function SessionState() {
 
 function destination(state: unknown): string {
   const from = state && typeof state === 'object' && 'from' in state ? state.from : null
+  if (typeof from === 'string' && from.split(/[?#]/, 1)[0] === '/invitations/respond') return '/invitations/respond'
   return typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/login') && !from.includes('\\') ? from : '/dashboard'
 }
 
@@ -32,6 +33,10 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
   const summary = useRef<HTMLDivElement>(null)
+  const authenticationRequired = location.state && typeof location.state === 'object'
+    && 'authenticationRequired' in location.state && location.state.authenticationRequired === true
+  const invitationReturn = location.state && typeof location.state === 'object'
+    && 'from' in location.state && location.state.from === '/invitations/respond'
   useEffect(() => {
     if (auth.status === 'anonymous') document.title = 'Đăng nhập · HustlyTasker'
   }, [auth.status])
@@ -76,6 +81,7 @@ export function LoginPage() {
       <div className="login-form-wrap"><span className="login-symbol" aria-hidden="true"><ArrowRightIcon /></span>
         <p className="eyebrow">CHÀO MỪNG TRỞ LẠI</p><h1>Đăng nhập vào<br />không gian của bạn.</h1>
         <p className="login-description">Tiếp tục nơi cả nhóm đang chờ bạn.</p>
+        {authenticationRequired && <Alert>Vui lòng đăng nhập để tiếp tục. Nội dung biểu mẫu chưa gửi chưa được lưu.</Alert>}
         <form onSubmit={(event) => void submit(event)} noValidate aria-label="Đăng nhập">
           {error && <div ref={summary} tabIndex={-1} className="form-summary"><Alert kind="error" title="Chưa thể đăng nhập">{error}{Object.keys(fields).length > 0 && <ul>{Object.entries(fields).map(([field, message]) => <li key={field}><a href={`#${field}`}>{message}</a></li>)}</ul>}</Alert></div>}
           <FormField id="email" label="Email" error={fields.email}><Input type="email" name="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} disabled={busy} placeholder="ban@congty.com" required /></FormField>
@@ -85,7 +91,7 @@ export function LoginPage() {
           <Button className="password-toggle" variant="ghost" onClick={() => setVisible(!visible)} aria-pressed={visible}>{visible ? <EyeSlashIcon aria-hidden="true" /> : <EyeIcon aria-hidden="true" />}{visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}</Button>
           <Button className="login-submit" type="submit" busy={busy}>Đăng nhập<ArrowRightIcon aria-hidden="true" /></Button>
         </form>
-        <div className="work-actions"><Link className="text-link" to="/forgot-password">Quên mật khẩu?</Link><Link className="text-link" to="/register">Đăng ký tài khoản</Link></div>
+        <div className="work-actions"><Link className="text-link" to="/forgot-password">Quên mật khẩu?</Link><Link className="text-link" to="/register" state={invitationReturn ? { from: '/invitations/respond' } : undefined}>Đăng ký tài khoản</Link><Link className="text-link" to="/invitations/respond">Tôi có mã lời mời</Link></div>
         <p className="login-security"><LockKeyIcon aria-hidden="true" />Đăng nhập an toàn bằng tài khoản của bạn.</p>
       </div>
       <footer className="login-main__footer">HustlyTasker<span>Không gian cho những người cùng làm.</span></footer>

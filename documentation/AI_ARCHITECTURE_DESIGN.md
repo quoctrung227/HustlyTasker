@@ -3,7 +3,523 @@
 Ngày: **2026-10-28**. AI01 design complete; Owner đã duyệt v1 fixture-only cho
 P4-02B. Live/provider/private-data decisions ngoài phạm vi vẫn pending.
 
-## Current checkpoint — HT-AI-P4-02B — IMPLEMENTATION COMPLETE
+## HT-AI-P4-04C — Durable governance, offline implementation (2026-11-08)
+
+**OFFLINE GOVERNANCE IMPLEMENTATION READY / DEVELOPMENT MIGRATION PENDING.**
+The Owner authorizes candidate additive schema and isolated PostgreSQL tests,
+not development apply, live data/billing or production. This section supersedes
+04B's proposed governance structure for the implemented offline slice only.
+Provider choice still targets the existing gpt-5.4-mini Responses adapter;
+there is no live transport, automatic fallback or key lookup.
+
+### Source-backed risk and actual new boundary
+
+Existing AiOperation/confirmation locks prevent repeated Task creation after
+proposal confirmation. They do not reserve a billable dispatch before two
+workers enter provider generation. The process-local HTTP throttle cannot be
+the shared spending authority. Reusing old operation statuses would obscure
+the difference between no dispatch and a possibly charged unknown result.
+
+New [governance.py](../backend/apps/ai/governance.py) and three appended
+[models](../backend/apps/ai/models.py) implement that separate boundary:
+
+1. Fail closed before candidate-table SQL unless literal AI_GOVERNANCE_ENABLED,
+   enabled trusted GovernancePolicy and existing development fixture guard pass.
+   No setting/env loader was added; OPENAI_LIVE always fails closed.
+2. Revalidate current manager actor/Profile/Workspace and resolve real selected
+   Review/Comment sources for Analyzer. No client DTO grants authority.
+3. In a short atomic transaction lock existing tenant context, then stable
+   GLOBAL/Profile/User buckets, then dispatch/reservations. Check shared
+   simulated cost exposure/request/inflight caps and reserve all three or none.
+4. Match scoped key plus keyed input/policy fingerprints. An equivalent request
+   returns metadata; changed input/config/rates/identity conflicts. Exactly one
+   RESERVED→DISPATCHING claim commits before the unchanged fake adapter runs.
+5. Run fake transport outside database locks, then settle known simulated usage
+   once or retain uncertain holds. No Task/proposal/analysis-history creation.
+
+```mermaid
+stateDiagram-v2
+    [*] --> RESERVED: atomic scope reservations
+    RESERVED --> DISPATCHING: commit one claim before transport
+    RESERVED --> FAILED_BEFORE_DISPATCH: definitive no attempt
+    DISPATCHING --> SUCCEEDED: known simulated usage, atomic settlement
+    DISPATCHING --> OUTCOME_UNKNOWN: timeout, invalid usage, persistence uncertainty
+    OUTCOME_UNKNOWN --> RECONCILED: explicit consistent simulated evidence
+```
+
+DISPATCHING also preserves uncertainty if a crash/database outage prevents an
+UNKNOWN write. No expired lease, cancellation or worker restart proves no charge.
+There is no transition back to RESERVED, automatic refund or redispatch. The
+original actor must retain current authority to read/reconcile; revocation
+leaves holds intact for a future approved operator workflow.
+
+### Persistence, provenance and accounting
+
+Candidate [ai.0002_dispatch_governance](../backend/apps/ai/migrations/0002_dispatch_governance.py)
+creates AiDispatch (scope/mode/identity/lifecycle/nullable usage and distinct
+reservation/estimated/accounted/billed amounts), AiBudgetBucket (shared limits
+and counters) and AiDispatchReservation (three protected holds). No old-table
+alteration/backfill or fixture provenance rewriting. Detailed constraints,
+lock order and reconciliation rules are in [AI_PERSISTENCE_REVIEW](AI_PERSISTENCE_REVIEW.md)
+and [DATABASE_SCHEMA](DATABASE_SCHEMA.md).
+
+FIXTURE, OPENAI_OFFLINE and OPENAI_LIVE are distinct schema modes. Only offline
+fake execution is implemented here; generated_by_ai stays false. Fake usage is
+SIMULATED, missing usage UNKNOWN, estimated debit is not actual billing and
+billed_cost remains NULL. Future observed provider usage and billing records
+must be separately validated; their schema capacity is not an implementation.
+
+Body/policy/evidence fingerprints are purpose-separated HMACs with verified
+scope and Django fallback-key support. Brief, source text/focus, provider bodies
+and derived result text are not persisted by this ledger. A first success can
+return transient validated output; duplicates return the receipt without
+redispatch or saved-output recovery. Existing fixture routes, AiProposal storage,
+human confirmation and advisory-only stateless Analyzer are unchanged. No new
+public API/React fields, runtime setting or signal side effect is introduced.
+
+Bucket identity is scope+mode, independent of date/model/config. Current limits
+are lifetime/cumulative; a new model/date never creates a fresh global allowance
+or loses old unknown holds. All default cost/request/inflight caps are zero;
+simulation policy is trusted server configuration, not request input. The
+synthetic reservation is ceiling((input cap×input rate +output cap×output rate)
+/1,000,000) to8 decimal places. These configured offline caps/rates are not a
+tokenizer-proven upper bound or current published live price. Unknown/out-of-cap
+usage keeps reservations; provider billing limits/monitoring are still required.
+No absolute prevention of live charges is claimed from database controls alone.
+
+### Verification and remaining gates
+
+Final focused52/52 PASS15.286s includes two real PostgreSQL connection races
+and6 migration tests (empty/legacy-related chain, constraints/indexes/relations).
+Full isolated826/826 PASS231.558s covers existing AI/business regressions.
+Both launchers and actual Python exit0; pip/Django/model graph/full migration
+chain and owned cleanup verified. Frozen source and29-table read-only development
+comparison are exact; development36 migrations/4 Users/2 Sessions preserved,
+candidate0002 UNAPPLIED. Failed synthetic-fixture setup attempts and all current
+evidence are recorded in [HANDOVER](HANDOVER.md), not relabeled as passing runs.
+No frontend/browser/live provider suite was executed for this backend-only slice.
+
+Remaining work is staged: no live billing evidence, automatic budget reset,
+operator recovery, proposal/result persistence integration, public contract or
+network client. Simulated reconciliation relies on a trusted caller assertion,
+not a verified invoice. Generic ORM hard-delete/AdminCollector maintenance may
+query new PROTECT relations before rollout and is not safe on the old schema;
+authorized current HTTP/fixture/startup paths do not execute new-table code.
+No such development maintenance is authorized.
+
+Next proposal: separately approved fresh inventory/backup and isolated restore
+readiness for ai.0002; development apply requires another explicit safety gate.
+Live HTTP/proposal wiring, private data terms, verified model bounds/pricing,
+provider-side limits/monitoring and tightly budgeted live smoke need separate
+Owner decisions. Manual website acceptance and the permanent deployment gate
+remain. **Stop at HT-AI-P4-04C — OWNER REVIEW GATE.**
+
+## HT-AI-P4-04B — Offline OpenAI adapter (2026-11-08)
+
+Historical04B checkpoint; current04C governance status is recorded above.
+
+**OFFLINE OPENAI ADAPTER COMPLETE — OWNER REVIEW GATE.** The Owner now
+chooses OpenAI, `gpt-5.4-mini`, Responses API and strict Structured Outputs for
+an actual offline adapter. This supersedes04A's provider-selection blocker for
+the approved target, not its live data, provenance, cost or migration gates.
+Execution remains fake transport only, live budgetUSD0. No key or live call.
+
+Implemented [openai_adapter.py](../backend/apps/ai/openai_adapter.py), using the
+existing StructuredProvider.generate(ProviderRequest,RequestControl)→ProviderResult
+contract; no second provider framework. Existing FixtureAdapter, application
+services, endpoints, React DTOs, models, migrations and settings are untouched.
+The current HTTP application still deliberately rejects nonfixture adapters.
+
+### Actual code boundary and configuration
+
+OpenAIResponsesAdapter accepts OpenAIConfig and an explicitly injected
+OfflineTransport.post(url,body,timeout_seconds,max_response_bytes,control).
+TransportResponse carries status_code and bounded bytes. No SDK, HTTP client,
+network implementation, credential/header loader, env reader, ORM or logging
+call exists in this module. A default instance cannot dispatch. Config.enabled
+must explicitly be True and the trusted in-memory transport's offline marker
+must literally be True. This is offline execution enablement, not live activation.
+Key presence in environment cannot construct or activate a network transport.
+
+| Config | Default | Enforced bound |
+|---|---|---|
+| enabled |false|exact bool; false→AI_DISABLED without transport call|
+| model |gpt-5.4-mini|server-code-owned bounded identifier; exact configured response model checked|
+| timeout_seconds |30.0|finite positive,≤120 seconds; effective deadline also respects RequestControl|
+| max_output_tokens |4096|exact integer1..32768, including reasoning/output budget|
+| max_response_bytes |131072|exact integer1..1048576 for provider envelope; domain JSON remains≤65536|
+
+Outbound envelope is capped at65536 UTF-8 bytes, enough for the existing12000
+character source budget with multibyte text plus schema. Input/domain limits
+remain unchanged: Generator brief6000 chars, total plan20 nodes/3 child levels,
+Analyzer1..20 selected sources/12000 text chars/focus1000, strict enums/dates and
+response fields. These offline technical caps are not an approved live budget.
+No settings.py or .env.example variable is introduced or read.
+
+### Request, response and privacy mapping
+
+The canonical endpoint metadata is https://api.openai.com/v1/responses, passed
+only to the fake transport. Body uses explicit model, store:false, stream:false,
+tools:[], max_output_tokens, separated system and JSON user-data messages, and
+text.format:{type:json_schema,name,strict:true,schema}. Every schema object has
+additionalProperties:false and all declared fields required. Graph/cycle/depth,
+date validity and citation membership are still checked by existing domain
+validators after parsing; a provider schema cannot establish tenant authority.
+
+Generator projects only validated brief and explicit permitted time context;
+no current date, user assignment, status or tenant is invented. System guidance
+requires null/warnings for deadlines lacking evidence. Offline tests prove that
+guidance/validation, not that a real model interprets dates accurately.
+Analyzer projects only authorized source correlation refs/text and focus.
+FeedbackInput carries no actor: a local zero-UUID sentinel supplies only the
+existing pure parser's unused actor-correlation slot. It is not a User, permission
+grant or business mapping and is never sent/stored. Profile/Workspace/Task source
+consistency is checked locally; future Django integration must still perform
+actual authorization/source selection/revalidation before/after dispatch.
+
+Response parsing requires object=response, completed status, no nonnull error/
+incomplete_details, an accepted model and exactly one completed assistant text
+message. The approved alias also accepts its officially documented snapshot
+gpt-5.4-mini-2026-03-17. Tools/function calls, multiple messages, refusals,
+truncation, malformed/duplicate/nonfinite JSON, byte overflow and invalid domain
+fields/graph/citations fail safely. Reasoning metadata is ignored, never returned
+or executed. Raw response/error bodies are not exposed or logged.
+
+Return provenance is **provider=openai_offline**, usage.status=offline_simulated,
+cost_usd=None. Optional fake token counts are validated as nonnegative exact
+integers with consistent totals/detail bounds; absent usage stays unknown.
+These are invented test observations, not actual inference or billable tokens.
+Nothing is relabelled fixture_zero or published through current fixture React.
+Raw brief, feedback and response remain transient; no AI/business record is
+created and no retention guarantee beyond absence of persistence is asserted.
+
+### Errors, timeouts and retries
+
+| Case | Existing safe AIError classification |
+|---|---|
+| Disabled / transport not explicitly offline |AI_DISABLED|
+| Missing transport, invalid model/config/input/control |VALIDATION_ERROR|
+| Provider401/403 |PROVIDER_UNAVAILABLE; upstream credentials are not caller RBAC|
+| Provider429 |RATE_LIMITED|
+| Timeout / cooperative deadline |PROVIDER_TIMEOUT|
+| Connection, other status, unexpected transport failure |PROVIDER_UNAVAILABLE|
+| Refusal |AI_REFUSED|
+| Invalid/incomplete/envelope/domain output |INVALID_PROVIDER_RESPONSE|
+| Cooperative cancellation |CANCELLED|
+
+No automatic retry, retry exhaustion loop, silent provider/model fallback or
+fixture substitution exists. Effective timeout is the smaller of configured
+timeout and remaining monotonic deadline; checked before/after transport and
+validation. A synchronous injected callback must honor the timeout/control
+contract; the adapter cannot forcibly preempt arbitrary Python or promise a
+remote refund. A future timeout/disconnect never establishes zero provider cost.
+The offline marker is a trusted-code seam, not a sandbox for malicious Python;
+tests additionally guard network/file/DB/domain operations and use invented data.
+
+### Verification and remaining activation gates
+
+Focused new adapter55/55 PASS0.038 seconds; final apps.ai270/270 PASS13.347 seconds,
+both launcher/actual Python exits0 and owned cleanup verified. Dependency/Django/
+model/migration-chain checks pass. All245 original sources and the two tested
+file hashes remain unchanged; final29-table development row/schema/sequence/
+history/cluster comparison is exact (4 Users/36 migrations preserved). Current
+evidence is in HANDOVER. No frontend/browser/live model test is implied by this
+adapter check. Official model and output semantics were fetched2026-11-08:
+[model](https://developers.openai.com/api/docs/models/gpt-5.4-mini),
+[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses).
+The API reference HTML exceeded tool limits and its Markdown was not rendered;
+the official guide's Responses text.format semantics are implemented. No account
+access, API key, live reliability, Vietnamese quality or billable integration is
+verified. store:false is not a provider Zero Data Retention guarantee.
+
+Adapter implementation can complete independently of live activation. The exact
+Generator provenance/dispatch/accounting migration proposal is in
+[AI_PERSISTENCE_REVIEW](AI_PERSISTENCE_REVIEW.md), not applied or approved schema.
+Keep Analyzer stateless. Before paid wiring, review the shared durable claim/
+reservation/UNKNOWN reconciliation, truthful mode/model/usage contract and
+retention/data terms; confirmation idempotency alone cannot deduplicate charges.
+Recommend next a separate **Live provenance and shared dispatch/accounting
+contract/schema review**, without migration application or live requests.
+Owner manual website acceptance is still PENDING. No next task starts here.
+
+## HT-AI-P4-04A — Live provider readiness (2026-11-08)
+
+**DESIGN READY / PROVIDER IMPLEMENTATION BLOCKED — OWNER REVIEW GATE.**
+This is the current source-backed readiness review, not live integration or
+provider activation. The Owner delegates routine engineering choices, but task
+section7 explicitly requires a proposal and stop if no approved provider choice
+exists. DECISION_LOG's AI-D01/D05/D09/D10 accept fixture-only operation and zero
+live budget; no later entry chooses a live provider/model or approves private
+egress. No adapter, SDK, runtime setting, endpoint, model or migration is added.
+The P4-03C UI and all earlier uncommitted work remain intact.
+
+### Engineering audit: existing capability and actual gap
+
+| Question | Actual source / capability | Live integration gap or conclusion |
+|---|---|---|
+|1. Provider interface?|[providers.py](../backend/apps/ai/providers.py): StructuredProvider.generate(ProviderRequest,RequestControl)→ProviderResult, typed usage | Reuse this one port; do not add another framework |
+|2. Supported providers?|Only FixtureAdapter is installed; Gemini/OpenAI below are historical candidates | No approved or implemented live adapter/model |
+|3. Fixture-specific pieces?|[services.py](../backend/apps/ai/services.py) permits exact FixtureAdapter only; durable service constructs it directly; serializers/React require fixture_demo/false/zero usage | A direct adapter substitution is deliberately blocked and would mislabel or reject live results |
+|4. Task/Subtask validation?|[validation.py](../backend/apps/ai/validation.py): exact ai.task-plan.v1,1–20 total nodes,3 child edges, unique refs, no cycles, valid priority/aware deadline, bounded text | Keep this independent parser after provider parsing; no assignment/status/tenant fields |
+|5. Proposal/confirmation?|[durable_services.py](../backend/apps/ai/durable_services.py), [models.py](../backend/apps/ai/models.py): scoped HMAC replay, original actor, explicit edited-plan confirmation, tenant→AI locks and atomic existing create_task/audit/outcome | Reuse confirmation guarantees; successful DB idempotency does not deduplicate overlapping paid dispatches |
+|6. Analyzer input?|[feedback_services.py](../backend/apps/ai/feedback_services.py): selected Review.comment through Deliverable→Task and nondeleted TaskComment.content, current nested manager authority | Existing source selector is sufficient; no broader source API/media fetch |
+|7. Allowed outbound data?|Currently none leaves the server. Future projection: Generator brief/explicit allowed time context; Analyzer authorized {ref,text} plus focus | Proposed egress only after data-policy approval; never serialize whole internal DTO |
+|8. Prohibited outbound data?|FeedbackSource also contains internal Profile/Workspace/Task IDs; public API selection has DB IDs | Strip these, actor/author identity, email, cookies, session, credentials, AuditLog, unrelated records and Deliverable URLs |
+|9. Timeout/retry/cancellation?|RequestControl has cooperative monotonic checks; current HTTP paths supply defaults without a deadline/disconnect callback; no network transport/retries | Browser abort prevents stale UI, not provider completion or billing; future transport needs real bounded I/O |
+|10. Tenant/RBAC?|Current can_manage_workspace_tasks: active Owner/Admin or Profile Member+Workspace ADMIN; current authority before/after work and on read/confirm/replay | Preserve this rule, SessionAuthentication/CSRF and active nested scope; no staff/Editor/Viewer shortcut |
+|11. Model output?|Strict32KiB request/64KiB response bounds, duplicate JSON keys/nonfinite/malformed inputs rejected, exact fields/enums/graphs and authorized citations | Validate trusted provenance and actual usage separately too; current generic ProviderResult is not a validated live ledger |
+|12. Existing persistence enough?|Validated TaskPlan JSON fits payload, but AiProposal requires scenario_id and has no provider/model/mode/usage; AiOperation records successful GENERATE/CONFIRM only | Live provenance and in-flight spend protection need a separately reviewed design; do not overload scenario_id/plan JSON |
+|13. Analyzer persistence required?|Current advisory workflow is intentionally stateless | No analysis persistence justified; billable request accounting can omit analysis text |
+|14. Default-off gates?|settings.py only exposes default-false AI_FIXTURE_ENABLED from DJANGO_AI_FIXTURE_ENABLED; development/nonproduction checks fail closed | No live selector/key/flag exists; do not reinterpret fixture flag as live permission |
+|15. Necessary changes now?|Audit, compatibility/data/cost design, fixture regression and Owner package | No safe justified runtime edit before provider/contract decisions; avoid speculative scaffolding |
+
+Important source detail: an optional validated synthetic brief IS passed into
+ProviderRequest when supplied (durable_services.py's validated_input branch);
+only an absent brief falls back to the scenario brief. FixtureAdapter deliberately
+does not interpret that text. Its HMAC fingerprint binds the provided brief, but
+no raw brief is stored in proposal/operation/AuditLog or echoed. A future live
+Generator needs a truthful brief-based request mode, rather than requiring a
+synthetic scenario to pretend it represents a real model.
+
+### Proposed integration boundaries — not implemented or approved
+
+Keep React→existing session/CSRF API→current tenant/manager resolution→AI
+application orchestration→one provider port→strict domain validator. Keep provider
+I/O outside tenant/database transactions. A separate live orchestration path must
+not weaken FixtureApplicationService's exact-adapter safety gate by accident.
+The future adapter should accept an injected transport for deterministic offline
+tests; current stdlib/dependencies are enough to evaluate this before choosing an
+SDK. No microservice, Celery, Redis, WebSocket, tool calling or browsing is needed
+for the bounded initial synchronous text-only design.
+
+Generator: authorize→validate actual brief and approved time context→reserve an
+approved request/budget→dispatch once→validate plan/provenance/usage→re-authorize→
+store a truthful proposal→human previews/edits→explicit confirmation through
+unchanged atomic Task services. Provider output never calls create_task directly,
+assigns users or changes status. Existing confirmation must remain provider-free.
+
+Analyzer: authorize exact Task and selected sources→project only S1…Sn/text and
+focus→approved reservation/dispatch→validate ai.feedback.v1 and citations against
+that exact source set→re-authorize/re-read source text→return advisory analysis.
+No Task/Review/Comment/Notification/Audit or analysis-history mutation is added.
+Source deletion or revocation while work is pending discards the result; content
+already transmitted or delivered cannot be retracted. Do not promise that session
+expiry or browser cancellation undoes an external request or its cost. Future
+live paths must explicitly revalidate session/account state before publishing.
+
+Retain the existing fixture request/response contract exactly. A future live
+mode requires an explicit versioned/discriminated envelope, truthful
+generated_by_ai/provider/model/usage, and matched React validators/copy. Do not
+return live output as fixture_demo, fabricate zero usage, silently coerce a live
+response into fixture DTOs, or silently fall back to a simulation/provider/model.
+No live API route, DTO branch or availability flag is implemented by this review.
+
+### Data handling and prompt security proposal
+
+| Field/data | Current state | Future explicit allowlist / retention gate |
+|---|---|---|
+| Raw Generator brief | Transient validated input; persisted HMAC digest only | Only text approved for the selected provider/data mode; never raw brief in logs/DB/errors |
+| Selected feedback | Current authorized Review/Comment text, bounded within one Task | Send only {ref,text}; focus optional; never whole Task/Workspace or serialized FeedbackSource |
+| Time context | Internal GeneratorInput supports aware deadline/reference/timezone; current HTTP does not expose all of it | Send only explicit validated context; null/warning for ambiguous dates, no invented month-bound rule |
+| User/tenant/source DB IDs | Required locally for access, replay, source mapping | Keep local; request correlation must not leak those IDs to a provider |
+| Provider response / generated plan | Fixture only today | Validate untrusted JSON; generated text can copy confidential input, so derived-data retention needs approval too |
+| Logs/telemetry | Static safe AIError/allowlisted fields; no raw brief/feedback | Only approved coarse feature/outcome/latency/token/cost/model metadata; no prompt/response/headers/provider error bodies |
+| Credentials | No key or live configuration in this task | Backend secret configuration only; no React bundle, query-string key, DB key store, .env inspection or startup activation |
+
+Future system instructions and untrusted JSON data must be separate. Briefs,
+feedback and focus never become system/tool instructions. No tools, URL fetching,
+code execution or provider-selected roles. Require exact domain JSON after any
+provider-native schema; escape text in React. Unknown fields, hallucinated IDs,
+foreign citations, excessive lists/text, bad dates/priority/graphs, refusal,
+truncation and empty output fail closed. A prompt alone is not an injection
+defense; a fixed-fixture injection test does not establish real-model resistance.
+
+### Provider evidence and selection gate
+
+Official documents accessed **2026-11-08** using OpenAI Docs and public Google
+documentation only; these GETs are documentation retrieval, not model requests.
+Google's public pages redirected to aistudio.google.com and returned Markdown;
+the browser tool could not render that content. Direct public HTTP GETs succeeded
+(200); ignored text evidence is under .local_backups/HT-AI-P4-04A/google-*.txt.
+
+- [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses): use supported strict JSON Schema, including additionalProperties:false; still run HustlyTasker's domain validation and handle refusal/incomplete output.
+- [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data): API content is not used for training by default unless sharing is opted into. Storage/abuse-monitoring retention and account eligibility are separate; store:false alone is not Zero Data Retention. Account terms/settings must be reviewed before private content.
+- [Gemini structured output](https://aistudio.google.com/docs/structured-output): supports a JSON Schema subset; some constraints need application validation and syntactic output does not prove semantic accuracy.
+- [Gemini terms](https://aistudio.google.com/docs/terms): unpaid treatment can include product/model improvement and human review; sensitive/confidential/personal data is unsuitable. Paid-service/account/jurisdiction conditions differ; paid processing is not a zero-retention guarantee. No inference about this Owner's account is made.
+- [Gemini rate limits](https://aistudio.google.com/docs/rate-limits): project-level quotas and variable capacity are operational limits, not HustlyTasker's cross-tenant spending ledger.
+
+Recommendation, NOT approval: evaluate a stable Gemini text model with native
+structured JSON for an inexpensive synthetic-only live demo if the Owner accepts
+the relevant data terms; evaluate a paid Gemini or OpenAI text model/account mode
+for confidential data only after terms/region/retention review. Choose the exact
+model by schema compatibility, Vietnamese task/feedback evaluations, latency,
+measured token cost and account availability, not popularity. Neither provider,
+model, free tier, account quota, Vietnamese quality nor billing ceiling is verified
+by this task. Historical pricing below is not a current activation quotation.
+No automatic paid fallback or cross-provider failover is proposed.
+
+### Cost, reliability and configuration proposal
+
+Existing fixture3/minute20/day process-cache limits remain approximate attempts,
+not global spend protection. Current live budget remains0. Before paid dispatch,
+approve a durable reservation/claim with User/Profile/Workspace/feature/body/key
+scope, current model/pricing version and concurrency bounds. Reserve worst-case
+cost from bounded input plus approved maximum output/reasoning tokens; settle
+actual usage and preserve an ambiguous state if timeout/disconnect leaves outcome
+unknown. Do not release a possibly consumed reservation or issue another request
+blindly. Provider project caps/alerts supplement, not replace, this accounting.
+Currency units, pricing freshness, reset timezone, budget period, caps and limits
+need an explicit decision; no new numeric budget is invented as accepted policy.
+
+Current overlapping first-generation requests can both execute the fixture before
+one winning proposal/replay commits. Keep current safe zero-cost behavior, but
+do not confuse that with at-most-one billable dispatch. No shared spend/claim
+store exists in AiOperation. A minimum additive provenance/accounting design
+needs Owner review, inventory/backfill/rehearsal and separate migration approval.
+Stateless Analyzer does not require retained analysis text to meter dispatch.
+
+Future I/O: HTTPS-only allowlisted provider endpoint/model, no caller-selected
+URL/redirect/credential target; bounded bytes before full decoding, explicit
+connect/read/overall deadline and output-token cap. Validate operator config
+before dispatch and honor remaining RequestControl deadline. Check cancellation
+before/after I/O; do not claim a synchronous HTTP client can terminate every
+provider computation. Start with zero automatic retries; any later bounded retry
+needs provider-specific idempotency/cost/retry-after rules. Timeout/429/5xx/network,
+refusal/malformed/truncated results map to existing static AIError categories;
+discard raw error bodies and never downgrade invisibly to fixture success.
+
+Proposed configuration names only (NOT added, loaded or enabled):
+DJANGO_AI_LIVE_ENABLED (defaultfalse), DJANGO_AI_PROVIDER, DJANGO_AI_MODEL,
+AI_PROVIDER_API_KEY, AI_PROVIDER_TIMEOUT_SECONDS, AI_MAX_OUTPUT_TOKENS,
+AI_ALLOWED_DATA_MODE and approved global/Profile budget/concurrency settings.
+Missing, invalid, unsupported or unapproved configuration must fail closed.
+Keep DJANGO_AI_FIXTURE_ENABLED independent. Do not load secrets, infer data
+approval from key presence or activate live processing during startup.
+
+### Required offline proof and staged next task
+
+| Test area | Existing evidence / next implementation requirement |
+|---|---|
+| Fixture contracts, disabled mode, invalid JSON/fields/size/enums/deadline/depth/citations | Existing apps.ai tests; re-run once in P4-04A, actual result in HANDOVER |
+| Tenant/CSRF/current authority/source revocation/no domain mutation/confirm replay+rollback | Existing isolated API/service tests; do not claim live-provider behavior from them |
+| Hostile brief/feedback | Fixture test proves inert fixture input only; future fake transport must inspect separated data messages and reject unsafe output |
+| Real adapter timeout/429/unavailable/truncated response/usage/provenance | NOT IMPLEMENTED/NOT RUN: requires approved adapter, injected fake transport, blocked network and invented inputs |
+| Cancellation/session change before/after dispatch | Future controlled transport must prove discarded results and safe reservation handling; no stopped-billing claim |
+| No secrets/private text in requests/logs/errors | Future exact outbound allowlist assertions, canary log tests and sanitized transport exceptions |
+| Paid dispatch/retry/concurrency/budget | Future isolated transactional reservation/reconciliation tests, including ambiguous completion; no fixture proxy for spend proof |
+| React compatibility and website | Existing fixture UI remains; manual checklist in FRONTEND_GUIDE, Owner acceptance PENDING. No new live React branch or browser rerun required here |
+
+Suggested next task after approval: an **offline-only provider adapter slice**
+for the named model/API, strict projections/schemas, injected transport and real
+timeout/error controls, still default-off and unconnected to billable runtime.
+Review provenance/dispatch/budget schema separately before migrations or paid
+application wiring. Only after those gates consider isolated fake-transport
+end-to-end integration, then a separately authorized capped synthetic live smoke.
+Customer-data activation and production release each require their own approval.
+
+Owner decisions actually required: (1) provider/model/API and synthetic versus
+private-data account mode; (2) exact permitted content/terms/region/retention and
+derived-proposal handling; (3) cost/concurrency caps plus durable enforcement;
+(4) reviewed provenance/dispatch accounting contract/schema scope. Existing
+manager RBAC, human confirmation, stateless Analyzer, no automatic mutations,
+Task hierarchy and tenant architecture are ALREADY APPROVED and not reopened.
+Do not begin the proposed next task, migration, key setup, billing or live call.
+The permanent exact predeployment Owner question remains mandatory.
+
+## Historical checkpoint — HT-AI-P4-03A — Feedback Analyzer foundation
+
+**HT-AI-P4-03A — DESIGN AND FIXTURE BACKEND COMPLETE / OWNER REVIEW GATE**,2026-11-02.
+The current Owner delegates routine technical choices for a bounded analysis-only
+backend slice. Reuse the existing FeedbackInput/FeedbackAnalysis contracts,
+strict citation validator, FixtureAdapter and FixtureApplicationService rather
+than another provider system. Detailed source map and current scope are in
+[FEEDBACK_ANALYZER_FOUNDATION](FEEDBACK_ANALYZER_FOUNDATION.md).
+
+The chosen slice is stateless POST under an authorized Task, selecting current
+Review.comment/nondeleted TaskComment.content by bounded typed references.
+Current active manager/internal-review authority and deep tenant scope are
+required before/after analysis; stale sources fail closed. The output is fixed
+fixture-only advisory text with synthetic provenance and authorized S1…Sn
+citations (only the first selected source is cited by the fixed example; this is
+not semantic reading). It cannot mutate Review/Task/Comment, create Notifications or fetch a
+Deliverable URL. No semantic interpretation of arbitrary text, media processing,
+live SDK/provider/key/billing or frontend is implemented by this scope.
+
+AiProposal and AiOperation remain Generator-specific; ANALYZE is not an allowed
+stored operation. There is no analysis row, saved replay, expiry store, confirm
+or applying suggestions. Existing3/minute +20/day process-cache limits and
+disabled-by-default fixture/environment guard are reused without changing
+persistent configuration. Repeated stateless fixture requests reauthorize and
+recompute; the historical general unsafe-AI durable-idempotency proposal below
+does not force a new ledger for this no-write/no-cost slice. Generator's durable
+confirmation remains unchanged. Any later live or persisted analysis needs its
+own cost/idempotency/source-retention/access/migration review.
+Current process-local throttles are not a distributed multi-worker budget.
+Pre/post source/authority checks are optimistic, not serializable locking; they
+cannot retract a delivered response or prevent changes after the final read.
+
+Current isolated AI215/215 PASS15.272s (43 new Analyzer tests), full719/719
+PASS217.696s, actual launcher/Python exits0 and owned DB/container/network cleanup
+verified. Dependency/Django/model drift/migration graph/full chain pass. Final
+development29-table row/schema/sequence/history/cluster comparison is exact:
+36 migrations/3 Users/2 Sessions/1 Profile/membership/Workspace/Task,Reviews/Comments/
+AI0. Of235 existing runtime/test baselines,232 unchanged; intended old edits are
+the safe error enum, route and service docstring. No schema/frontend/env/flag/
+provider/data write; final tested hashes stable. Historical676/537/30 below are
+P4-02C evidence only; no frontend/browser/live run occurred for P4-03A.
+FE05 and P4-02C manual Owner acceptance
+remain unverified. The permanent Owner predeployment readiness/authorization gate
+applies even if tests pass; no externally accessible rollout is authorized.
+
+## Historical checkpoint — HT-AI-P4-02C — fixture React integration
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**,2026-11-02. The Owner authorizes
+the fixture Generator React preview/edit/confirm UI and separately approved an
+optional synthetic brief≤6,000. This updates the historical scenario-only HTTP
+restriction below, not provider/private-data policy or the Task/schema design.
+R3 already applied exact ai.0001 on development; P4-02C needs no migration.
+
+The architecture now connects existing React Task navigation → same session/CSRF
+client → permission-checked OPTIONS and generate/read/confirm APIs → existing
+durable fixture service. OPTIONS exposes actual disabled/enabled state and public
+scenario samples; it grants no authority and consumes no generation quota.
+The optional validated brief is HMAC-bound when present, with old absent-field
+canonicalization preserved; raw brief is neither persisted nor echoed/logged.
+It does not make the fixed fixture analyze input or detect/redact real data.
+
+Preview edits title/description/priority/deadline locally within ai.task-plan.v1;
+parent hierarchy stays fixed. No draft-save API is added. An explicit native
+dialog freezes the complete edited confirmation; existing tenant→proposal→
+operation locking and unchanged create_task remain the only creation path.
+Generate never creates Tasks; human confirmation creates PENDING/unassigned
+Tasks atomically with existing audits and immutable recovery mapping.
+
+Known-ID GET reconciliation follows an ambiguous confirmation; no blind fresh
+key/ordinary Task POST fallback. Explicit same frozen key/body replay requires
+a successful AVAILABLE read with matching ID/revision. Stale confirmation is
+canceled and current content needs fresh human review. User/Profile/Workspace cache scoping,
+request aborts and cache removal prevent late cross-user/tenant preview reuse.
+
+Targeted AI172/172 PASS12.169s and full isolated backend676/676 PASS213.712s are
+current results; launcher and actual Python container exits0 plus owned cleanup
+are verified. Frontend537/537 PASS24.35s/18 files; typecheck/Biome/build exit0.
+Real Generator enabled4/4, disabled1/1 and onboarding3/3 browser checks pass with
+actual process exits0/cleanup; four-size axe/keyboard/focus and representative
+visual checks pass. Foundation6/6, Workspace/Task7/7, collaboration7/7, whole
+workflow1/1 and account1/1 complete all8 real isolated Chromium suites30/30;
+actual exits0/owned cleanup and final0 owned test containers/networks verified.
+Final read-only
+development29-table fingerprints/schema/sequences/history/identity and45
+protected source hashes match the pre-task baseline exactly.
+Initial browser2/4 and unit527/537 failures are retained with corrected final
+runs. Historical02B/FE05 results below are not substituted. Nondurable drafts/
+SPA Back limitations, advisory build chunk size and unverified manual development
+acceptance remain explicit. Live providers, Analyzer, paid or
+automatic fallback, physical purge and shared quotas remain absent/gated.
+Persistent development fixture flags and private configuration are unchanged.
+Stop at Owner review; no following implementation or feature enablement begins.
+
+## Historical checkpoint — HT-AI-P4-02B — IMPLEMENTATION COMPLETE
 
 **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL / OWNER
 REVIEW.** This closes only the approved fixture-only Generator backend slice.

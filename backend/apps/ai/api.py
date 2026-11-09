@@ -19,7 +19,9 @@ from apps.workspace.serializers import StrictInputSerializer
 from apps.workspace.views import TenantApiViewMixin
 
 from . import durable_services
+from .contracts import ValidationLimits
 from .errors import AIError
+from .validation import validate_generator_input
 
 
 MAX_REQUEST_BYTES = 32 * 1024
@@ -71,11 +73,22 @@ class SafeAIInputSerializer(StrictInputSerializer):
 
 class GenerateProposalSerializer(SafeAIInputSerializer):
     scenario_id = serializers.CharField(max_length=80, trim_whitespace=False)
+    brief = serializers.CharField(
+        required=False, max_length=6000, allow_blank=False, trim_whitespace=False,
+    )
 
+    @sensitive_variables("data")
     def to_internal_value(self, data):
         if isinstance(data, Mapping) and "scenario_id" in data and type(data["scenario_id"]) is not str:
             raise serializers.ValidationError({"scenario_id": ["A scenario identifier is required."]})
+        if isinstance(data, Mapping) and "brief" in data and type(data["brief"]) is not str:
+            raise serializers.ValidationError({"brief": ["A synthetic text brief is required."]})
         return super().to_internal_value(data)
+
+    @sensitive_variables("value")
+    def validate_brief(self, value):
+        # Reuse the bounded text contract; this does not turn the fixture into AI.
+        return validate_generator_input({"brief": value}, ValidationLimits()).brief
 
 
 class ConfirmProposalSerializer(SafeAIInputSerializer):
@@ -158,10 +171,22 @@ class ProposalApiMixin(TenantApiViewMixin):
 
 
 @method_decorator(never_cache, name="dispatch")
-@method_decorator(sensitive_post_parameters("payload"), name="dispatch")
+@method_decorator(sensitive_post_parameters("payload", "brief"), name="dispatch")
 class ProposalGenerateView(ProposalApiMixin, APIView):
     http_method_names = ("post", "options")
     throttle_classes = (FixtureGenerationMinuteThrottle, FixtureGenerationDayThrottle)
+
+    def get_throttles(self):
+        # Read-only capability discovery must not consume generation attempts.
+        if self.request.method == "OPTIONS":
+            return []
+        return super().get_throttles()
+
+    def options(self, request, *args, **kwargs):
+        # Existing permission checks run before this standard metadata response.
+        response = super().options(request, *args, **kwargs)
+        response.data["ai"] = durable_services.fixture_metadata()
+        return response
 
     def post(self, request, **kwargs):
         serializer = GenerateProposalSerializer(data=request.data)

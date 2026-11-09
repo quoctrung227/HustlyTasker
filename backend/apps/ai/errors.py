@@ -12,6 +12,7 @@ class ErrorCode(str, Enum):
     RATE_LIMITED = "RATE_LIMITED"
     BUDGET_EXCEEDED = "BUDGET_EXCEEDED"
     PERMISSION_DENIED = "PERMISSION_DENIED"
+    NOT_FOUND = "NOT_FOUND"
     STALE_CONTEXT = "STALE_CONTEXT"
     CANCELLED = "CANCELLED"
     AI_REFUSED = "AI_REFUSED"
@@ -31,6 +32,7 @@ _MESSAGES = {
     ErrorCode.RATE_LIMITED: "The request limit was reached.",
     ErrorCode.BUDGET_EXCEEDED: "The configured spending limit was reached.",
     ErrorCode.PERMISSION_DENIED: "The operation is not authorized.",
+    ErrorCode.NOT_FOUND: "The requested resource is not available in this tenant scope.",
     ErrorCode.STALE_CONTEXT: "The authorized context has changed.",
     ErrorCode.CANCELLED: "The operation was cancelled.",
     ErrorCode.AI_REFUSED: "No usable proposal was returned.",

@@ -226,7 +226,7 @@ class DurableProposalApiTests(APITestCase):
         self.assertEqual(Task.objects.count(), 0)
 
     def test_provider_mode_brief_or_unknown_fields_are_rejected_without_echo(self):
-        for field in ("brief", "provider", "model", "fixture_mode", "workspace_id", "SYNTHETIC_PRIVATE_FIELD"):
+        for field in ("provider", "model", "fixture_mode", "workspace_id", "SYNTHETIC_PRIVATE_FIELD"):
             cache.clear()
             with self.subTest(field=field):
                 response = self.client.post(self.url(), {"scenario_id": "subtitle-check-v1", field: "synthetic-private-value"},

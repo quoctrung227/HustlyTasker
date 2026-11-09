@@ -405,6 +405,60 @@ def profile_invitations_visible_to_managers(context):
     return queryset.distinct()
 
 
+def profile_members_visible_to_managers(context):
+    """Same-Profile governance roster; ordinary members gain no new access.
+
+    Repeat the caller's current authority in the lazy queryset so a previously
+    resolved context cannot expose a roster after revocation or role changes.
+    Inactive membership history is readable to managers, never reactivated here.
+    """
+
+    current_context = _refresh_profile_access_context(context)
+    if not can_manage_profile_invitations(current_context):
+        raise TenantAccessNotFound()
+
+    return ProfileMembership.objects.filter(
+        profile_id=current_context.profile_id,
+        profile__memberships__id=current_context.membership_id,
+        profile__memberships__user_id=current_context.user_id,
+        profile__memberships__user__is_active=True,
+        profile__memberships__is_active=True,
+        profile__memberships__role=current_context.profile_role,
+    ).select_related("user").only(
+        "id", "profile_id", "role", "is_active", "joined_at",
+        "user__first_name", "user__last_name",
+    ).distinct()
+
+
+def profile_invitation_capabilities(context):
+    """Read-only UI hints from existing manager and invitation role ceilings."""
+
+    current_context = _refresh_profile_access_context(context)
+    if not can_manage_profile_invitations(current_context):
+        raise TenantAccessNotFound()
+
+    active = Profile.objects.filter(
+        id=current_context.profile_id,
+        status=Profile.Status.ACTIVE,
+        memberships__id=current_context.membership_id,
+        memberships__user_id=current_context.user_id,
+        memberships__user__is_active=True,
+        memberships__is_active=True,
+        memberships__role=current_context.profile_role,
+    ).exists()
+    roles = []
+    if active:
+        roles = [ProfileInvitation.Role.MEMBER]
+        if current_context.profile_role == ProfileMembership.Role.OWNER:
+            roles.append(ProfileInvitation.Role.ADMIN)
+
+    return {
+        "can_invite": active,
+        "can_manage_invitations": active,
+        "allowed_invitation_roles": roles,
+    }
+
+
 def _has_active_workspace_state(context):
     """Keep lifecycle state checks tied to the verified tenant context."""
 
