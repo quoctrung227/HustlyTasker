@@ -15,6 +15,7 @@ from .views import (
     WorkspaceArchiveView,
     WorkspaceDetailView,
     WorkspaceListView,
+    WorkspaceMemberCandidateListView,
     WorkspaceMemberDetailView,
     WorkspaceMemberListView,
     WorkspaceRestoreView,
@@ -118,6 +119,14 @@ urlpatterns = [
         ),
         WorkspaceMemberListView.as_view(),
         name="workspace-member-list",
+    ),
+    path(
+        (
+            "profiles/<str:profile_id>/workspaces/"
+            "<str:workspace_id>/member-candidates/"
+        ),
+        WorkspaceMemberCandidateListView.as_view(),
+        name="workspace-member-candidate-list",
     ),
     path(
         (

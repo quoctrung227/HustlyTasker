@@ -218,6 +218,7 @@ class WorkspaceMemberReadSerializer(serializers.ModelSerializer):
     profile_membership_id = serializers.UUIDField(read_only=True)
     display_label = serializers.SerializerMethodField()
     is_assignable = serializers.SerializerMethodField()
+    capabilities = serializers.SerializerMethodField()
 
     class Meta:
         model = WorkspaceMember
@@ -230,6 +231,7 @@ class WorkspaceMemberReadSerializer(serializers.ModelSerializer):
             "is_active",
             "joined_at",
             "updated_at",
+            "capabilities",
         )
         read_only_fields = fields
 
@@ -267,6 +269,63 @@ class WorkspaceMemberReadSerializer(serializers.ModelSerializer):
         # These are the current assignment service's target predicates. This
         # read-only hint cannot replace its locked mutation-time validation.
         return bool(eligible_profile_membership)
+
+
+    def get_capabilities(self, membership):
+        management = self.context.get("workspace_member_capabilities", {})
+        allowed_roles = management.get("allowed_roles", [])
+        mutable = bool(
+            management.get("can_add", False)
+            and membership.is_active
+            and membership.role in allowed_roles
+        )
+        profile_role = getattr(membership, "_target_profile_role", None)
+        if profile_role is None:
+            # Individual POST/PATCH responses are not annotated roster rows.
+            # Their new write hints fail closed without a verified context;
+            # still accurately explain the target's inherited authority.
+            profile_role = ProfileMembership.objects.filter(
+                id=getattr(membership, "profile_membership_id", None),
+                profile_id=membership.workspace.profile_id,
+                user_id=membership.user_id,
+                user__is_active=True,
+                is_active=True,
+            ).values_list("role", flat=True).first()
+        return {
+            "can_update": mutable,
+            "can_revoke": mutable,
+            "allowed_roles": list(allowed_roles) if mutable else [],
+            "has_inherited_access": profile_role in (
+                ProfileMembership.Role.OWNER,
+                ProfileMembership.Role.ADMIN,
+            ),
+        }
+
+
+class WorkspaceMemberCandidateReadSerializer(serializers.ModelSerializer):
+    """Selection identity uses ProfileMembership, never a global User ID."""
+
+    profile_membership_id = serializers.UUIDField(source="id", read_only=True)
+    profile_role = serializers.CharField(source="role", read_only=True)
+    display_label = serializers.SerializerMethodField()
+    has_inherited_access = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProfileMembership
+        fields = (
+            "profile_membership_id", "display_label", "profile_role",
+            "has_inherited_access",
+        )
+        read_only_fields = fields
+
+    def get_display_label(self, membership):
+        return membership.user.get_full_name().strip() or f"Thành viên {str(membership.pk)[:8]}"
+
+    def get_has_inherited_access(self, membership):
+        return membership.role in (
+            ProfileMembership.Role.OWNER,
+            ProfileMembership.Role.ADMIN,
+        )
 
 
 class WorkspaceMemberCreateSerializer(StrictInputSerializer):

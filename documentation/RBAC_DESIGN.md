@@ -1,6 +1,112 @@
 # HT-RBAC-DESIGN-P0-01
 
-## HT-FE-MEMBERS-01 — Existing governance exposed through React (2026-11-08)
+## HT-FE-WORKSPACE-MEMBERS-01 — Workspace access UI contract (2026-11-09)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** The current Owner authorizes
+Workspace member/access React integration and minimal migration-free APIs.
+Existing WorkspaceMember, services, roles, locks and authority remain unchanged;
+this is not new membership/RBAC design. Current backend/targeted final frontend,
+real browser and read-only development preservation gates pass as recorded below.
+Earlier839/801/14 are historical results only; manual Owner website acceptance
+remains pending and no deployment/next task is authorized automatically.
+
+| Current same-Profile actor | Workspace access | Read management data | Manage explicit Workspace roles |
+|---|---|---|---|
+| Profile Owner/Admin | Inherited across same-Profile Workspaces | Allowed | ADMIN/MEMBER/VIEWER |
+| Profile MEMBER + active Workspace ADMIN | Assigned Workspace only | Allowed | MEMBER/VIEWER; existing ADMIN row protected from delegated manager |
+| Profile MEMBER + active Workspace MEMBER(Editor) | Assigned Workspace only | Denied403 | None |
+| Profile MEMBER + active Workspace VIEWER | Assigned Workspace only, read-only | Denied403 | None |
+| Profile MEMBER without effective Workspace assignment | Denied404 | Denied404 | None |
+| Revoked/inactive/foreign identity | Denied | Denied | None |
+
+Session authentication/CSRF and current database identity/membership remain
+authoritative. Profile selection, known UUIDs, staff flags, legacy Workspace
+OWNER and transitional Workspace.owner never confer privileges. Active Profile
+membership is required even for delegated Workspace Admin. Profile Owner/Admin
+need no WorkspaceMember record; ordinary Members do. Neither Workspace creation
+nor Profile invitation acceptance automatically creates a Workspace assignment.
+
+Existing GET/POST members and PATCH/DELETE member-detail are reused. The new
+GET member-candidates endpoint is scoped to one authorized Workspace and returns
+only active same-Profile membership IDs, safe labels, Profile role and inherited
+access flag, excluding every active Workspace row. It is not access to the full
+Profile governance roster. Workspace Admin still gets403 on the Profile roster.
+Inactive historical Workspace rows can be reactivated by existing direct-add;
+active unsupported legacy rows are excluded, not repaired or overwritten.
+Profile Owner/Admin candidates retain inherited authority even if an explicit
+lower Workspace role is added. No global User ID/email directory is exposed.
+
+Roster root capabilities expose current can_add/allowed_roles/profile_role/
+workspace_role/has_inherited_access. Each row adds can_update/can_revoke/
+allowed_roles/has_inherited_access. These readonly hints use the current
+can_mutate_workspace_members predicate and existing actor/target role ceiling.
+workspace_role describes the resolver's effective context: inherited managers
+have null even when an explicit WorkspaceMember row also exists. It does not
+prove absence of a direct row or make a lower direct role their authority ceiling.
+They never replace locked mutation checks or become client-settable fields.
+Archived Profile/Workspace keeps manager roster read access, sets mutation hints
+false/allowed_roles empty and returns no candidates. Lazy selectors repeat actor
+scope; final response validation rejects role/identity drift and clears stale
+candidate data after archival. Current PostgreSQL tests verify joined names/
+target-role subqueries use one list evaluation query and zero serialization
+queries per prefetched roster/candidate list.
+
+No new last-Workspace-Admin rule is introduced. Profile Owner/Admin can revoke
+the last explicit ADMIN while inherited Profile governance remains; last-active
+Profile Owner protection is unchanged. Removing an explicit Workspace assignment
+from a Profile Owner/Admin does not remove their inherited access. Roster rows
+represent direct assignments, not all users with inherited management authority.
+
+Soft revoke preserves WorkspaceMember history and leaves Task/TaskAssignment/
+Deliverable/Review and Task status unchanged. Current authority checks block
+revoked ordinary members; Viewer downgrade retains read but denies execution.
+Regranting Editor can reactivate the effectiveness of a retained active
+TaskAssignment; there is no automatic Task unassignment or reassignment policy.
+Task assignment still targets active Profile MEMBER + Workspace MEMBER/Editor;
+no Workspace grant automatically assigns, starts or completes a Task.
+
+No model/migration/service/Task workflow, Invitation consent/role/identity,
+AI governance/flags or development data change is part of this task. React adds
+the section to existing Workspace detail, retaining User/Profile/Workspace-scoped
+cache/abort, explicit mutation confirmation, ordinary-refetch draft stability
+and unchanged session/CSRF handling. Backend remains authoritative at mutation.
+
+Fresh targeted PostgreSQL95/95 PASS9.634s and full863/863 PASS294.428s (one run),
+launcher/actual Python0 independently verified; dependency/Django/model/migration
+checks and owned cleanup PASS. Mocked API client67/67 PASS3.76s; final focused
+UI34/34 PASS12.40s after semantic fieldset/CSS correction and type/lint/build0.
+Broader frontend902/902 PASS51.11s preceded that semantic-only change and is not
+claimed to be a full run at the final source hash. Initial test import/required
+fixture/DTO expectation, mocked timing/cache metadata and semantic checks were
+corrected without relaxing policy/assertions. Real isolated Workspace browser
+4/4 PASS39.1s on first runab941585c1e94477ae8d1d951e04a374, launcher/Playwright/
+backend0 with owned database/resources removed. It exercises actual invitation→
+recipient register/accept→Editor grant→Task assignment/Start, role changes with
+retained WORKING/assignment state, revocation/stale-cache denial, archived/ceiling/
+CSRF/duplicate/cross-tenant checks. Four viewport/keyboard/axe/focus checks pass;
+375/1440 screenshots visually inspected. Fresh Profile Members/Invitation4/4
+PASS46.3s (runcfcf1c4def564696af6ca5a9c3446dd8), Task stability4/4 PASS20.3s
+(run9a56ad93957241c3b627f408c2e89b85) and Auth/CSRF/tenant6/6 PASS45.3s
+(runf5ccc4c5d8ee402fa07076269b4d6e9e) complete18/18 current real-browser checks.
+Every launcher/Playwright/backend exit0 with owned database/resource removal;
+no historical browser count is substituted.
+
+At2026-11-09T08:17:28Z the final READ ONLY development comparison exactly matches
+all29-table data/schema/constraints/indexes/sequences/history/identity properties,
+excluding transient connections.36 migrations/4 Users/2 Sessions/1 Profile/
+membership/Workspace/Task/3 AuditLogs preserved; WorkspaceMember/Invitation/AI0.
+ai.0002 remains UNAPPLIED and its three tables absent. No persistent fixture,
+schema/AI flag/credential/provider/external mail change occurred. Source/cleanup
+evidence and manual steps are recorded in HANDOVER. Manual Owner acceptance and
+real SMTP remain unverified; no next runtime task, rollout or deployment is
+started. Stop at **HT-FE-WORKSPACE-MEMBERS-01 — OWNER REVIEW GATE**.
+
+Source: [Workspace access predicates/selectors](../backend/apps/workspace/access.py),
+[existing locked membership services](../backend/apps/workspace/services.py),
+[Task execution/assignment services](../backend/apps/tasks/services.py) and
+[current API contract](API_DOCUMENTATION.md#ht-fe-workspace-members-01--workspace-access-contract).
+
+## Historical completed HT-FE-MEMBERS-01 — Existing governance exposed through React (2026-11-08)
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** The Owner authorizes migration-free
 organization member/invitation integration, not a second membership system or
@@ -1036,9 +1142,12 @@ Current Workspace write-validation contract:
 - The member roster is manager-only and actor-bound in SQL. It returns only
   supported effective assignments backed by an active User and active
   same-Profile ProfileMembership; stale/downgraded actor authority fails
-  closed. Results expose assignment ID, ProfileMembership ID, effective role,
-  active state, and timestamps only—never User ID, email, username, or other
-  PII. Only effective active assignments are listed.
+  closed. Results expose assignment ID, ProfileMembership ID, safe display label,
+  assignment eligibility, row role, active state, timestamps and read-only
+  capability/inherited-access hints—never global User ID, email or username.
+  Only effective active assignments are listed. The current bounded candidate
+  selector and management hint contract are documented above; no new mutation
+  authority is created.
 - Services re-resolve tenant authority under Profile-first locks and write
   `profile.archived/restored`, `workspace.created/updated/archived/restored`,
   or `workspace.membership.created/updated/revoked/reactivated` audit events in

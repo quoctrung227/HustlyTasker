@@ -558,6 +558,85 @@ def can_mutate_workspace_members(context):
     )
 
 
+def workspace_member_management_capabilities(context):
+    """Read-only hints for the existing, locked membership service policies."""
+
+    if not can_manage_workspace_members(context):
+        raise TenantAccessNotFound()
+
+    inherited = context.profile_role in (
+        ProfileMembership.Role.OWNER,
+        ProfileMembership.Role.ADMIN,
+    )
+    active = can_mutate_workspace_members(context)
+    roles = []
+    if active:
+        if inherited:
+            roles.append(WorkspaceMember.Role.ADMIN)
+        roles.extend((WorkspaceMember.Role.MEMBER, WorkspaceMember.Role.VIEWER))
+    return {
+        "can_add": active,
+        "allowed_roles": roles,
+        "profile_role": context.profile_role,
+        "workspace_role": context.workspace_role,
+        "has_inherited_access": inherited,
+    }
+
+
+def workspace_member_candidates_visible_to_managers(context):
+    """Bounded selection candidates, not an organization-wide User directory.
+
+    Keep the same current manager authority in the lazy SQL so a context that
+    is revoked before evaluation cannot reveal Profile candidates. Any active
+    Workspace row excludes a candidate, including unsupported legacy rows;
+    inactive historical rows may be reactivated by the existing add service.
+    """
+
+    if not can_manage_workspace_members(context):
+        raise TenantAccessNotFound()
+
+    actor_profile = ProfileMembership.objects.filter(
+        id=context.profile_context.membership_id,
+        profile_id=context.profile_id,
+        user_id=context.user_id,
+        user__is_active=True,
+        is_active=True,
+        role=context.profile_role,
+    )
+    active_workspace_membership = WorkspaceMember.objects.filter(
+        workspace_id=context.workspace_id,
+        user_id=OuterRef("user_id"),
+        is_active=True,
+    )
+    queryset = ProfileMembership.objects.filter(
+        profile_id=context.profile_id,
+        profile__status=Profile.Status.ACTIVE,
+        profile__workspaces__id=context.workspace_id,
+        profile__workspaces__status=Workspace.Status.ACTIVE,
+        user__is_active=True,
+        is_active=True,
+    ).annotate(
+        _actor_profile_active=Exists(actor_profile),
+        _has_active_workspace_membership=Exists(active_workspace_membership),
+    ).filter(
+        _actor_profile_active=True,
+        _has_active_workspace_membership=False,
+    )
+    if context.profile_role == ProfileMembership.Role.MEMBER:
+        actor_workspace = WorkspaceMember.objects.filter(
+            workspace_id=context.workspace_id,
+            user_id=context.user_id,
+            is_active=True,
+            role=WorkspaceMember.Role.ADMIN,
+        )
+        queryset = queryset.annotate(
+            _actor_workspace_admin=Exists(actor_workspace),
+        ).filter(_actor_workspace_admin=True)
+    return queryset.select_related("user").only(
+        "id", "role", "joined_at", "user__first_name", "user__last_name",
+    )
+
+
 def can_manage_workspace_lifecycle(context):
     """Only Profile managers may archive/restore an active Profile's Workspace."""
 
@@ -604,7 +683,7 @@ def workspace_members_visible_to_managers(context):
         user_id=OuterRef("user_id"),
         user__is_active=True,
         is_active=True,
-    ).order_by("id").values("id")[:1]
+    ).order_by("id")
     assignable_profile_membership = ProfileMembership.objects.filter(
         profile_id=context.profile_id,
         user_id=OuterRef("user_id"),
@@ -625,7 +704,8 @@ def workspace_members_visible_to_managers(context):
             WorkspaceMember.Role.VIEWER,
         ),
     ).annotate(
-        profile_membership_id=Subquery(active_profile_membership),
+        profile_membership_id=Subquery(active_profile_membership.values("id")[:1]),
+        _target_profile_role=Subquery(active_profile_membership.values("role")[:1]),
         _has_assignable_profile_membership=Exists(assignable_profile_membership),
     ).filter(
         profile_membership_id__isnull=False,

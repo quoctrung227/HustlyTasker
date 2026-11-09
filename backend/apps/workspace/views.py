@@ -19,6 +19,8 @@ from .access import (
     profile_invitations_visible_to_managers,
     profile_members_visible_to_managers,
     profiles_visible_to,
+    workspace_member_candidates_visible_to_managers,
+    workspace_member_management_capabilities,
     workspace_members_visible_to_managers,
     workspaces_visible_to,
 )
@@ -44,6 +46,7 @@ from .serializers import (
     ProfileReadSerializer,
     WorkspaceCreateSerializer,
     WorkspaceLifecycleSerializer,
+    WorkspaceMemberCandidateReadSerializer,
     WorkspaceMemberCreateSerializer,
     WorkspaceMemberReadSerializer,
     WorkspaceMemberUpdateSerializer,
@@ -477,6 +480,29 @@ class WorkspaceMemberListView(TenantApiViewMixin, generics.ListAPIView):
             self.workspace_access_context
         ).order_by("joined_at", "id")
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["workspace_member_capabilities"] = (
+            workspace_member_management_capabilities(self.workspace_access_context)
+        )
+        return context
+
+    def get_paginated_response(self, data):
+        response = super().get_paginated_response(data)
+        capabilities = workspace_member_management_capabilities(
+            self.workspace_access_context,
+        )
+        response.data["capabilities"] = capabilities
+        # Recheck after serialization too. Lifecycle changes must not leave
+        # enabled row controls next to a disabled response-level capability.
+        if not capabilities["can_add"]:
+            for row in response.data["results"]:
+                row["capabilities"].update({
+                    "can_update": False, "can_revoke": False,
+                    "allowed_roles": [],
+                })
+        return response
+
     def post(self, request, *args, **kwargs):
         serializer = WorkspaceMemberCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -499,6 +525,29 @@ class WorkspaceMemberListView(TenantApiViewMixin, generics.ListAPIView):
                 else status.HTTP_201_CREATED
             ),
         )
+
+
+@method_decorator(never_cache, name="dispatch")
+class WorkspaceMemberCandidateListView(TenantReadOnlyViewMixin, generics.ListAPIView):
+    serializer_class = WorkspaceMemberCandidateReadSerializer
+    permission_classes = (CanManageWorkspaceMembers,)
+
+    def get_queryset(self):
+        return workspace_member_candidates_visible_to_managers(
+            self.workspace_access_context,
+        ).order_by("joined_at", "id")
+
+    def get_paginated_response(self, data):
+        # Fail closed if the permission snapshot changed during evaluation.
+        capabilities = workspace_member_management_capabilities(
+            self.workspace_access_context,
+        )
+        response = super().get_paginated_response(data)
+        if not capabilities["can_add"]:
+            response.data.update({
+                "count": 0, "results": [], "next": None, "previous": None,
+            })
+        return response
 
 
 @method_decorator(never_cache, name="dispatch")

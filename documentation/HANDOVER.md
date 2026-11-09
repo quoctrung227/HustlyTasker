@@ -1,6 +1,150 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-11-08 — HT-FE-MEMBERS-01 OWNER REVIEW GATE
+## Current checkpoint — 2026-11-09 — HT-FE-WORKSPACE-MEMBERS-01 OWNER REVIEW GATE
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** No implementation blocker in
+this approved scope. Owner manual website acceptance and real email remain
+unverified; no next task, migration rollout or deployment has started.
+
+Owner authorizes minimal Workspace access/member React integration and any
+essential migration-free API gap only. Initial repository is CLEAN on main,
+HEAD c835904d4dca1b75299e0b07b9317c044e05c699 (Owner committed prior work).
+765 original file hashes/status are Git-ignored under
+.local_backups/HT-FE-WORKSPACE-MEMBERS-01/. No commit/reset/stash/credentials,
+development writes/migrations, AI flag/provider, or deployment authorized.
+ai.0002 must remain UNAPPLIED. Preserve Members-01 and Task stability completion.
+
+AUDIT DONE — source-backed matrix shared before code:
+- Real WorkspaceMember(User FK, unique workspace+user), ADMIN/MEMBER(Editor)/
+  VIEWER; legacy OWNER fails closed. Profile Owner/Admin inherit all same-Profile
+  Workspace read/management without explicit rows. Profile MEMBER needs an active
+  supported WorkspaceMember; no automatic grant on Profile acceptance/create.
+- Profile Owner/Admin assign/manage all3 Workspace roles. Workspace ADMIN only
+  MEMBER/VIEWER and cannot update/revoke existing ADMIN. No invented last-WS-Admin
+  rule or target-Profile-Owner protection; removing an explicit manager row does
+  not remove inherited Profile authority. Archived managers may read, not mutate.
+- Existing GET/POST members + PATCH/DELETE members/{membership_id} are reused.
+  POST target_profile_membership_id/role =>201 new,200 reactivate,409 duplicate;
+  PATCH role=>200, DELETE soft revoke=>204. Current services lock/revalidate/audit.
+- Tasks only assign active Profile MEMBER + Workspace MEMBER; actual current
+  assignment/state still required for execution. Revoke/downgrade preserves
+  Task/TaskAssignment/Deliverable/Review/status; regrant can make old active
+  assignments effective again. No auto-unassignment is claimed or added.
+
+IMPLEMENTED AND VERIFIED:
+- Backend workspace access/serializers/views/urls, new test_workspace_access_api.py
+  (24 tests) and additive expected DTO fields in workspace/test_write_api.py and
+  tasks/test_identity_api.py. New GET member-candidates and GET members capability envelope;
+  no models/migrations/services changes. Active same-Profile candidate identity,
+  no active WS row, sanitized labels and role ceilings; archived candidates empty.
+- Extended WorkspaceMembers.tsx + new34 tests reuse the inline section,
+  native dialogs, User/Profile/Workspace scope, nonoptimistic grant/role/revoke.
+- New workspace-access.ts +67 tests reuse the existing transport/CSRF. Tenant
+  page adds a discoverable #workspace-members anchor and current User scope;
+  safe static role/target errors, new isolated runner suite and4-case real E2E.
+  No second API client, route/store or invitation-by-email workflow.
+- Root read full skill/master and executed offline UX confirmation/success search
+  and React async-cleanup searches via existing dependency image. Existing
+  tokens/keyboard/dialog patterns retained. Native fieldset action grouping and
+  one small CSS reset preserve existing spacing without a new theme.
+  No new design system, SDK or infrastructure. Local Python PATH absence is
+  bypassed with existing isolated Python image, not venv installation/recreation.
+
+READ-ONLY DEVELOPMENT BASELINE: original container49ef9315..., volume
+docker_postgres_data,127.0.0.1:5432,hustlytasker_db,PG16.14/Engine29.8.2 verified.
+29 tables/36 migrations/4 Users/2 Sessions/1 Profile/membership/Workspace/Task/
+3 AuditLogs; WorkspaceMember0,Invitation0,AI0; ai.0002 unapplied. Snapshot stored
+as development-before.json; never print its row hashes/whole payload.
+
+### Actual verification and retained earlier attempts
+
+| Check | Actual current-task evidence |
+|---|---|
+| Backend targeted |95/95 PASS9.634s, run78fe5a21db67485b929f1c2b46b5d075 |
+| Full isolated backend (once) |863/863 PASS294.428s, run748db0386bde47ac99acb1dea2aeb720 |
+| Backend safety/checks | Both launcher/actual Python0 independently recorded; pip/Django/model drift/graph/full isolated chain and owned DB removal PASS. PG137 is intentional disposable-container cleanup |
+| New frontend API |67/67 PASS3.76s, mocked DTO/transport checks, launcher0 |
+| Final Workspace UI |34/34 PASS12.40s, includes final semantic markup, launcher0 |
+| Broader frontend (once) |902/902 PASS51.11s,26 files, launcher0; before final semantic-only fieldset/CSS reset. No mutation handler/business logic changed afterward |
+| Final quality | TypeScript/Biome85 files/build exit0, build8.58s; existing575.27kB chunk advisory remains, no unrelated bundle refactor |
+| Workspace real Chromium |4/4 PASS39.1s, runab941585c1e94477ae8d1d951e04a374, first run |
+| Profile Members regression |4/4 PASS46.3s, runcfcf1c4def564696af6ca5a9c3446dd8 |
+| Task stability regression |4/4 PASS20.3s, run9a56ad93957241c3b627f408c2e89b85 |
+| Auth/CSRF/tenant foundation |6/6 PASS45.3s, runf5ccc4c5d8ee402fa07076269b4d6e9e |
+| Browser exits/cleanup |18/18 actual Chromium cases, each launcher/Playwright/backend0 and owned DB/resources removed |
+| Responsive/accessibility |375/768/1440/812x375 keyboard/focus/reflow/reduced-motion/axe PASS;375/1440 screenshots visually inspected |
+
+Full frontend source hashes and exact two-file semantic follow-up are retained
+as frontend-full-source.json / frontend-semantic-followup.json. Final34, quality
+and all18 browser tests verify that last markup; broad902 is not misrepresented
+as running again on an identical final hash. All16 final source hashes match
+tested-source.json; backend7 matches backend-tested-source.json.
+
+Initial backend72-discovery attempt failed on test import/required Task fixture
+and additive response-envelope expectation; fixed test-only. Initial focused
+frontend179 ran173 PASS/6 FAIL: corrected tests assert absence of private data
+rather than disabled-query metadata, and wait for actual batched DOM/effects.
+All hidden-state/abort/stale-submit assertions remain. Initial quality fixes
+remove invalid Testing Library exact options, make error-focus dependencies real
+and use native fieldset grouping/CSS reset. No suppressions or policy weakening.
+attempt-1/attempt-2/before-semantic logs remain; no failed attempt is called PASS.
+
+The new browser journey performs real React invitation/registration/acceptance,
+Workspace Editor grant, Task create/assign/Start, Viewer/Editor update and revoke.
+Read-back/negative authorization probes alone use direct API. Locmem code
+extraction is private test-only and in memory; no external email/provider calls.
+Revoke removes stale recipient content/returns404 while Task/assignment remain.
+Same-node grant/Task forms survive real focus/visibility refresh. Other old
+collaboration/work-management/AI browser suites were not rerun; their prior
+results stay historical, while full current backend/frontend regressions pass.
+
+### Final preservation and files changed
+
+At2026-11-09T08:17:28Z the READ ONLY development snapshot exactly matches every
+original29-table data/schema/constraint/index/sequence/history/cluster property,
+excluding transient connections.36 migrations/4 Users/2 Sessions/1 Profile/
+membership/Workspace/Task/3 AuditLogs retained; WorkspaceMember/Invitation/AI0.
+ai.0002 remains UNAPPLIED with its three tables absent. Original container,
+volume and loopback binding verified; no services/volumes restarted or deleted.
+All seven isolated backend attempts/browser runs have0 owned containers/networks.
+765-file comparison has0 missing/unexpected changes;16 frozen code hashes match.
+AI/models/migrations/services/AuthProvider/AGENTS/README and other source preserved.
+No .env/credentials read, persistent fixture, AI flag/call, commit or push.
+
+Task changes26 files:16 code/test and10 affected docs. Existing backend:
+apps/workspace/{access,serializers,views,urls,test_write_api}.py and
+apps/tasks/test_identity_api.py; new apps/workspace/test_workspace_access_api.py.
+Existing frontend: src/features/workspaces/WorkspaceMembers.tsx,
+src/pages/tenants.tsx,src/services/api/client.ts,src/styles.css. New frontend:
+src/features/workspaces/WorkspaceMembers.test.tsx; src/services/api/workspace-access.ts
+and workspace-access.test.ts; e2e/workspace-members.spec.ts. Existing runner:
+scripts/test-frontend-integration.ps1 (suite mapping only; no new fixture setup).
+Docs: HANDOVER,PROGRESS,PROJECT_ROADMAP,REQUIREMENT_STATUS,CHANGELOG,
+API_DOCUMENTATION,RBAC_DESIGN,FRONTEND_GUIDE,PROJECT_CONTEXT,FRONTEND_MVP_ACCEPTANCE.
+Ignored evidence holds all receipts, snapshots/hashes, cleanup and final link/
+whitespace verification. No new database schema documentation is needed.
+
+### Limits and exact next step
+
+REAL EMAIL DELIVERY NOT VERIFIED; invitation tests use locmem. Profile role/
+remove, recipient inbox/preview, live AI, production and remote CI are not newly
+implemented/verified. Broader frontend semantic-follow-up distinction above is
+intentional; no extra full-suite repeat was needed for two markup-only files.
+Manual Owner website acceptance remains PENDING. Existing process-local throttle
+and large bundle limits remain; no production-ready claim.
+
+Owner next follows the Workspace section in FRONTEND_GUIDE: invite/explicit
+Profile accept, open intended Workspace, grant Editor, assign/Start, confirm
+Viewer update/revoke and verify access/history. Those real development writes
+were NOT performed by the agent. No code work remains in this approved task.
+Suggested later priority is Owner acceptance then separately scoped Profile
+membership role/remove governance/API/UI; do not invent those contracts here.
+Await a new Owner instruction. Do not rerun unchanged tests/start another task
+or apply ai.0002. **STOP: HT-FE-WORKSPACE-MEMBERS-01 — OWNER REVIEW GATE.**
+
+---
+
+## Historical checkpoint — 2026-11-08 — HT-FE-MEMBERS-01 OWNER REVIEW GATE
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Manual Owner website acceptance
 and real email delivery remain unverified. No next task or rollout has started.

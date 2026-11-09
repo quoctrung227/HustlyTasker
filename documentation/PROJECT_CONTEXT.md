@@ -64,9 +64,33 @@ Container:
 
 Current Phase:
 
-PHASE 4 - Organization Members/Invitation review / AI development migration pending
+PHASE 4 - Workspace access integration / AI development migration pending
 
-Current task — 2026-11-08:
+Current task — 2026-11-09:
+
+`HT-FE-WORKSPACE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE`
+
+Workspace access uses the existing WorkspaceMember(User FK) and approved
+ADMIN/MEMBER(Editor)/VIEWER roles. Profile Owner/Admin inherit same-Profile
+Workspace governance without explicit rows; ordinary Profile MEMBER requires
+effective explicit access. Profile acceptance/Workspace creation never auto-adds
+membership. Scoped candidate reads and current/per-row hints now support React
+grant/role/revoke on Workspace Detail using existing locked mutation services.
+Roster is explicit assignments, not an exhaustive list of inherited managers.
+Removing such a row never removes inherited authority. There is no separate
+last-Workspace-Admin rule; last-active-Profile-Owner protections remain unchanged.
+
+Only active Profile MEMBER + Workspace MEMBER is a Task assignee. Revoke/downgrade
+preserves Task/history/active assignment; runtime access/execution revalidation
+blocks the revoked actor, and regrant may make an old assignment effective again.
+No schema/services/workflow/AI/auth change. Current backend863/targeted95,
+API67/finalUI34 and real browser18 PASS; broader frontend902 precedes only the
+final semantic-only fieldset reset, verified by final focused/browser/quality
+checks. Exact development preservation confirmed,36 migrations/4 Users/2 Sessions.
+Evidence is tracked in HANDOVER; ai.0002 development rollout, real email and manual
+Owner acceptance stay separate. No automatic next task is authorized.
+
+### Historical completed organization Members integration — 2026-11-08
 
 `HT-FE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE`
 

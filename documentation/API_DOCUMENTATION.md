@@ -1,8 +1,205 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
-## HT-FE-MEMBERS-01 — Organization roster and Invitation React integration
+## HT-FE-WORKSPACE-MEMBERS-01 — Workspace access contract
+
+Status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**. This task connects the
+existing Workspace membership domain to React. It adds a bounded read-only
+candidate endpoint and additive capability hints, not a membership model,
+mutation service, role, migration or parallel authorization system. Current
+backend, targeted final frontend, real isolated browser and read-only development
+preservation checks below pass. Historical839/801/14 results below are not new
+results for this task. Manual Owner website acceptance and real SMTP remain
+unverified; no next task, AI activation, migration rollout or deployment begins
+automatically.
+
+### Actual domain and management authority
+
+`WorkspaceMember` already links User to Workspace with one unique
+`(workspace,user)` row. Profile membership, explicit Workspace assignment and
+Task assignment are distinct. Active Profile Owner/Admin inherit access and
+management across their same-Profile Workspaces without WorkspaceMember rows.
+Ordinary Profile MEMBER needs an active explicit ADMIN/MEMBER/VIEWER row;
+MEMBER is the stored value for Workspace Editor. Legacy Workspace OWNER,
+transitional Workspace.owner and staff/superuser flags grant no authority.
+
+| Caller | Read Workspace | Read roster/candidates | Grant/update/revoke Workspace roles |
+|---|---|---|---|
+| Active Profile OWNER/ADMIN | Same-Profile Workspaces, inherited | Allowed | ADMIN/MEMBER/VIEWER |
+| Profile MEMBER + active Workspace ADMIN | Assigned Workspace only | Allowed | MEMBER/VIEWER; cannot alter an existing ADMIN row |
+| Profile MEMBER + active Workspace MEMBER/VIEWER | Assigned Workspace only |403 | None |
+| Profile MEMBER without effective assignment |404 |404 | None |
+| Inactive/revoked/foreign identity or tenant scope |404 or authentication403 | Denied | None |
+
+Both Profile and Workspace must be ACTIVE for mutations. Manager roster remains
+readable in archived scope; mutation hints are false and candidate list is empty.
+Profile invitation acceptance and Workspace creation never automatically create
+WorkspaceMember rows. Profile membership selection in React is not authority.
+
+### Read endpoints and additive capabilities
+
+Prefix: `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}`.
+
+`GET /members/` retains standard bounded pagination and all eight existing row
+fields: id,profile_membership_id,display_label,is_assignable,role,is_active,
+joined_at,updated_at. It adds response-level `capabilities`:
+
+```json
+{
+  "can_add": true,
+  "allowed_roles": ["ADMIN", "MEMBER", "VIEWER"],
+  "profile_role": "OWNER",
+  "workspace_role": null,
+  "has_inherited_access": true
+}
+```
+
+`workspace_role` is null for inherited Profile Owner/Admin authority; for a
+delegated manager it is ADMIN and allowed_roles is MEMBER/VIEWER. Archived
+scope keeps the actual role/inheritance explanation, but can_add:false and
+allowed_roles:[]. This resolver role is not an inventory of explicit rows:
+null does not prove that an inherited manager lacks an explicit assignment.
+Each roster row adds nested `capabilities`:
+
+```json
+{
+  "can_update": true,
+  "can_revoke": true,
+  "allowed_roles": ["ADMIN", "MEMBER", "VIEWER"],
+  "has_inherited_access": false
+}
+```
+
+Row mutation flags require current mutation authority and a current target row
+role inside the caller's existing management ceiling. They are not a new
+permission grant. Target has_inherited_access identifies an active Profile
+Owner/Admin whose explicit Workspace row does not define their full authority.
+The roster contains only effective explicit assignments; it is not an invented
+list of inherited WorkspaceMember records. POST/PATCH retain their old fields
+and return additive row hints fail-closed without a verified serializer context;
+consumers refresh the authoritative GET after a successful mutation.
+
+**New:** `GET /member-candidates/` permits the same current Workspace managers,
+including delegated Workspace Admin who cannot read the Profile governance
+roster. It returns standard count/next/previous/results with each result exactly:
+
+```json
+{
+  "profile_membership_id": "00000000-0000-0000-0000-000000000000",
+  "display_label": "Thành viên tổng hợp",
+  "profile_role": "MEMBER",
+  "has_inherited_access": false
+}
+```
+
+Candidates are active same-Profile memberships with an active User and no
+active WorkspaceMember row. ANY active row excludes a candidate, including a
+legacy unsupported role; an inactive historical row remains eligible for the
+existing reactivation service. Profile Owner/Admin candidates are not silently
+filtered: the existing add service permits them, and inherited access is clearly
+identified. Adding an explicit lower role cannot reduce inherited authority.
+Candidate membership IDs are Profile-scoped identifiers, never global User IDs.
+
+Roster/candidate lists order by joined_at,id, default page20/max100. GET/HEAD/
+OPTIONS only for candidates; session authentication/no-store remain. No email,
+username, raw account ID or unrelated Profile data is projected. Display labels
+use authorized names or safe membership-prefix fallback. Lazy query predicates
+repeat current actor scope and lifecycle; final response revalidates authority.
+Archive during candidate serialization clears count/results/links. Joined name
+loading and the target Profile-role subquery avoid per-row lookups; current
+PostgreSQL tests verify one evaluation query and zero serialization queries for
+each prefetched roster/candidate list.
+
+### Existing writes, unchanged
+
+| Method/path | Exact body | Successful result / existing failure |
+|---|---|---|
+| POST /members/ | `{target_profile_membership_id,role}` |201 new row;200 reactivation of same inactive row;409 already-active duplicate |
+| PATCH /members/{membership_id}/ | `{role}` |200; same-role no-op preserves audit history |
+| DELETE /members/{membership_id}/ | No fields needed |204 soft revoke; no hard deletion |
+
+The existing atomic services lock Profile→Workspace→actor memberships→target,
+repeat current authority/role ceilings and write audit in the same transaction.
+Invalid/inactive/cross-Profile body targets use generic400; visible forbidden or
+archived writes403; unknown/malformed/wrong-parent/out-of-scope URL IDs404.
+Client-supplied capabilities, user_id, tenant IDs or unknown fields are rejected.
+Session CSRF remains mandatory for every unsafe request. Read hints can become
+stale; mutation-time checks always decide. No automatic mutation retry is added.
+
+No separate last-Workspace-Admin invariant exists. Profile managers may revoke
+the final explicit Workspace ADMIN because inherited Profile governance remains;
+the independent last-active-Profile-Owner invariant is unchanged. Revoking an
+explicit row belonging to a Profile Owner/Admin does not remove inherited access.
+
+Revoke only changes WorkspaceMember.is_active and audit. Tasks, TaskAssignment,
+Deliverable/Review and workflow status are retained, not deleted/unassigned or
+reset. A revoked ordinary member loses Workspace/Task access immediately; a
+Viewer downgrade retains reads but cannot execute. Regranting Editor can make
+an existing still-active TaskAssignment effective again. Task assignability
+still requires active User + active Profile MEMBER + active Workspace MEMBER,
+ACTIVE scopes, current manager action and valid Task state; a new Workspace grant
+does not itself assign or start a Task. No Task workflow change is introduced.
+
+React integrates the access section into the existing Workspace detail page,
+with its **Thành viên / Quyền truy cập** anchor; it does not add a second
+Workspace route. The API client strictly projects these DTOs and scopes cache
+keys by User/Profile/Workspace/page. Forms consume server role/capability hints,
+submit through the existing CSRF/session transport, abort on context changes,
+invalidate roster/candidate/assignment-relevant queries after confirmed writes
+and preserve drafts during ordinary same-User refresh. Owner/Admin inheritance
+is explained separately from direct rows; missing Profile membership directs
+authorized managers to the existing organization invitation flow.
+
+### Current verification checkpoint
+
+| Check actually run in this task | Result and limit |
+|---|---|
+| Targeted isolated backend |95/95 PASS9.634s; launcher and actual Python0 independently recorded |
+| Full isolated backend, one run |863/863 PASS294.428s; launcher/actual Python0, dependency/Django/model/migration checks and owned cleanup PASS |
+| Workspace access API client, mocked transport |67/67 PASS3.76s, launcher0; not real-browser evidence |
+| Final WorkspaceMembers UI unit/component checks |34/34 PASS12.40s, launcher0 after semantic fieldset/CSS correction |
+| Broader frontend unit/contract checkpoint |902/902 PASS51.11s before the final semantic-only fieldset/CSS reset; not claimed as a full run of the final source hash |
+| TypeScript/Biome/build after final semantic markup |All exit0 |
+| Real isolated Workspace access browser |4/4 PASS39.1s on first runab941585c1e94477ae8d1d951e04a374; launcher/Playwright/backend0 and owned database/resources removed |
+| Real Profile Members/Invitation regression |4/4 PASS46.3s, runcfcf1c4def564696af6ca5a9c3446dd8; launcher/Playwright/backend0 and owned cleanup |
+| Real Task stability regression |4/4 PASS20.3s, run9a56ad93957241c3b627f408c2e89b85; launcher/Playwright/backend0 and owned cleanup |
+| Real Auth/CSRF/tenant foundation |6/6 PASS45.3s, runf5ccc4c5d8ee402fa07076269b4d6e9e; launcher/Playwright/backend0 and owned cleanup |
+| Current browser aggregate |18/18 PASS on final source, all owned database/resources removed; no historical browser result substituted |
+| Final development preservation |2026-11-09T08:17:28Z READ ONLY snapshot exactly matches all29-table data/schema/constraints/indexes/sequences/history/identity, excluding transient connections |
+
+The current browser run performs Profile invitation, recipient registration/
+acceptance, Editor grant, Task assignment and Start through real React against
+isolated PostgreSQL. It verifies Viewer/Editor role changes preserve WORKING
+status/assignment, revocation removes access/stale content and mutation/tenant/
+CSRF/duplicate boundaries remain. Four viewport375/768/1440/812x375 keyboard,
+focus, axe and reflow checks pass;375/1440 images were visually inspected.
+Ordinary same-User focus preserves the same mounted access/Task draft nodes.
+These are automated isolated checks, not manual Owner development-site writes.
+
+Development remains36 applied migrations,4 Users,2 Sessions,1 Profile/membership/
+Workspace/Task,3 AuditLogs and0 WorkspaceMember/Invitation/AI rows. Candidate
+ai.0002_dispatch_governance remains UNAPPLIED with its three tables absent.
+No persistent business fixture/schema/AI flag, credential, provider call or
+external email change is part of this task. Exact source/cleanup/check receipts
+and Owner continuation are recorded in HANDOVER; manual acceptance is still
+pending. Stop at **HT-FE-WORKSPACE-MEMBERS-01 — OWNER REVIEW GATE**.
+
+Initial backend attempt had a test import/required fixture field mismatch and
+old exact response-key expectations; corrected only test setup/contract additions.
+Earlier frontend fixture timing/cache metadata and semantic markup issues were
+corrected without weakening authorization, assertions or lint policy. Full run
+evidence and exact source chronology remain in HANDOVER. No development fixture/
+migration, AI activation, external mail or deployment is authorized; manual Owner
+acceptance is not claimed.
+
+Source: [Workspace access selectors/capabilities](../backend/apps/workspace/access.py),
+[serializers](../backend/apps/workspace/serializers.py),
+[views](../backend/apps/workspace/views.py),
+[existing membership services](../backend/apps/workspace/services.py) and
+[Task assignment/execution services](../backend/apps/tasks/services.py).
+
+## Historical completed HT-FE-MEMBERS-01 — Organization roster and Invitation React integration
 
 Status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**. The Owner authorizes React
 membership/invitation integration plus the smallest schema-free API gap fix.
@@ -1140,6 +1337,7 @@ membership and the nested parent path.
 | `POST` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/archive/` | Profile Owner or Profile Admin; Profile must be active | Archive the Workspace. |
 | `POST` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/restore/` | Profile Owner or Profile Admin; Profile must be active | Restore the Workspace. |
 | `GET` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/` | Profile Owner/Admin or that Workspace's Admin | List effective active Workspace assignments without User PII; this remains readable for an archived Workspace. |
+| `GET` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/member-candidates/` | Profile Owner/Admin or that Workspace's Admin | Bounded same-Profile active membership candidates without an active Workspace row; archived scope returns an empty list. |
 | `POST` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/` | Profile Owner/Admin or that Workspace's Admin; Profile and Workspace must be active | Direct-add or reactivate an active same-Profile member within the caller's role ceiling. |
 | `PATCH` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/{membership_id}/` | Profile Owner/Admin or that Workspace's Admin; Profile and Workspace must be active | Change an active Workspace assignment within the caller's role ceiling. |
 | `DELETE` | `/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/members/{membership_id}/` | Profile Owner/Admin or that Workspace's Admin; Profile and Workspace must be active | Soft-revoke an active assignment while retaining its row and history. |
@@ -1231,13 +1429,18 @@ mutation results contain exactly:
 
 - `id`
 - `profile_membership_id`
+- `display_label`
+- `is_assignable`
 - `role`
 - `is_active`
 - `joined_at`
 - `updated_at`
+- `capabilities` (read-only nested management/inheritance hints described above)
 
-They intentionally omit global User ID, email, username, and other PII. Member
-list results use the standard bounded pagination envelope and stable
+They intentionally omit global User ID, email and username; authorized labels
+use names or safe membership-prefix fallback. Member list results add the
+current management capability envelope described above and use bounded pagination
+with stable
 `joined_at`, then `id`, ordering. Direct add and role update use locked atomic
 services and write `workspace.membership.created` or
 `workspace.membership.updated` AuditLog events in the same transaction.
@@ -1246,6 +1449,10 @@ roster visibility, retains the row, returns `204 No Content`, and writes
 `workspace.membership.revoked` atomically. Profile Owner/Admin can manage
 `ADMIN`, `MEMBER`, and `VIEWER`; Workspace Admin remains limited to `MEMBER`
 and `VIEWER`, including concurrent reactivation attempts.
+
+The current candidate/capability contract above augments these existing writes.
+It does not add a last-Workspace-Admin rule, remove inherited Profile manager
+authority or change retained Task/Deliverable/Review history on soft revoke.
 
 Profile responses contain exactly:
 

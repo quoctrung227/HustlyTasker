@@ -1,6 +1,25 @@
 # Frontend MVP completeness and acceptance — HT-FE-P3-04
 
-## Current bounded follow-up — HT-FE-MEMBERS-01,2026-11-08
+## Current bounded follow-up — HT-FE-WORKSPACE-MEMBERS-01,2026-11-09
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Owner separately
+approved the previously deferred Workspace member candidate/management surface.
+Existing inline Workspace Detail now provides real same-Profile candidate grant,
+confirmed role update/revoke, roster/current capabilities and inherited-access
+explanation. Existing Profile invitation/recipient and Task stability remain;
+no new schema, authorization model or generalized Profile governance is implied.
+Profile role/remove and recipient inbox/preview are still separate contracts.
+
+Current backend95/full863 PASS, API67/finalUI34 and type/lint/build0; broader
+frontend902/902 passed before the final semantic-only fieldset/CSS reset, whose
+final focused/UI checks pass. Real Workspace4+Members4+stability4+foundation6=
+18/18 PASS, actual exits0 and owned cleanup. Final08:17:28Z read-only development
+proof matches all29-table data/schema/history/sequence/identity fingerprints,
+36 migrations/4 Users/2 Sessions retained; ai.0002 still UNAPPLIED.
+No development business writes, AI/migration apply or manual Owner acceptance.
+Current evidence/final status belongs in HANDOVER.
+
+## Historical bounded follow-up — HT-FE-MEMBERS-01,2026-11-08
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Owner now separately approved
 organization Members/Invitation React integration. Historical FE04/FE05 exclusions

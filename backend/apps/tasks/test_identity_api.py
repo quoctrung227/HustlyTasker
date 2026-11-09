@@ -357,7 +357,7 @@ class TaskIdentityApiTests(APITestCase):
         rows = {str(row["profile_membership_id"]): row for row in response.data["results"]}
         self.assertEqual(rows[str(self.memberships["editor"].id)]["display_label"], "Lan Trần")
         self.assertEqual(rows[str(self.memberships["second-editor"].id)]["display_label"], f"Thành viên {str(self.memberships['second-editor'].id)[:8]}")
-        expected_fields = {"id", "profile_membership_id", "display_label", "is_assignable", "role", "is_active", "joined_at", "updated_at"}
+        expected_fields = {"id", "profile_membership_id", "display_label", "is_assignable", "role", "is_active", "joined_at", "updated_at", "capabilities"}
         for row in rows.values():
             self.assertEqual(set(row), expected_fields)
             self.assertIs(type(row["is_assignable"]), bool)

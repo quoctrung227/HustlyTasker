@@ -1,6 +1,148 @@
 # HustlyTasker frontend guide
 
-## HT-FE-MEMBERS-01 — Organization Members and Invitation (2026-11-08)
+## HT-FE-WORKSPACE-MEMBERS-01 — Workspace access management (2026-11-09)
+
+Status: **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE**. Reuse the
+existing local startup commands below. No dependency, authentication, schema,
+AI flag, email provider or persistent development data change is part of this task.
+
+### Domain and discoverable entry
+
+Open **Tổ chức → Workspace → Thành viên / Quyền truy cập**. The existing Workspace
+detail route keeps its inline Members section and anchor #workspace-members;
+there is no duplicate page/auth provider. Roster/current capabilities come from
+the real manager-only GET members API, including archived read-only contexts.
+An Editor/Viewer retains legitimate Workspace/Task read access but cannot read
+the management roster or candidates. Knowing a route/UUID never grants access.
+
+| Actor | Workspace access | Member administration |
+|---|---|---|
+| Active Profile Owner/Admin | All same-Profile Workspaces; explicit WorkspaceMember not required | ADMIN/MEMBER/VIEWER while both scopes are active |
+| Profile MEMBER + active Workspace ADMIN | Assigned Workspace | MEMBER/VIEWER only; cannot edit/revoke an existing ADMIN |
+| Profile MEMBER + active Workspace MEMBER | Assigned Workspace, Editor execution requires active TaskAssignment/current state | None |
+| Profile MEMBER + active Workspace VIEWER | Assigned Workspace read-only | None |
+| Profile MEMBER with no effective Workspace row | None, tenant-safe404 | None |
+
+The real model is WorkspaceMember(User FK, unique Workspace+User), not a new
+WorkspaceMembership table. Profile acceptance and Workspace creation do not
+create these rows. The roster lists effective explicit assignments, not every
+inherited Profile manager. An inherited context's workspace_role may be null
+even when a lower explicit row exists; UI labels the access context rather than
+claiming that null proves no assignment. Workspace OWNER is unsupported legacy
+authority, not a choice. Staff/Workspace.owner alone grants no tenant authority.
+
+### Grant, role update and revoke
+
+**Thêm thành viên** opens a shared native dialog with a paginated **Chọn thành
+viên tổ chức** selector. New manager-only GET member-candidates returns active
+same-Profile memberships/Users without an active Workspace row. It includes
+inactive rows eligible for reactivation and Profile managers with a clear
+inherited-access explanation. No unrelated tenant/User directory/email is shown.
+Archived contexts return no candidates and disable mutation capabilities.
+
+Choose a server-allowed **Vai trò trong Workspace** and **Cấp quyền truy cập**.
+ADMIN means Quản lý, MEMBER means Editor, VIEWER means Chỉ xem. Existing POST
+members sends only target_profile_membership_id/role; new201, reactivation200,
+already-active duplicate409. Neither Admin/Viewer nor Profile Owner/Admin becomes
+an Editor/Task assignee merely through broad read/management authority.
+
+Each row uses server can_update/can_revoke/allowed_roles. **Cập nhật quyền** opens
+a role form requiring **Xác nhận cập nhật quyền**; existing PATCH sends role only.
+**Thu hồi quyền** requires **Xác nhận thu hồi quyền**, then existing DELETE204
+soft-revokes the explicit assignment. Controls are pending-disabled and never
+optimistically report success. Recoverable errors retain input;409/uncertain
+outcomes refresh actual data rather than automatically repeat a write.
+
+Removing/demoting a Profile manager's explicit row does not remove inherited
+authority; the UI warns before mutation. There is no existing last-Workspace-
+Admin invariant; do not invent one. The separate last-active-Profile-Owner rule
+remains unchanged. People not yet in this Profile must use the existing Profile
+invitation workflow first; a Workspace Admin without Profile governance is told
+to contact the Profile Owner/Admin instead of receiving an unauthorized invite link.
+
+### Task compatibility, stability and private state
+
+Membership writes invalidate the new User/Profile/Workspace access scope plus
+the existing workKeys scope, Workspace lists and current authority, so TaskAssign
+refreshes the existing is_assignable roster. Only active Profile MEMBER + active
+Workspace MEMBER is an eligible assignee; actual assignment/state is still checked
+for Start/Submit. No Task forms, workflow or assignment service is rewritten.
+
+Revoke/downgrade preserves Task, TaskAssignment, Deliverable, Review and status.
+Revoke removes effective Workspace reads/execution; Viewer downgrade retains
+reads but denies execution. Regranting Editor can reactivate the effect of an
+old still-active TaskAssignment; no auto-unassignment is claimed.
+
+Normal refetch/focus/auth validation keeps the same form and draft. User/Profile/
+Workspace changes abort and discard old pending state. Actual lost authority
+removes candidate/roster data;404 also removes the old work scope and refreshes
+Workspace authority. A roster403 does not erase legitimate Editor/Viewer Task
+read cache. Recoverable CSRF403 is distinguished from lost authority. No private
+state is persisted in localStorage or a new global store.
+
+Full UI UX Pro Max/master read and actual offline `confirmation permission
+changes --domain ux` / `async request cleanup race --stack react` searches inform
+explicit confirmation, truthful success, abort cleanup and caught async failures.
+Existing teal/neutral tokens, typography, lists, native selects/dialogs, focus and
+linked errors remain. Native fieldset labels the row action group; a small CSS
+reset preserves the existing work-actions spacing without a new visual direction.
+
+### Owner manual acceptance — not performed on persistent development
+
+1. Log in as authorized Owner/Admin, invite the intended recipient through
+   **Thành viên tổ chức** with an approved working mail backend. Recipient signs
+   in and explicitly accepts the emailed code. REAL EMAIL DELIVERY NOT VERIFIED
+   by this task; automated tests use locmem only.
+2. Verify an ordinary Profile MEMBER initially sees no unassigned Workspace.
+   Open the intended Workspace as its manager, choose **Thêm thành viên**, select
+   that accepted member and grant MEMBER/Editor. No Workspace email invitation
+   or guessed User ID is needed.
+3. Recipient opens only permitted Workspaces. Assign a Task using the existing
+   form; the Editor can Start/Submit only when its current workflow permits.
+4. Manager changes the explicit role to VIEWER and confirms. Recipient keeps
+   reads but loses execution. Restore MEMBER or confirm revoke as intended;
+   revoke removes Workspace access while preserving Task/history.
+5. Check Workspace Admin cannot grant ADMIN/manage another ADMIN; archived
+   contexts are read-only. Keep a grant/Task form open during normal focus/refetch
+   and confirm that a real logout/context switch removes old private content.
+
+### Fresh verification and isolated commands
+
+Backend targeted95/95 PASS9.634s, full863/863 PASS294.428s (one full run),
+launcher/actual Python0 and dependency/Django/isolated migration-chain checks
+PASS. API client67/67 PASS3.76s; final UI34/34 PASS12.40s. Broader frontend902/902
+PASS51.11s ran once before the final semantic-only fieldset/native CSS reset;
+only that markup changed afterward, with final34/typecheck/Biome/build and all
+18 real browser tests passing on the final source. No handler/workflow changed.
+
+Browser: Workspace4/4 PASS39.1s, Profile Members4/4 PASS46.3s, Task stability4/4
+PASS20.3s, foundation6/6 PASS45.3s. All launcher/Playwright/isolated backend exits0,
+owned DB removal and0 remaining containers/networks across7attempts/runs verified.
+Four viewports/keyboard/focus/reflow/axe pass;375/1440 PNGs visually inspected in
+Git-ignored .local_backups/HT-FE-WORKSPACE-MEMBERS-01/screenshots/.
+
+```powershell
+.\scripts\test-backend.ps1 -TestLabel apps.workspace.test_workspace_access_api,apps.workspace.test_write_api,apps.tasks.test_identity_api
+npm.cmd --prefix frontend test -- src/services/api/workspace-access.test.ts src/features/workspaces/WorkspaceMembers.test.tsx
+.\scripts\test-frontend-integration.ps1 -Suite workspace-members
+.\scripts\test-frontend-integration.ps1 -Suite members
+.\scripts\test-frontend-integration.ps1 -Suite task-stability
+.\scripts\test-frontend-integration.ps1 -Suite foundation
+```
+
+Final2026-11-09T08:17:28Z read-only snapshot exactly matches all original29-table
+data/schema/constraint/index/sequence/history/cluster properties except transient
+connections:36 migrations/4 Users/2 Sessions/1 Profile/membership/Workspace/Task/
+3 AuditLogs; WorkspaceMember/Invitation/AI0. No .env/credentials read or migration
+apply; ai.0002 remains UNAPPLIED. Existing large bundle advisory remains.
+
+These real website writes are reserved for Owner acceptance. Automated business
+mutations use only owned isolated PostgreSQL. Current counts/exits, failed-attempt
+corrections, cleanup and preservation evidence are in HANDOVER; no manual website
+or production readiness is inferred. Profile role/remove and recipient inbox/
+preview remain separate scope. ai.0002 development rollout is still unapproved.
+
+## Historical HT-FE-MEMBERS-01 — Organization Members and Invitation (2026-11-08)
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** This bounded integration adds
 protected /profiles/:profileId/members and /invitations/respond. Use the existing

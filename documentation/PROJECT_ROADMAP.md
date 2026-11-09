@@ -1,12 +1,30 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 ## Giai đoạn hiện tại
 
-`PHASE 4 - Organization Members/Invitation owner review / AI migration still pending`
+`PHASE 4 - Workspace access integration / AI migration still pending`
 
-Current task: **HT-FE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+Current task: **HT-FE-WORKSPACE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+Source-backed WorkspaceMember read/grant/role/revoke integration reuses existing
+locked services and approved role ceilings. Added only the missing scoped
+candidate GET/current capability hints; no schema or new authority. Existing
+Workspace Detail hosts native forms/confirmations with User/Profile/Workspace
+scope, stable draft and current Task-assignee refresh. Profile invitation and
+Task workflows remain independent and unchanged.
+Current backend95/full863, API67/finalUI34 and type/lint/build PASS; broader
+frontend902 precedes only the final semantic fieldset/CSS reset, covered by final
+focused/browser checks. Real Workspace4+Members4+stability4+foundation6=18/18
+PASS, all actual browser/backend/launcher exits0 and owned cleanup. Final29-table
+development fingerprints/schema/history exact;36 migrations/4 Users/2 Sessions
+retained, ai.0002 still UNAPPLIED. No live AI or migration apply.
+Owner manual acceptance is the next action after verification; later Profile
+membership role/remove contracts need their own scope. No automatic follow-on.
+
+### Historical completed organization Members integration
+
+Historical task: **HT-FE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
 Discoverable React Profile members/invitation management and explicit authenticated
 recipient accept/decline now use existing Invitation services. Minimal additive
 GET Profile members supplies authorized sanitized roster/current capabilities;

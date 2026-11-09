@@ -11,6 +11,7 @@ import { WorkspaceMembers } from '../features/workspaces/WorkspaceMembers'
 import { useWorkContext } from '../features/workspaces/useWorkContext'
 import { workApi } from '../services/api/work-management'
 import { ProfileOnboarding } from '../features/profiles/ProfileOnboarding'
+import { useAuth } from '../features/auth/AuthProvider'
 
 function usePage() {
   const [search, setSearch] = useSearchParams()
@@ -71,6 +72,7 @@ export function WorkspacesPage() {
 
 export function WorkspaceDetailPage() {
   const { profileId = '', workspaceId = '' } = useParams()
+  const { user } = useAuth()
   const context = useWorkContext(profileId, workspaceId)
   const query = context.workspace
   if (query.isError || context.profile.isError) return <><PageHeader title="Nội dung không khả dụng" back={{ to: `/profiles/${profileId}/workspaces`, label: 'Không gian làm việc' }} /><ErrorState error={query.error || context.profile.error} onRetry={() => { void query.refetch(); void context.profile.refetch() }} /></>
@@ -78,9 +80,10 @@ export function WorkspaceDetailPage() {
   const workspace = query.data
   return <><PageHeader eyebrow={periodLabel(workspace.period)} title={workspace.name} description="Thông tin không gian làm việc của nhóm." back={{ to: `/profiles/${profileId}/workspaces`, label: 'Không gian làm việc' }} action={<Badge status={workspace.status} />} />
     <WorkspaceActions profileId={profileId} workspace={workspace} capabilities={{ canEdit: context.active && context.capabilities.data?.manageWorkspace, canArchive: context.profile.data?.status === 'ACTIVE' && context.capabilities.data?.manageLifecycle, canRestore: context.profile.data?.status === 'ACTIVE' && context.capabilities.data?.manageLifecycle }} onUpdate={(input, signal) => workApi.updateWorkspace(profileId, workspaceId, input, signal)} onLifecycle={(action, signal) => workApi.setWorkspaceStatus(profileId, workspaceId, action, signal)} onSaved={() => context.invalidate(true)} onDenied={context.denied} />
+    <div className="work-actions"><a className="button button--secondary" href="#workspace-members">Thành viên / Quyền truy cập</a></div>
     {!context.active && <Alert>Không gian hoặc tổ chức đã lưu trữ. Công việc chỉ được xem theo quyền hiện tại.</Alert>}
     <Card className="workspace-task-link"><div><p className="eyebrow">CÙNG LÀM VIỆC</p><h2>Công việc của không gian</h2><p>Theo dõi công việc, công việc con, thời hạn và mức ưu tiên.</p></div><Link className="button button--primary" to={`/profiles/${profileId}/workspaces/${workspaceId}/tasks`}>Xem công việc<ArrowRightIcon aria-hidden="true" /></Link></Card>
     <div className="workspace-detail-grid"><Card className="workspace-about"><span className="organization-icon"><CalendarDotsIcon aria-hidden="true" /></span><h2>Về không gian này</h2><p className="preserve-text">{workspace.description || 'Không gian này chưa có mô tả.'}</p><Link className="text-link" to={`/profiles/${profileId}`}><ArrowLeftIcon aria-hidden="true" />Xem tổ chức</Link></Card><Card className="workspace-facts"><h2>Thông tin chung</h2><dl><div><dt>Kỳ làm việc</dt><dd>{periodLabel(workspace.period)}</dd></div><div><dt>Trạng thái</dt><dd><Badge status={workspace.status} /></dd></div><div><dt>Ngày tạo</dt><dd>{dateLabel(workspace.created_at)}</dd></div><div><dt>Cập nhật gần nhất</dt><dd>{dateLabel(workspace.updated_at)}</dd></div></dl></Card></div><ReadOnlyNote />
-    <WorkspaceMembers key={`${profileId}:${workspaceId}`} profileId={profileId} workspaceId={workspaceId} allowed={context.active && context.capabilities.data?.manageWorkspace === true} />
+    <WorkspaceMembers key={`${user?.id}:${profileId}:${workspaceId}`} profileId={profileId} workspaceId={workspaceId} currentUserId={user?.id || ''} />
   </>
 }

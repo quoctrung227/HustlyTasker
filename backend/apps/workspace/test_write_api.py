@@ -42,6 +42,7 @@ class WorkspaceWriteApiTests(APITestCase):
         "is_active",
         "joined_at",
         "updated_at",
+        "capabilities",
     }
 
     @classmethod
@@ -720,7 +721,7 @@ class WorkspaceWriteApiTests(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.assertEqual(
                     set(response.data),
-                    {"count", "next", "previous", "results"},
+                    {"count", "next", "previous", "results", "capabilities"},
                 )
                 self.assertEqual(
                     response.data["count"],

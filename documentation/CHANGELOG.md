@@ -2,7 +2,32 @@
 
 Lịch sử thay đổi của dự án HustlyTasker.
 
-## Unreleased - 2026-11-08
+## Unreleased - 2026-11-09
+
+### HT-FE-WORKSPACE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE
+
+- Added manager-only paginated Workspace member-candidates read and additive
+  current/per-row capabilities on the existing roster; same-Profile active
+  identity, lazy authority rechecks, no User/email directory or new write policy.
+- Extended existing inline Workspace Members with grant, confirmed role update/
+  revoke, inherited-access warnings and safe current-context display. Reused
+  locked services/ADMIN-MEMBER-VIEWER ceilings, Session/CSRF and Task assignment.
+- Added User/Profile/Workspace cache scopes, abort/stale-response guards and
+  stable refresh behavior. Actual404 purges lost work scope;403 roster preserves
+  legitimate Task reads. Native fieldset+small style reset provides semantic
+  action grouping without changing visual direction or mutation handlers.
+- Added24 PostgreSQL API/integration/query tests,67 client and34 UI tests plus4
+  real browser cases. Backend95/full863, client67/finalUI34 and quality0 PASS;
+  broader frontend902 passed once before the final semantic-only reset. Current
+  Workspace4+Members4+stability4+foundation6=18/18 browsers PASS, actual exits0
+  and owned cleanup verified. Final08:17:28Z29-table development data/schema/
+  history/sequence/identity proof exact;36 migrations/4 Users/2 Sessions retained,
+  ai.0002 still UNAPPLIED,0 WorkspaceMember/Invitation/AI rows added.
+- No model/migration/services/AI/credentials or development data changes. Earlier
+  test fixture/DTO/timing and quality failures are retained in ignored evidence;
+  no policy suppression. Real email/manual Owner/deployment remain unverified.
+
+## Historical unreleased entries - 2026-11-08
 
 ### HT-FE-MEMBERS-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE
 

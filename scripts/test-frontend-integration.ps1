@@ -2,7 +2,7 @@
 param(
     [ValidateRange(1024,65535)]
     [int]$BackendPort = 8001,
-    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members')]
+    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members','workspace-members')]
     [string]$Suite = 'foundation'
 )
 
@@ -29,6 +29,7 @@ $htCreatedPg = $false
 $htCreatedServer = $false
 $htServerReady = $false
 $htSpec = switch ($Suite) {
+    'workspace-members' {'e2e/workspace-members.spec.ts'}
     'members' {'e2e/members.spec.ts'}
     'task-stability' {'e2e/task-stability.spec.ts'}
     'feedback-analyzer' {'e2e/feedback-analyzer.spec.ts'}
@@ -43,6 +44,7 @@ $htSpec = switch ($Suite) {
     default {'e2e/real-api.spec.ts'}
 }
 $htArtifactTask = switch ($Suite) {
+    'workspace-members' {'HT-FE-WORKSPACE-MEMBERS-01'}
     'members' {'HT-FE-MEMBERS-01'}
     'task-stability' {'HT-FE-STABILITY-01'}
     'feedback-analyzer' {'HT-AI-P4-03C'}

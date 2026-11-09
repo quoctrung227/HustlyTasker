@@ -1,6 +1,56 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-11-08 (HT-FE-MEMBERS-01)
+## Current Snapshot - 2026-11-09 (HT-FE-WORKSPACE-MEMBERS-01)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Source-backed
+audit found real WorkspaceMember roles ADMIN/MEMBER(Editor)/VIEWER, inherited
+Profile Owner/Admin management and existing locked add/update/revoke services.
+No new schema, permission policy, last-Workspace-Admin invariant or automatic
+membership/Task-assignment change is introduced.
+
+New manager-only GET member-candidates selects active same-Profile membership/
+User identities without an active Workspace row. Existing GET members gains
+root/current actor and per-row capability hints; old fields/writes preserved.
+Archived roster is readable with false mutation flags and empty candidates.
+Owner/Admin manage all3 roles; Workspace ADMIN only MEMBER/VIEWER and cannot
+change/revoke an existing ADMIN. Roster is explicit assignments; inherited
+Profile governance is explained rather than fabricated as a Workspace row.
+
+Existing Workspace Detail now exposes an inline **Thành viên / Quyền truy cập**
+entry, real roster/candidate pagination, grant, confirmed role update/revoke and
+current access context. User/Profile/Workspace query keys/abort/permission-loss
+cleanup preserve previous Task stability and Profile invitation flows. Mutations
+refresh Task-assignee data; execution still requires the actual current Editor
+assignment/state. Revoke/downgrade keeps Task/TaskAssignment/Deliverable/Review;
+regrant may make a still-active old assignment effective again.
+
+Fresh targeted PostgreSQL95/95 PASS9.634s and full863/863 PASS294.428s (one full
+run), launcher/actual Python0 with dependency/Django/model/isolated-chain/cleanup
+checks PASS. API client67/67 PASS3.76s; final UI34/34 PASS12.40s. Broader frontend
+902/902 PASS51.11s ran once before the final semantic-only fieldset/CSS reset;
+that last markup is verified by final34/typecheck/lint/build and current browsers.
+No mutation handler/business logic changed after the broader run.
+
+Real isolated Workspace browser4/4 PASS39.1s and prior Members4/4 PASS46.3s,
+actual launcher/Playwright/backend0 and owned DB/resource cleanup. Workspace
+four-size375/768/1440/812x375 keyboard/focus/reflow/axe PASS;375/1440 PNGs inspected.
+Task stability4/4 PASS20.3s and Auth foundation6/6 PASS45.3s complete18/18 current
+real browser tests; all launcher/Playwright/backend exits0 and owned cleanup.
+Initial test fixture/DTO/timing and quality errors were
+corrected without suppressions or relaxed authority checks; evidence retained.
+
+Initial clean main/c835904,765 original file hashes and read-only development
+baseline retained. No .env read, persistent fixture/migration, AI flag/provider,
+commit or deployment. ai.0002 remains pending; real email and manual Owner website
+acceptance remain unverified. Final2026-11-09T08:17:28Z read-only comparison is
+exact across all29-table data/schema/constraints/indexes/sequences/history/cluster
+properties except transient connections:36 migrations/4 Users/2 Sessions,
+1 Profile/membership/Workspace/Task/3 AuditLogs; WorkspaceMember/Invitation/AI0.
+All seven isolated attempts/runs have0 owned containers/networks.765 originals
+and16 frozen code hashes are checked at handoff; no missing/unexpected changes.
+Stop at **HT-FE-WORKSPACE-MEMBERS-01 — OWNER REVIEW GATE**. No next task/rollout.
+
+## Historical Snapshot - 2026-11-08 (HT-FE-MEMBERS-01)
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** React organization Members,
 invitation management and explicit recipient response now consume actual APIs.
