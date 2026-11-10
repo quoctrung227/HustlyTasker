@@ -1,6 +1,24 @@
 # HT-FE-P3-03 — Frontend/API contract matrix
 
-## Current contract — HT-API-FE-P3-03A — 2026-10-27
+## Current refinement — HT-FE-TASK-UX-REFINEMENT-01 — 2026-11-10
+
+The Owner now requires URL-only new Deliverable submissions. Existing scoped
+POST deliverables/ and `file_url` max500 storage are reused: HTTP(S) only, bounded
+valid Unicode without controls/NUL. This supersedes earlier nonblank-text-or-URL
+write acceptance without changing the model, revision lifecycle or capability
+checks. Each revision retains its own stored URL. Safe links open through
+**Mở sản phẩm** with target_blank/rel=noopener noreferrer; historical non-URL
+text/paths stay readable as inert text and are never rewritten or fetched.
+
+TaskReadSerializer adds `active_assignment.display_name` for list/detail/action
+presentation from current tenant-readable identity. NULL means unavailable;
+React supports old missing labels with a generic human fallback. No global User
+ID, contact directory, per-Task roster request or name-based authority is added.
+Compensation redaction and all mutation authorization remain unchanged.
+Current checks and final browser/Owner review status are in HANDOVER; the dated
+API03A test counts below are historical evidence, not current Task UX results.
+
+## Capability contract — HT-API-FE-P3-03A — 2026-10-27, refined above
 
 Owner approved the minimal capability extension and its frontend consumers.
 The three former authorization gaps are resolved: API03A is COMPLETE and FE03 is
@@ -12,7 +30,7 @@ schema, migration or mutation-service rule is introduced. Task base remains
 
 | UI action | Required read-only capability | Server calculation and existing write contract |
 |---|---|---|
-| Submit Deliverable | Task.can_submit | Current active assigned Editor, ACTIVE scopes, WORKING, no PENDING/SUBMITTED Deliverable; POST deliverables/ with nonblank file_url, max500 characters |
+| Submit Deliverable | Task.can_submit | Current active assigned Editor, ACTIVE scopes, WORKING, no PENDING/SUBMITTED Deliverable; POST deliverables/ with valid HTTP(S) file_url, max500 Unicode code points |
 | Approve | Deliverable.can_approve | Current reviewer/manager, ACTIVE scopes, Task REVIEW, SUBMITTED latest by created_at DESC/id DESC, actor not uploader, no existing Review; POST deliverables/{d}/approve/ with optional comment |
 | Request changes | Deliverable.can_request_changes | Same authority/state as Approve; POST deliverables/{d}/request-changes/ with nonblank comment |
 | Edit existing Comment | Comment.can_edit | Current capable commenter, ACTIVE scopes, nondeleted row and author User equality; PATCH comments/{c}/ with content<=4000 |

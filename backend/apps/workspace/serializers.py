@@ -117,6 +117,22 @@ class WorkspaceCreateSerializer(StrictInputSerializer):
         allow_null=True,
     )
     period = serializers.DateField()
+    source_workspace_id = serializers.UUIDField(required=False)
+    initial_profile_membership_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False,
+    )
+
+    def validate(self, attrs):
+        if "source_workspace_id" in attrs and "initial_profile_membership_ids" in attrs:
+            raise serializers.ValidationError({
+                "initial_profile_membership_ids": ["Choose a source or initial members, not both."],
+            })
+        ids = attrs.get("initial_profile_membership_ids", [])
+        if len(ids) != len(set(ids)):
+            raise serializers.ValidationError({
+                "initial_profile_membership_ids": ["Duplicate membership references are not allowed."],
+            })
+        return attrs
 
     def validate_period(self, value):
         if value.day != 1:

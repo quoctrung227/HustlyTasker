@@ -1,6 +1,192 @@
 # PROJECT PROGRESS
 
-## Current Snapshot - 2026-11-09 (HT-FE-INVITATION-DELIVERY-FIX-01)
+## Current Snapshot - 2026-11-10 (HT-FE-TASK-ASSIGNEE-NAME-FIX-01)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Unique anonymous GET marker
+proved the old13:49 --noreload Django process was serving8000 despite a second
+15:05 process; display_name source was added14:34. Current name/DTO/cache logic
+already handles full name/username correctly. Stopped only both verified project
+server families, started one fresh server and confirmed direct/Vite-proxied GETs
+land only in its log. Existing launcher now refuses occupied loopback ports
+before config loading; two guard tests added, no Django/React/RBAC/schema change.
+
+Fresh focused PostgreSQL59/59, frontend122/122 and launcher15/15 PASS, actual
+exits0; typecheck/lint/Django/model/graph checks PASS. In-process read-only actual
+GET handlers on4existing Tasks return current names and matching list/detail
+DTOs; not an authenticated HTTP/Owner-session test. Initial proxy check failed
+because Vite was absent; existing Vite started on verified free5173, final
+frontend/direct/proxy200 and sole-backend routing PASS. Full suites/build/browser
+not rerun because no business/frontend runtime code changed.
+
+Final29-table snapshots identical except connections:37migrations/5Users/
+2Sessions/4Tasks/34Audits retained; tasks.0005APPLIED, ai.0002UNAPPLIED.71initial
+dirtypaths/624originals preserved; only2launcher/test files+6docs affected.
+0owned isolated resources. No dev fixtures/business writes/SMTP/AI/deploy.
+Owner Ctrl+F5/reopen existing Task next; STOP OWNER REVIEW GATE.
+
+## Historical Snapshot - 2026-11-10 (HT-FE-TASK-UX-REFINEMENT-01)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.**
+Task-only descriptioncard24remdesktop/fixedheading/internalkeyboardscroll and
+mobilemax24remnaturalshortheight; adjacentfactsnotstretch. Stacked UTCdatepair
+retainsquery/validation/timezone. Existing file_url500 is reused for NEWHTTP(S)
+submissions/resubmissions; legacyreadtext/path/revisions retained. No upload,
+fetch, schema or migration. Safe current Task active_assignment.display_name
+fullName→safeusername→generic/NULLunavailable replacesUUIDlabels with batchedSQL,
+no privilege or compensation-policy expansion. SharednativeUI/tokens retained.
+
+Fresh targeted191/full996 PostgreSQLPASS/actualPython0, graph/model/fullchain/
+ownedcleanupPASS. Focusedcollab150/layout122 and finalfullfrontend1123PASS;
+quality0/build18.45s,599.02kB advisory. All37/37 real browser cases across8suites
+PASS, including UX4,collaboration7,fullbusinessacceptance1 and25regressions;
+actualbrowser/backend/launcher0/cleanup. Four-size
+geometry/axe0/keyboard and375/1440PNG inspection verified. Firstlintsemantic/
+specificity failures corrected with nativefieldset/section and documentedone-
+element scrollfocus exception, no globalrules disabled or tests weakened.
+
+DevelopmentinitialREADONLY37migrations/3Tasks/2Deliverables/5Users/2Sessions,
+newerOwneractivitythanoldrollout; tasks.0005APPLIED/ai.0002UNAPPLIED. Final
+15:05:20Z all29-table fingerprints/schema/history/sequences match exactly except
+connections. Initial59dirtypaths preserved;618originals/no unexpectedchanges,
+22frozen source hashes match,71finaldirtypaths. Local Django8000/Vite5173 started
+with existing launchers;9/9anonymous GETsmokes and read-only ORM3Tasks/2Deliverables
+PASS.0ownedtestresources remain across2backend/8browser runs.13docs synchronized.
+No devfixtures/mutationtests/SMTP/AIcalls, no nextfeature or publicdeployment.
+Owner manual localhost acceptance is pending; STOP OWNER REVIEW GATE.
+
+## Historical Snapshot - 2026-11-10 (HT-DB-TASK-BRIEF-ROLLOUT-01)
+
+**DEVELOPMENT MIGRATION COMPLETE — OWNER UI ACCEPTANCE PENDING.** Exact Owner-
+approved targetedTask0005 completed13:47:38Z/20:47:38Vietnam, exit0. No other
+migration applied; history36→37, ai.0002UNAPPLIED. Four nullablevarchar2048 URLs
+plus nullable numeric18,0 and validatednonnegativeCHECK verified.29tables and
+alllegacybusinessdata preserved;2oldTasks/fiveNULLmetadata,0Subtasks,5Users/
+2Sessions/2Profiles/3Workspaces/2Assignments/2Invitations/21Audits unchanged.
+
+External restricted custom backup126444bytes retained at D:/da/HustlyTaskerBackups/
+HT-DB-TASK-BRIEF-ROLLOUT-01/20261110T134015Z_13690e70102440b48376c269c8f2d460/.
+SHA25677C2DB34B6AB89F4BDE7E65B25B69C67C5B1378981F5B7B9B58891F01700AB7C;
+archive list/full read/restore and isolatedtargetedmigration/schema/data/TaskORM
+checksPASS, actualexits0. First isolatedhostconnection failure corrected by
+loopback-onlyauthenticatedtemporary bridge; no migration was attempted then.
+Both rehearsal targets cleaned, backupretained. Restore ownership/grants not
+rehearsed (--no-owner/--no-privileges); no unsafe automatic recovery.
+
+Djangosystem/modeldrift/targetedconsistency and actualTaskORM2 PASS. Normal
+backend8000/Vite5173 runninglocally, HTTP GET9/9PASS and postsmoke preservation
+PASS. No credentials/tokens/PII printed, .env loaded only by existing safeparser,
+no real login/businessfixtures/mail/AI/deploy. Runtime/source/migrations remain
+unchanged; prior969/1067/43tests are historical, not rerun for documentation-only
+rollout operations. Source preservation/final docs checkpoints in HANDOVER.
+STOP for Owner manual website acceptance; no next task/general/AI migration.
+
+## Historical Snapshot - 2026-11-10 (HT-FE-TASK-COMPENSATION-RBAC-01)
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.** Existing Task brief
+candidate is preserved; the Owner now restricts field disclosure to current
+Task-readable Profile Owner/Admin, Workspace Admin and valid ACTIVE assignee.
+Other MEMBER/VIEWER gets NULL. Writes remain existing managers only. Current
+tenant/role/assignment SQL is reused, batched per page, no staff/ID/query bypass.
+Inspection-only Django Admin excludes the financial field entirely. No schema,
+workflow, Invitation, inheritance or AI change.
+
+Source/private baseline: main/2c421f1,56 pre-existing dirty/untracked paths.
+READ ONLY initial development29tables/36migrations/5Users/2Sessions/2Profiles/
+3Workspaces/2Tasks; tasks.0005 and ai.0002 remain UNAPPLIED. New pay/URL columns
+are absent; no development Task API or website acceptance is claimed.
+
+Final targeted164/164 PostgreSQL PASS23.863s, actual Python/launcher0, including
+32new security cases. pip/system/migration consistency/full isolated chain and
+owned DB cleanup PASS. Focused frontend159/159 PASS20.19s; typecheck/Biome/build
+exit0. Real isolated Brief4/4 PASS45.9s includes Owner/current-assignee/member/
+Viewer Network+DOM projections and same-user cache clearing after reassignment,
+CSRF/edit/IDOR, four-sizeaxe0/keyboard and unchanged URLs/24h/legacy hierarchy.
+Full PostgreSQL969/969 PASS346.625s/actualPython0 and full frontend1067/1067
+PASS42.25s on frozen source; initial existing WorkspaceActions focus failure and
+subsequent unchanged21/full1067 passes are retained, not described as a fix.
+All9 broader browser suites39/39 PASS, plus Brief4 =43/43 across10suites,
+actual launcher/Playwright/backend0. Four-sizeaxe0/keyboard/reflow plus current
+375/1440 privacy-form PNG inspection pass. Final owned resource audit0 across
+3backend/10browser runs. READ ONLY13:17:12Z all29-table data/schema/history/
+sequences/cluster fingerprints unchanged except connections; before/after SHA256
+1196f624…38f65f54 matches.36migrations/5Users/2Sessions/all Owner rows retained,
+tasks.0005/ai.0002 UNAPPLIED and candidate columns/tables absent. All12 frozen
+source hashes/617 original project files preserved;12docs synchronized. No
+development/manual website claim, real mail/provider or unrelated feature change.
+
+Next: STOP at compensation OWNER REVIEW GATE.
+Any subsequent tasks.0005 rollout requires separate approval/inventory/backup/
+rehearsal. No ai.0002 apply, real email/provider call or public deploy.
+
+## Historical Snapshot - 2026-11-10 (HT-FE-TASK-BRIEF-24H-VI-01)
+
+**CANDIDATE IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.** Preserve30 previous
+dirty inheritance paths on main/2c421f1;778 originals/status/diff saved privately.
+Read-only current development29tables/36migrations/5Users/2Sessions/3Workspaces/
+3WorkspaceMembers/2Tasks/2Invitations; ai.0002 unapplied, no .env/SMTP reads/change.
+
+Implemented candidate tasks.0005: four nullable HTTP(S) URL2048 fields and nullable
+exact numeric18,0 expected whole-Task VND compensation/nonnegative CHECK. Canonical
+digit-string DTO avoids JS float loss. Existing Task readers inclViewer see pay;
+metadata writes remain manager-only. Ordinary hierarchy UI hidden, backend/AI
+relations/API preserved. Controlled dd/mm/yyyy+24h minute inputs retain local→UTC
+and unchanged-edit timestamps. No source rollout/dev Task API compatibility is
+claimed before independently approved migration.
+
+Fresh targeted PostgreSQL132/132 PASS20.268s, actual Python/launcher0 plus pip/
+system/model drift/graph/full isolated chain/owned cleanup PASS (32new tests,
+3candidate migration cases). Final full backend937/937 PASS317.404s/actualPython0.
+Task frontend164/164 focused and deadline37/37 passed; final full1047/1047
+PASS42.77s includes strengthened calendar/stability tests. Typecheck/Biome100files/
+build20.37s exit0;597.46kB chunk advisory. Real final Brief4/4 PASS33.5s plus10
+regression suites43/43 PASS=47/47, actual launcher/Playwright/backend0 and owned
+cleanup. Covers HCM18:30↔11:30Z, exact large pay, optional/clear/legacy fields,
+Editor/Viewer scope, hierarchy UI absence/backend preservation, Task→Review,
+AI fixture, Workspace/Invitation/inheritance/stability/Auth. Four-sizeaxe0,
+keyboard/focus/reflow and final mobile/desktop screenshot inspection pass.
+Initial calendar-label/old-test-selector failures are retained honestly; final
+mobile CSS improves month readability without JS/permission changes.
+
+READ ONLY12:34:44Z all29-table data/schema/history/sequences/cluster fingerprints
+unchanged except connections;36 migrations/5 Users/2 Sessions and allOwner rows
+retained. tasks.0005/ai.0002 UNAPPLIED, new Task columns absent.0 owned resources
+across2backend+13browser runs.778 originals/31 frozen task sources, previous30dirty
+changes preserved;12 affected docs synchronized. No development Task E2E/real
+Gmail/production/remoteCI claim, no SMTP/AI/auth/settings change. Stop at Owner
+migration review gate; next is separately approved controlled tasks.0005 rollout.
+
+## Historical Snapshot - 2026-11-10 (HT-FE-WORKSPACE-INHERITANCE-01)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Initial CLEAN
+main/2c421f19ad0e48f1bc639cfb3743f2079d54f5c1;
+772 original hashes saved. Read-only original PG16.14 database:29 tables,
+36 migrations/5 Users/2 Sessions/2 Profiles/3 memberships/2 Workspaces/
+2 WorkspaceMembers/2 Invitations/2 Tasks/19 AuditLogs; ai.0002 UNAPPLIED.
+Owner now reports Gmail SMTP functioning; do not reuse older config absence as
+current evidence or change/read credentials. No real email authorized here.
+
+Source audit verifies canonical Workspace.period+unique Profile/month and UTC
+settings. No new schema/current pointer needed. Implemented optional atomic
+source role snapshot or confirmed first-Workspace MEMBER selection, manager-only
+read-only preview and exact-current-ACTIVE-month onboarding after accept.
+Existing revoked assignment history is never reactivated, no tasks copied or
+source role cascade. Full skill/master and focused offline UX/React searches
+used. Final PostgreSQL132/132 targeted and905/905 full PASS (actual Python/launcher0),
+pip/system/model drift/graph/full isolated chain and owned DB cleanup PASS.
+Focused frontend68/full955 PASS, final TypeScript/Biome91files/build9.17s exit0.
+Six final real Chromium suites24/24 PASS: inheritance4,Workspace4,Members4,
+fake delivery2,stability4,auth/CSRF/tenant6; every launcher/Playwright/backend0.
+Four-size375/768/1440/812x375 axe0, keyboard/focus/reflow PASS; mobile/desktop
+scrolled role-preview PNGs visually inspected. Earlier fixture/type/provider-wrapper
+test failures are distinguished from final results in HANDOVER, not hidden.
+At11:12:55Z all29-table development fingerprints/schema/history/sequences exact,
+36 migrations and Owner rows unchanged,ai.0002 unapplied;0 owned resources across
+3backend+8browser attempts,772 originals and19 frozen source hashes preserved.
+All11 affected docs synchronized; no SMTP/settings/models/migrations/AI change,
+no real mail or Owner website mutation. Manual review/build advisory remain;
+no implementation blocker. Stop at OWNER REVIEW GATE, no next task/deploy.
+
+## Historical Snapshot - 2026-11-09 (HT-FE-INVITATION-DELIVERY-FIX-01)
 
 **APPLICATION FIX VERIFIED — REAL EMAIL CONFIGURATION PENDING OWNER.** The
 reported development503 is reproduced by a no-send Django settings preflight:

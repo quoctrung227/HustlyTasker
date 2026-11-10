@@ -1,12 +1,82 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-11-09
+Last updated: 2026-11-10
 
 ## Giai đoạn hiện tại
 
-`PHASE 4 - Invitation email configuration review / AI migration still pending`
+`PHASE 4 - Task UX refinement / AI migration pending`
 
-Current task: **HT-FE-INVITATION-DELIVERY-FIX-01 — APPLICATION FIX VERIFIED /
+Current task: **HT-FE-TASK-ASSIGNEE-NAME-FIX-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+The assignee fallback was caused by an old --noreload Django server serving
+localhost. Current name/username/DTO/cache logic is retained. One verified fresh
+server now handles direct/proxy traffic; launcher refuses an occupied port before
+loading configuration. Fresh PostgreSQL59/frontend122/launcher15 and quality
+checks PASS; read-only4existing Task handlers match names, development29-table
+fingerprints unchanged. No schema, AI, membership, pay or frontend redesign.
+Owner reload/Task review next; no migration or next feature starts automatically.
+
+Historical task: **HT-FE-TASK-UX-REFINEMENT-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+Four Owner-requested improvements implemented: boundeddescription scrollcard,
+newHTTP(S)DeliverableURLs with immutablelegacyhistory, stackedUTCdatefilters and
+currentserver-derivedassignee names. No schema/migration, RBAC/workflow/SMTP/AI
+change. Fresh191/full996PostgreSQL, full1123frontend/quality0 and37/37realbrowser
+cases across8suites PASS, actualexits0/ownedcleanup. Exact29-tabledevelopment
+preservation and22testedsourcehashes verified. Django8000/Vite5173 started,
+GET9/9/read-only ORM PASS;13docs synchronized. Current results and limitations
+in HANDOVER. NextOwner
+manualreview only, noautomaticfeature/migration/deployment; ai.0002UNAPPLIED.
+
+Historical task: **HT-DB-TASK-BRIEF-ROLLOUT-01 — DEVELOPMENT MIGRATION COMPLETE /
+OWNER UI ACCEPTANCE PENDING**. Targeted tasks.0005 applied development only,
+36→37history; ai.0002 remains unapplied. External restrictedbackup/archive/restore/
+isolatedtargetedrehearsal and exactlegacydata/schema preservationPASS. Actual
+backendTaskORM/Djangochecks/localViteproxy/HTTPGET9/9PASS, no datafixtures or real
+mail/AI. Existingruntimecode and all prior dirty work preserved; docs current.
+Owner manual Create/Edit/Detail/assignment/payprivacy/VI24h acceptance is next.
+No automatic next feature, general migration, AI rollout or public deployment.
+
+Historical task: **HT-FE-TASK-COMPENSATION-RBAC-01 — IMPLEMENTATION COMPLETE /
+PENDING DEVELOPMENT MIGRATION APPROVAL**.
+Owner narrows compensation disclosure to legitimate managers/current assignee,
+with server-side NULL redaction and unchanged metadata write rules. No schema
+change or migration apply. Shared Task DTO and inspection-only Admin hardening,
+React privacy/caching tests and isolated Network/DOM checks are implemented.
+Final targeted164/full969 PostgreSQL, fullfrontend1067 and Brief4/4 browsers
+PASS/actual exits0; final43real browsers/quality/ownedcleanup and exact29-table
+development fingerprints preserved.12docs synchronized; current source frozen,
+no models/migration/SMTP/Workspace/AI change. Initial unchanged Workspace focus
+failure and subsequent21/full1067 passes remain documented, not disguised as fix.
+Next gate: Owner reviews this RBAC correction before separately authorizing
+controlled tasks.0005 rollout. ai.0002 remains unrelated and UNAPPLIED.
+
+Historical task: **HT-FE-TASK-BRIEF-24H-VI-01 — CANDIDATE IMPLEMENTATION COMPLETE /
+PENDING DEVELOPMENT MIGRATION APPROVAL**.
+Owner approves optional resource URLs/whole-Task VND pay, Vietnamese24h deadline
+UI and ordinary Subtask UI removal while preserving backend/history/AI contracts.
+tasks.0005 candidate only, no development apply; source requires new columns
+before Task use there. Final backend132/full937, frontend1047, quality0 and
+real Chromium47/47 PASS/actual exits0/owned cleanup. Four-sizeaxe0/focus/reflow,
+mobile calendar fix/visual inspection and exact29-table development preservation
+verified in HANDOVER. Its earlier all-reader compensation policy is superseded
+by the current approved RBAC task; no broader editor writes, SMTP/
+Workspace/Invitation/AI changes. Next requires separate Owner-approved inventory/
+backup/rehearsal and targeted tasks.0005 rollout; keep ai.0002 UNAPPLIED. No
+automatic migration/next implementation, development manual E2E or public deploy.
+
+Historical task: **HT-FE-WORKSPACE-INHERITANCE-01 — IMPLEMENTATION COMPLETE /
+OWNER REVIEW GATE**.
+Owner-approved bounded migration-free membership snapshot on Workspace creation,
+confirmed first-Workspace MEMBER selection and exact-current-month onboarding
+after successful Invitation acceptance. No revival of revoked rows, no tasks
+copied, no source mutation or later cascade. Final PostgreSQL132/full905,
+frontend68/full955,quality0 and6real browser suites24/24 PASS; actual Python/
+Playwright/backend/launcher exits0, owned cleanup and full29-table development
+fingerprint/schema/history preservation verified.36 migrations/5 Users/2 Sessions
+and Owner rows retained,ai.0002 UNAPPLIED. Owner reports working Gmail SMTP;
+no real send/config change here. Manual acceptance next; no further implementation,
+migration rollout, live provider or deployment starts automatically.
+
+Historical task: **HT-FE-INVITATION-DELIVERY-FIX-01 — APPLICATION FIX VERIFIED /
 REAL EMAIL CONFIGURATION PENDING OWNER**.
 Actual no-send settings diagnostic confirms console preflight rejection and
 missing SMTP host/username/password; read-only Invitation/audit counts0. Console

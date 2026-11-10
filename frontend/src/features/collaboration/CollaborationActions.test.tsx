@@ -32,7 +32,7 @@ async function openSubmit(props = context()) {
   const user = userEvent.setup()
   await user.click(screen.getByRole('button', { name: 'Nộp sản phẩm' }))
   const dialog = screen.getByRole('dialog', { name: 'Nộp sản phẩm' })
-  return { ...view, props, user, dialog, input: within(dialog).getByLabelText('Đường dẫn hoặc nội dung sản phẩm') }
+  return { ...view, props, user, dialog, input: within(dialog).getByLabelText('Link sản phẩm hoàn thành') }
 }
 
 describe('Submit Deliverable controls', () => {
@@ -40,15 +40,19 @@ describe('Submit Deliverable controls', () => {
     render(<SubmitDeliverable {...context()} {...state} />)
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
-  it('submits trimmed text without inventing a URL/upload requirement and waits for the server', async () => {
+  it('submits one trimmed finished-product URL without upload or local workflow mutation and waits for the server', async () => {
     const { props, user, dialog, input } = await openSubmit()
-    fireEvent.change(input, { target: { value: '  Sản phẩm dưới dạng văn bản  ' } })
+    expect(input).toHaveAttribute('type', 'url')
+    expect(input).toHaveAttribute('inputmode', 'url')
+    expect(input).toHaveAttribute('placeholder', 'https://drive.google.com/file/d/.../view')
+    expect(dialog.querySelector('input[type="file"]')).toBeNull()
+    fireEvent.change(input, { target: { value: '  https://drive.google.com/file/d/synthetic-final/view  ' } })
     await user.click(within(dialog).getByRole('button', { name: 'Nộp sản phẩm' }))
-    expect(collaborationApi.submitDeliverable).toHaveBeenCalledWith('profile', 'workspace', 'task', { file_url: 'Sản phẩm dưới dạng văn bản' }, expect.any(AbortSignal))
+    expect(collaborationApi.submitDeliverable).toHaveBeenCalledWith('profile', 'workspace', 'task', { file_url: 'https://drive.google.com/file/d/synthetic-final/view' }, expect.any(AbortSignal))
     expect(props.onSaved).toHaveBeenCalledWith(item, 'submit')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
-  it.each(['', 'a'.repeat(501), 'Có\0NUL', '\uD800'])('rejects invalid input and focuses a linked error summary (%#)', async (value) => {
+  it.each(['', `https://example.test/${'a'.repeat(501)}`, 'Có\0NUL', '\uD800', 'javascript:alert(1)', 'data:text/plain,test', 'file:///tmp/result.mp4', 'ftp://example.test/video.mp4', 'Kết quả dưới dạng văn bản', 'https://user:password@example.test/video'])('rejects invalid new submission and focuses a linked error summary (%#)', async (value) => {
     const { user, dialog, input } = await openSubmit()
     fireEvent.change(input, { target: { value } })
     await user.click(within(dialog).getByRole('button', { name: 'Nộp sản phẩm' }))
@@ -63,9 +67,9 @@ describe('Submit Deliverable controls', () => {
     const error = new ApiError(status, status === 403 ? 'forbidden' : 'validation', 'Không thể lưu thay đổi.', { file_url: 'Kiểm tra sản phẩm.' })
     vi.mocked(collaborationApi.submitDeliverable).mockRejectedValue(error)
     const { props, user, dialog, input } = await openSubmit()
-    fireEvent.change(input, { target: { value: 'Bản nháp cần giữ' } })
+    fireEvent.change(input, { target: { value: 'https://example.test/keep-draft' } })
     await user.click(within(dialog).getByRole('button', { name: 'Nộp sản phẩm' }))
-    expect(input).toHaveValue('Bản nháp cần giữ')
+    expect(input).toHaveValue('https://example.test/keep-draft')
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Không thể lưu thay đổi.')
     expect(props.onFailure).toHaveBeenCalledWith(error)
     expect(props.onSaved).not.toHaveBeenCalled()
@@ -75,7 +79,7 @@ describe('Submit Deliverable controls', () => {
     let resolve: (value: Deliverable) => void = () => { throw new Error('Missing resolver') }
     vi.mocked(collaborationApi.submitDeliverable).mockReturnValue(new Promise<Deliverable>((done) => { resolve = done }))
     const view = await openSubmit()
-    fireEvent.change(view.input, { target: { value: 'Đang gửi' } })
+    fireEvent.change(view.input, { target: { value: 'https://example.test/submitting' } })
     fireEvent.submit(view.input.closest('form') as HTMLFormElement)
     fireEvent.submit(view.input.closest('form') as HTMLFormElement)
     expect(collaborationApi.submitDeliverable).toHaveBeenCalledTimes(1)
@@ -89,12 +93,27 @@ describe('Submit Deliverable controls', () => {
   })
   it('stops a stale open form when refreshed capability is false and keeps its draft', async () => {
     const view = await openSubmit()
-    fireEvent.change(view.input, { target: { value: 'Bản nháp' } })
+    fireEvent.change(view.input, { target: { value: 'https://example.test/stale-draft' } })
     view.rerender(<SubmitDeliverable {...view.props} canSubmit={false} />)
     expect(within(view.dialog).getByRole('button', { name: 'Nộp sản phẩm' })).toBeDisabled()
-    expect(view.input).toHaveValue('Bản nháp')
+    expect(view.input).toHaveValue('https://example.test/stale-draft')
     fireEvent.submit(view.input.closest('form') as HTMLFormElement)
     expect(collaborationApi.submitDeliverable).not.toHaveBeenCalled()
+  })
+  it.each([
+    new ApiError(0, 'network', 'Network failed.'),
+    new ApiError(500, 'server', 'Server failed.'),
+    new ApiError(200, 'invalid-response', 'Invalid response.'),
+  ])('keeps an uncertain submission as a draft and requires history inspection without automatic replay (%#)', async (error) => {
+    vi.mocked(collaborationApi.submitDeliverable).mockRejectedValue(error)
+    const { props, user, dialog, input } = await openSubmit()
+    fireEvent.change(input, { target: { value: 'https://example.test/uncertain-result' } })
+    await user.click(within(dialog).getByRole('button', { name: 'Nộp sản phẩm' }))
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Chưa xác nhận được kết quả nộp. Kiểm tra lịch sử sản phẩm trước khi thử lại.')
+    expect(input).toHaveValue('https://example.test/uncertain-result')
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+    expect(collaborationApi.submitDeliverable).toHaveBeenCalledTimes(1)
+    expect(props.onSaved).not.toHaveBeenCalled()
   })
 })
 

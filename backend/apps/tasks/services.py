@@ -6,6 +6,7 @@ from apps.audit.models import AuditLog
 from apps.notifications.models import Notification
 from apps.notifications.services import emit_task_notifications
 from apps.reviews.models import Deliverable, Review
+from apps.reviews.validation import normalize_deliverable_url
 from apps.workspace.access import (
     TenantAccessNotFound,
     can_execute_workspace_tasks,
@@ -16,6 +17,7 @@ from apps.workspace.models import ProfileMembership, WorkspaceMember
 from apps.workspace.services import lock_workspace_mutation_context
 
 from .models import Task, TaskAssignment
+from .brief import TASK_BRIEF_URL_FIELDS, normalize_task_compensation, normalize_task_reference
 
 
 _UNSET = object()
@@ -138,6 +140,11 @@ def create_task(
     priority=Task.Priority.MEDIUM,
     deadline=None,
     parent_id=None,
+    raw_video_url=None,
+    reference_video_url=None,
+    template_project_url=None,
+    script_url=None,
+    estimated_compensation_vnd=None,
 ):
     context, workspace, _ = lock_workspace_mutation_context(
         actor=actor,
@@ -158,6 +165,11 @@ def create_task(
         status=Task.Status.PENDING,
         priority=priority,
         deadline=deadline,
+        raw_video_url=normalize_task_reference(raw_video_url, field="raw_video_url"),
+        reference_video_url=normalize_task_reference(reference_video_url, field="reference_video_url"),
+        template_project_url=normalize_task_reference(template_project_url, field="template_project_url"),
+        script_url=normalize_task_reference(script_url, field="script_url"),
+        estimated_compensation_vnd=normalize_task_compensation(estimated_compensation_vnd),
         created_by=actor,
     )
     task.full_clean()
@@ -190,6 +202,11 @@ def update_task(
     priority=_UNSET,
     deadline=_UNSET,
     parent_id=_UNSET,
+    raw_video_url=_UNSET,
+    reference_video_url=_UNSET,
+    template_project_url=_UNSET,
+    script_url=_UNSET,
+    estimated_compensation_vnd=_UNSET,
 ):
     context, workspace, _ = lock_workspace_mutation_context(
         actor=actor,
@@ -224,6 +241,22 @@ def update_task(
     if deadline is not _UNSET and task.deadline != deadline:
         task.deadline = deadline
         changed_fields.append("deadline")
+
+    references = {
+        "raw_video_url": raw_video_url, "reference_video_url": reference_video_url,
+        "template_project_url": template_project_url, "script_url": script_url,
+    }
+    for field in TASK_BRIEF_URL_FIELDS:
+        if references[field] is not _UNSET:
+            value = normalize_task_reference(references[field], field=field)
+            if getattr(task, field) != value:
+                setattr(task, field, value)
+                changed_fields.append(field)
+    if estimated_compensation_vnd is not _UNSET:
+        amount = normalize_task_compensation(estimated_compensation_vnd)
+        if task.estimated_compensation_vnd != amount:
+            task.estimated_compensation_vnd = amount
+            changed_fields.append("estimated_compensation_vnd")
 
     if not changed_fields:
         return task
@@ -466,7 +499,7 @@ def submit_deliverable(
 
     deliverable = Deliverable(
         task=task,
-        file_url=(file_url or "").strip(),
+        file_url=normalize_deliverable_url(file_url),
         uploaded_by=actor,
         revision=revision,
         status=Deliverable.Status.SUBMITTED,

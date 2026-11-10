@@ -81,6 +81,7 @@ from .services import (
     revoke_workspace_member,
     update_workspace,
     update_workspace_member,
+    workspace_inheritance_preview,
 )
 
 
@@ -402,6 +403,29 @@ class WorkspaceListView(TenantApiViewMixin, generics.ListAPIView):
             response_serializer.data,
             status=status.HTTP_201_CREATED,
         )
+
+
+@method_decorator(never_cache, name="dispatch")
+class WorkspaceInheritancePreviewView(TenantReadOnlyViewMixin, generics.GenericAPIView):
+    permission_classes = (CanCreateWorkspace,)
+
+    def get(self, request, *args, **kwargs):
+        source_id = request.query_params.get("source_workspace_id")
+        if source_id is not None:
+            # Reuse the strict create field rather than accept an unvalidated ID.
+            field = WorkspaceCreateSerializer().fields["source_workspace_id"]
+            try:
+                source_id = field.run_validation(source_id)
+            except ApiValidationError as exc:
+                raise ApiValidationError({"source_workspace_id": exc.detail}) from None
+        preview = workspace_inheritance_preview(
+            actor=request.user, profile_id=self.profile_access_context.profile_id,
+            source_workspace_id=source_id,
+        )
+        rows = self.paginate_queryset(preview.pop("results"))
+        response = self.get_paginated_response(rows)
+        response.data.update(preview)
+        return response
 
 
 @method_decorator(never_cache, name="dispatch")

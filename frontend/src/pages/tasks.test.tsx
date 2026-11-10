@@ -1,10 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppRoutes } from '../app/App'
-import { AuthProvider } from '../features/auth/AuthProvider'
+import { AuthProvider, useAuth } from '../features/auth/AuthProvider'
 import { ApiError, apiClient } from '../services/api/client'
 import { authApi, queryKeys, tenantApi } from '../services/api/queries'
 import type { Page, Profile, User, Workspace } from '../services/api/types'
@@ -16,8 +16,8 @@ import { TaskDetailPage, TasksPage, filtersFromSearch } from './tasks'
 // Page tests exercise permission hints, scoped data and navigation. Actual
 // mutation forms and HTTP contracts have their own focused tests/browser flows.
 vi.mock('../features/tasks/TaskForms', () => ({
-  TaskCreate: ({ canCreate, fixedParentId, onSaved }: { canCreate?: boolean; fixedParentId?: string; onSaved: () => void }) => canCreate
-    ? <button type="button" onClick={onSaved}>{fixedParentId ? 'Tạo công việc con' : 'Tạo công việc'}</button> : null,
+  TaskCreate: ({ canCreate, onSaved }: { canCreate?: boolean; onSaved: () => void }) => canCreate
+    ? <button type="button" onClick={onSaved}>Tạo công việc</button> : null,
   TaskEdit: ({ canEdit, onDenied }: { canEdit?: boolean; onDenied: () => void }) => canEdit
     ? <button type="button" onClick={onDenied}>Chỉnh sửa công việc</button> : null,
   TaskAssign: ({ canAssign, onOpen }: { canAssign?: boolean; onOpen: () => void }) => canAssign
@@ -27,7 +27,8 @@ vi.mock('../features/tasks/TaskForms', () => ({
 }))
 
 // This direct-page harness deliberately isolates child feature boundaries and
-// does not mount application authentication. Keep AI availability disabled here;
+// does not mount application authentication for Task pages. The Workspace route
+// requires the real current-User context for its scoped creation form. Keep AI availability disabled here;
 // task-generator.test.tsx exercises the real entry with AuthProvider and both
 // availability states. Do not mock auth globally: the 403 identity test below
 // must continue exercising the actual provider and protected application route.
@@ -55,12 +56,17 @@ function TestNavigation() {
   return <><output data-testid="location">{location.pathname}{location.search}</output><button type="button" onClick={() => navigate(`/profiles/${otherProfileId}/workspaces/${otherWorkspaceId}/tasks`)}>Đổi phạm vi</button></>
 }
 
+function AuthenticatedWorkspacePage() {
+  const { status } = useAuth()
+  return status === 'authenticated' ? <WorkspacesPage /> : null
+}
+
 function renderPage(path = base) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0, gcTime: 0, refetchOnWindowFocus: false } } })
   render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><TestNavigation /><Routes>
     <Route path="/profiles/:profileId/workspaces/:workspaceId/tasks" element={<TasksPage />} />
     <Route path="/profiles/:profileId/workspaces/:workspaceId/tasks/:taskId" element={<TaskDetailPage />} />
-    <Route path="/profiles/:profileId/workspaces" element={<WorkspacesPage />} />
+    <Route path="/profiles/:profileId/workspaces" element={<AuthProvider><AuthenticatedWorkspacePage /></AuthProvider>} />
   </Routes></MemoryRouter></QueryClientProvider>)
   return client
 }
@@ -78,9 +84,9 @@ beforeEach(() => {
 })
 
 describe('Task URL filters and pagination', () => {
-  it('allowlists filter values and gives an explicit parent precedence over root_only', () => {
+  it('allowlists current filter values and ignores retired hierarchy URL controls without hiding existing Tasks', () => {
     expect(filtersFromSearch(new URLSearchParams(`status=WORKING&priority=HIGH&ordering=deadline&parent_id=${taskId}&root_only=true&private=ignored`)))
-      .toEqual({ status: 'WORKING', priority: 'HIGH', ordering: 'deadline', parent_id: taskId })
+      .toEqual({ status: 'WORKING', priority: 'HIGH', ordering: 'deadline' })
     expect(filtersFromSearch(new URLSearchParams('status=ADMIN&priority=999&ordering=title&parent_id=../../secret&deadline_before=not-a-date')))
       .toEqual({ ordering: '-created_at' })
   })
@@ -100,9 +106,9 @@ describe('Task URL filters and pagination', () => {
     const user = userEvent.setup()
     await user.selectOptions(screen.getByLabelText('Trạng thái'), 'WORKING')
     await user.selectOptions(screen.getByLabelText('Mức ưu tiên'), 'URGENT')
-    await user.selectOptions(screen.getByLabelText('Cấu trúc'), 'root')
+    expect(screen.queryByLabelText('Cấu trúc')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Áp dụng bộ lọc' }))
-    await waitFor(() => expect(workApi.tasks).toHaveBeenLastCalledWith(profileId, workspaceId, { status: 'WORKING', priority: 'URGENT', root_only: true, ordering: '-created_at' }, 1, expect.any(AbortSignal)))
+    await waitFor(() => expect(workApi.tasks).toHaveBeenLastCalledWith(profileId, workspaceId, { status: 'WORKING', priority: 'URGENT', ordering: '-created_at' }, 1, expect.any(AbortSignal)))
     expect(screen.getByTestId('location')).not.toHaveTextContent('page=3')
     expect(screen.getByTestId('location')).not.toHaveTextContent('unknown=')
   })
@@ -112,7 +118,7 @@ describe('Task URL filters and pagination', () => {
     renderPage(`${base}?priority=HIGH&root_only=true`)
     await screen.findByRole('link', { name: task.title })
     await userEvent.setup().click(screen.getByRole('button', { name: 'Trang sau' }))
-    await waitFor(() => expect(workApi.tasks).toHaveBeenLastCalledWith(profileId, workspaceId, { priority: 'HIGH', root_only: true, ordering: '-created_at' }, 2, expect.any(AbortSignal)))
+    await waitFor(() => expect(workApi.tasks).toHaveBeenLastCalledWith(profileId, workspaceId, { priority: 'HIGH', ordering: '-created_at' }, 2, expect.any(AbortSignal)))
   })
 
   it('labels local title search as page-only and never sends it to the server', async () => {
@@ -135,8 +141,8 @@ describe('Task URL filters and pagination', () => {
     renderPage()
     await screen.findByRole('link', { name: task.title })
     const calls = vi.mocked(workApi.tasks).mock.calls.length
-    fireEvent.change(screen.getByLabelText('Thời hạn từ ngày (UTC)'), { target: { value: '2026-12-01' } })
-    fireEvent.change(screen.getByLabelText('Thời hạn đến ngày (UTC)'), { target: { value: '2026-01-01' } })
+    fireEvent.change(screen.getByLabelText('Thời hạn từ ngày (UTC)'), { target: { value: '01/12/2026' } })
+    fireEvent.change(screen.getByLabelText('Thời hạn đến ngày (UTC)'), { target: { value: '01/01/2026' } })
     await userEvent.setup().click(screen.getByRole('button', { name: 'Áp dụng bộ lọc' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Khoảng thời hạn chưa hợp lệ')
     expect(workApi.tasks).toHaveBeenCalledTimes(calls)
@@ -198,7 +204,7 @@ describe('Task access and tenant cache boundaries', () => {
     renderPage(`${base}/${taskId}`)
     expect(await screen.findByRole('button', { name: 'Chỉnh sửa công việc' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Phân công công việc' })).toBeVisible()
-    expect(await screen.findByRole('button', { name: 'Tạo công việc con' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Tạo công việc con' })).not.toBeInTheDocument()
     expect(workApi.members).not.toHaveBeenCalled()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Phân công công việc' }))
     await waitFor(() => expect(workApi.members).toHaveBeenCalledWith(profileId, workspaceId, 1, expect.any(AbortSignal)))
@@ -240,6 +246,8 @@ describe('Task access and tenant cache boundaries', () => {
   })
 
   it('does not keep Workspace creation visible after an authenticated Profile read becomes forbidden', async () => {
+    const user: User = { id: '00000000-0000-4000-8000-000000000209', email: 'fixture@example.test', username: 'fixture', first_name: '', last_name: '', created_at: created, email_verified: false }
+    vi.spyOn(authApi, 'me').mockResolvedValue(user)
     vi.mocked(workApi.capabilities).mockResolvedValue(managerCapabilities)
     const client = renderPage(`/profiles/${profileId}/workspaces`)
     expect(await screen.findByRole('button', { name: 'Tạo không gian' })).toBeVisible()
@@ -283,8 +291,8 @@ describe('Task access and tenant cache boundaries', () => {
   })
 })
 
-describe('Task hierarchy rendering', () => {
-  it('uses bounded ancestor lookups and suppresses a fourth child level', async () => {
+describe('existing hierarchy data without ordinary hierarchy controls', () => {
+  it('keeps an existing child detail readable without fetching ancestors or rendering child controls', async () => {
     vi.mocked(workApi.capabilities).mockResolvedValue(managerCapabilities)
     const parents = [0, 1, 2].map((n) => `00000000-0000-4000-8000-00000000030${n}`)
     vi.mocked(workApi.task).mockImplementation(async (_pid, _wid, id) => {
@@ -293,21 +301,119 @@ describe('Task hierarchy rendering', () => {
       return { ...task, id, title: `Cấp tổ tiên ${index}`, parent_id: parents[index + 1] ?? null }
     })
     renderPage(`${base}/${taskId}`)
-    expect(await screen.findByText('Đã đến giới hạn 3 cấp con. Không thể thêm cấp sâu hơn.')).toBeVisible()
-    expect(screen.getByRole('navigation', { name: 'Phân cấp công việc' })).toHaveTextContent('Cấp tổ tiên 2Cấp tổ tiên 1Cấp tổ tiên 0')
+    expect(await screen.findByRole('heading', { name: task.title })).toBeVisible()
+    expect(screen.queryByRole('navigation', { name: 'Phân cấp công việc' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Công việc con' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Tạo công việc con' })).not.toBeInTheDocument()
-    expect(workApi.task).toHaveBeenCalledTimes(4)
+    expect(workApi.task).toHaveBeenCalledOnce()
+    expect(workApi.subtasks).not.toHaveBeenCalled()
   })
 
-  it('blocks child creation when ancestry is invalid while preserving authorized Task detail', async () => {
+  it('does not interpret or rewrite a historical parent relation in the ordinary detail UI', async () => {
     vi.mocked(workApi.capabilities).mockResolvedValue(managerCapabilities)
     vi.mocked(workApi.task).mockResolvedValue({ ...task, parent_id: taskId })
     renderPage(`${base}/${taskId}`)
-    expect(await screen.findByRole('alert')).toHaveTextContent('Chưa thể xác minh đầy đủ phân cấp.')
-    expect(screen.getByRole('heading', { name: task.title })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: task.title })).toBeVisible()
+    expect(screen.queryByText('Chưa thể xác minh đầy đủ phân cấp.')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Tạo công việc con' })).not.toBeInTheDocument()
     expect(screen.queryByText('Invalid hierarchy')).not.toBeInTheDocument()
     expect(workApi.task).toHaveBeenCalledOnce()
+  })
+})
+
+describe('ordinary Task list preserves historical records', () => {
+  it('lists roots and children without hierarchy controls or root-only filtering', async () => {
+    const child = { ...task, id: otherProfileId, parent_id: taskId, title: 'Công việc cũ vẫn hiển thị' }
+    vi.mocked(workApi.tasks).mockResolvedValue(page([task, child]))
+    renderPage(`${base}?root_only=true&parent_id=${taskId}`)
+    expect(await screen.findByRole('link', { name: child.title })).toBeVisible()
+    expect(screen.getByRole('link', { name: task.title })).toBeVisible()
+    expect(screen.queryByText('CÔNG VIỆC CON')).not.toBeInTheDocument()
+    expect(screen.queryByText('CÔNG VIỆC GỐC')).not.toBeInTheDocument()
+    expect(workApi.tasks).toHaveBeenCalledWith(profileId, workspaceId, { ordering: '-created_at' }, 1, expect.any(AbortSignal))
+  })
+})
+
+describe('Task brief with server-redacted compensation', () => {
+  // These role scenarios model server-authorized projections; React does not
+  // infer compensation access from role labels or assignment/User IDs.
+  it.each(['Profile Owner', 'Profile Admin', 'Workspace Admin'])('shows authorized %s compensation with the existing metadata controls', async () => {
+    vi.mocked(workApi.capabilities).mockResolvedValue(managerCapabilities)
+    vi.mocked(workApi.task).mockResolvedValue({ ...task, estimated_compensation_vnd: '500000' })
+    renderPage(`${base}/${taskId}`)
+    expect(await screen.findByText('500.000 VNĐ')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Chỉnh sửa công việc' })).toBeVisible()
+  })
+
+  it('shows safe document actions and exact whole-Task compensation to an authorized read-only assignee', async () => {
+    vi.mocked(workApi.task).mockResolvedValue({ ...task, raw_video_url: 'https://example.test/raw', reference_video_url: 'https://example.test/reference', template_project_url: 'https://example.test/template', script_url: 'https://docs.google.com/document/d/synthetic/edit', estimated_compensation_vnd: '9007199254740993' })
+    renderPage(`${base}/${taskId}`)
+    expect(await screen.findByRole('heading', { name: 'Tài liệu và nguyên liệu' })).toBeVisible()
+    for (const name of ['Mở video gốc', 'Mở video tham khảo', 'Mở dự án mẫu', 'Mở kịch bản']) {
+      expect(screen.getByRole('link', { name })).toHaveAttribute('target', '_blank')
+      expect(screen.getByRole('link', { name })).toHaveAttribute('rel', 'noopener noreferrer')
+    }
+    expect(screen.getByText('9.007.199.254.740.993 VNĐ')).toBeVisible()
+    expect(screen.getByText(/Chỉ hiển thị khi máy chủ xác nhận quyền xem hiện tại/)).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Chỉnh sửa công việc' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Tiền công dự kiến (VNĐ)')).not.toBeInTheDocument()
+  })
+  it.each(['unassigned MEMBER', 'ordinary VIEWER'])('does not render compensation for a server-redacted %s while retaining URL/deadline access', async () => {
+    vi.mocked(workApi.task).mockResolvedValue({ ...task, script_url: 'https://example.test/script', deadline: '2027-12-31T11:30:00Z', estimated_compensation_vnd: null })
+    renderPage(`${base}/${taskId}`)
+    expect(await screen.findByRole('heading', { name: task.title })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Mở kịch bản' })).toHaveAttribute('href', 'https://example.test/script')
+    expect(screen.getByText(/31\/12\/2027/)).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Tiền công dự kiến' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Tiền công dự kiến (VNĐ)')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Chỉnh sửa công việc' })).not.toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('500.000')
+    expect(document.body).not.toHaveTextContent('500000')
+    expect(document.body).not.toHaveTextContent('VNĐ')
+  })
+  it('replaces formerly visible compensation in both DOM and QueryClient after a same-User redacted refresh', async () => {
+    vi.mocked(workApi.task).mockResolvedValueOnce({ ...task, estimated_compensation_vnd: '9007199254740993' })
+      .mockResolvedValue({ ...task, estimated_compensation_vnd: null })
+    const client = renderPage(`${base}/${taskId}`)
+    expect(await screen.findByText('9.007.199.254.740.993 VNĐ')).toBeVisible()
+    const key = workKeys.task(profileId, workspaceId, taskId)
+    await act(async () => { await client.invalidateQueries({ queryKey: key }) })
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Tiền công dự kiến' })).not.toBeInTheDocument())
+    expect(client.getQueryData<Task>(key)?.estimated_compensation_vnd).toBeNull()
+    expect(JSON.stringify(client.getQueryData(key))).not.toContain('9007199254740993')
+    expect(document.body).not.toHaveTextContent('9.007.199.254.740.993')
+    expect(screen.getByRole('heading', { name: task.title })).toBeVisible()
+  })
+  it.each([403, 404])('hides a formerly visible compensation after Task access is revoked with HTTP %s', async (status) => {
+    vi.mocked(workApi.task).mockResolvedValueOnce({ ...task, estimated_compensation_vnd: '9007199254740993' })
+      .mockRejectedValue(new ApiError(status, status === 403 ? 'forbidden' : 'not-found', 'Nội dung không khả dụng.'))
+    const client = renderPage(`${base}/${taskId}`)
+    expect(await screen.findByText('9.007.199.254.740.993 VNĐ')).toBeVisible()
+    await act(async () => { await client.invalidateQueries({ queryKey: workKeys.task(profileId, workspaceId, taskId) }) })
+    expect(await screen.findByRole('heading', { name: 'Nội dung không khả dụng' })).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Tiền công dự kiến' })).not.toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('9.007.199.254.740.993')
+    expect(workApi.task).toHaveBeenCalledTimes(2)
+  })
+  it('does not render a redacted compensation value on ordinary Task list rows', async () => {
+    vi.mocked(workApi.tasks).mockResolvedValue(page([{ ...task, estimated_compensation_vnd: null }]))
+    renderPage()
+    expect(await screen.findByRole('link', { name: task.title })).toBeVisible()
+    expect(document.body).not.toHaveTextContent('Tiền công dự kiến')
+    expect(document.body).not.toHaveTextContent('500000')
+    expect(document.body).not.toHaveTextContent('500.000')
+  })
+  it('does not render four empty documents or an absent compensation group', async () => {
+    renderPage(`${base}/${taskId}`)
+    await screen.findByRole('heading', { name: task.title })
+    expect(screen.queryByRole('heading', { name: 'Tài liệu và nguyên liệu' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Tiền công dự kiến' })).not.toBeInTheDocument()
+  })
+  it('displays zero VNĐ and safely omits an unsafe link even when a mock bypasses the API parser', async () => {
+    vi.mocked(workApi.task).mockResolvedValue({ ...task, raw_video_url: 'javascript:alert(1)', estimated_compensation_vnd: '0' })
+    renderPage(`${base}/${taskId}`)
+    expect(await screen.findByText('0 VNĐ')).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Mở video gốc' })).not.toBeInTheDocument()
   })
 })
 
@@ -330,5 +436,110 @@ describe('Task permission403 identity stability', () => {
     expect(workApi.capabilities).toHaveBeenCalledOnce()
     expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Đăng nhập' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Task detail reading layout and grouped deadline filters', () => {
+  it('retains a very long description in a named keyboard-focusable region outside the fixed card heading', async () => {
+    const description = `${'Nội dung giao việc rất dài.\n'.repeat(1600)}https://example.test/${'a'.repeat(2500)}\nKẾT THÚC NỘI DUNG`
+    vi.mocked(workApi.task).mockResolvedValue({ ...task, description })
+    renderPage(`${base}/${taskId}`)
+    const region = await screen.findByRole('region', { name: 'Mô tả công việc' })
+    expect(region.textContent).toBe(description)
+    expect(region).toHaveAttribute('tabindex', '0')
+    region.focus()
+    expect(region).toHaveFocus()
+    expect(region).not.toContainElement(screen.getByRole('heading', { name: 'Thông tin công việc' }))
+    expect(region).not.toContainElement(screen.getByRole('heading', { name: 'Thời hạn và phân công' }))
+    expect(workApi.task).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the empty-description message inside the same readable region', async () => {
+    vi.mocked(workApi.task).mockResolvedValue({ ...task, description: null })
+    renderPage(`${base}/${taskId}`)
+    expect(await screen.findByRole('region', { name: 'Mô tả công việc' })).toHaveTextContent('Công việc chưa có mô tả.')
+  })
+
+  it('groups both UTC deadline controls in from-to order without regrouping status or priority', async () => {
+    renderPage()
+    await screen.findByRole('link', { name: task.title })
+    const group = screen.getByRole('group', { name: 'Khoảng thời hạn (UTC)' })
+    const from = within(group).getByLabelText('Thời hạn từ ngày (UTC)')
+    const to = within(group).getByLabelText('Thời hạn đến ngày (UTC)')
+    expect(from.compareDocumentPosition(to) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(group).not.toContainElement(screen.getByLabelText('Trạng thái'))
+    expect(group).not.toContainElement(screen.getByLabelText('Mức ưu tiên'))
+  })
+
+  it('preserves UTC filter boundaries and clears the whole date group through the existing actions', async () => {
+    renderPage()
+    await screen.findByRole('link', { name: task.title })
+    const user = userEvent.setup()
+    fireEvent.change(screen.getByLabelText('Thời hạn từ ngày (UTC)'), { target: { value: '01/12/2027' } })
+    fireEvent.change(screen.getByLabelText('Thời hạn đến ngày (UTC)'), { target: { value: '31/12/2027' } })
+    await user.click(screen.getByRole('button', { name: 'Áp dụng bộ lọc' }))
+    await waitFor(() => expect(workApi.tasks).toHaveBeenLastCalledWith(profileId, workspaceId, {
+      ordering: '-created_at', deadline_after: '2027-12-01T00:00:00Z', deadline_before: '2027-12-31T23:59:59.999999Z',
+    }, 1, expect.any(AbortSignal)))
+    await user.click(screen.getByRole('button', { name: 'Xóa bộ lọc' }))
+    await waitFor(() => expect(workApi.tasks).toHaveBeenLastCalledWith(profileId, workspaceId, { ordering: '-created_at' }, 1, expect.any(AbortSignal)))
+    expect(screen.getByLabelText('Thời hạn từ ngày (UTC)')).toHaveValue('')
+    expect(screen.getByLabelText('Thời hạn đến ngày (UTC)')).toHaveValue('')
+  })
+})
+
+describe('server-scoped assignee display names', () => {
+  const assignment = { id: '00000000-0000-4000-8000-000000000281', profile_membership_id: '00000000-0000-4000-8000-000000000282', assigned_at: created }
+  it.each([
+    { display_name: 'Nguyễn An', expected: 'Nguyễn An' },
+    { display_name: 'editor_synthetic', expected: 'editor_synthetic' },
+    { display_name: null, expected: 'Thành viên không còn khả dụng' },
+    { display_name: undefined, expected: 'Thành viên được phân công' },
+    { display_name: assignment.profile_membership_id, expected: 'Thành viên được phân công' },
+  ])('renders $expected instead of a raw membership UUID', async ({ display_name, expected }) => {
+    vi.mocked(workApi.task).mockResolvedValue({ ...task, active_assignment: { ...assignment, display_name } })
+    renderPage(`${base}/${taskId}`)
+    expect(await screen.findByText(expected)).toBeVisible()
+    expect(document.body.textContent).not.toContain(assignment.profile_membership_id)
+    expect(document.body.textContent).not.toContain(assignment.id)
+    expect(workApi.members).not.toHaveBeenCalled()
+  })
+
+  it('distinguishes an unassigned Task from an unavailable assignee', async () => {
+    renderPage(`${base}/${taskId}`)
+    expect(await screen.findByText('Chưa phân công')).toBeVisible()
+    expect(screen.queryByText('Thành viên không còn khả dụng')).not.toBeInTheDocument()
+    expect(workApi.members).not.toHaveBeenCalled()
+  })
+
+  it('uses the same safe name for Task list rows without loading the management roster', async () => {
+    vi.mocked(workApi.tasks).mockResolvedValue(page([{ ...task, active_assignment: { ...assignment, display_name: 'Editor được giao' } }]))
+    renderPage()
+    expect(await screen.findByText('Editor được giao')).toBeVisible()
+    expect(document.body.textContent).not.toContain(assignment.profile_membership_id)
+    expect(workApi.members).not.toHaveBeenCalled()
+  })
+
+  it('replaces the old assignee name when a current Task response changes assignment', async () => {
+    vi.mocked(workApi.task).mockResolvedValueOnce({ ...task, active_assignment: { ...assignment, display_name: 'Người nhận trước' } })
+      .mockResolvedValue({ ...task, active_assignment: { ...assignment, id: '00000000-0000-4000-8000-000000000283', display_name: 'Người nhận mới' } })
+    const client = renderPage(`${base}/${taskId}`)
+    expect(await screen.findByText('Người nhận trước')).toBeVisible()
+    await act(async () => { await client.invalidateQueries({ queryKey: workKeys.task(profileId, workspaceId, taskId) }) })
+    expect(await screen.findByText('Người nhận mới')).toBeVisible()
+    expect(screen.queryByText('Người nhận trước')).not.toBeInTheDocument()
+    expect(workApi.members).not.toHaveBeenCalled()
+  })
+
+  it('does not retain the last known name after the server marks an existing assignment unavailable', async () => {
+    vi.mocked(workApi.task).mockResolvedValueOnce({ ...task, active_assignment: { ...assignment, display_name: 'Tên được phép trước đây' } })
+      .mockResolvedValue({ ...task, active_assignment: { ...assignment, display_name: null } })
+    const client = renderPage(`${base}/${taskId}`)
+    expect(await screen.findByText('Tên được phép trước đây')).toBeVisible()
+    await act(async () => { await client.invalidateQueries({ queryKey: workKeys.task(profileId, workspaceId, taskId) }) })
+    expect(await screen.findByText('Thành viên không còn khả dụng')).toBeVisible()
+    expect(screen.queryByText('Tên được phép trước đây')).not.toBeInTheDocument()
+    expect(client.getQueryData<Task>(workKeys.task(profileId, workspaceId, taskId))?.active_assignment?.display_name).toBeNull()
+    expect(workApi.members).not.toHaveBeenCalled()
   })
 })

@@ -75,9 +75,10 @@ describe('scoped collaboration reads', () => {
   it('shows revision/review history and a safe external URL without inventing blocked actions', async () => {
     setup()
     expect(await screen.findByText('Hãy sửa lại phần mở đầu.')).toBeVisible()
-    const link = screen.getByRole('link', { name: /Mở sản phẩm bàn giao/ })
+    const link = screen.getByRole('link', { name: /Mở sản phẩm/ })
     expect(link).toHaveAttribute('href', deliverable.file_url)
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+    expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('referrerpolicy', 'no-referrer')
     expect(screen.queryByRole('button', { name: /Nộp|Phê duyệt|Yêu cầu chỉnh sửa/ })).not.toBeInTheDocument()
   })
@@ -96,6 +97,24 @@ describe('scoped collaboration reads', () => {
     expect(await screen.findByText('Bản ghi cũ · chưa có phiên bản')).toBeVisible()
     expect(screen.getByText(/Thông tin thành viên không còn khả dụng/)).toBeVisible()
     expect(screen.getByText('Chưa có quyết định đánh giá cho phiên bản này.')).toBeVisible()
+  })
+  it('preserves old non-URL file references as readable text without inventing an upload or external link', async () => {
+    vi.mocked(collaborationApi.deliverables).mockResolvedValue(page([{ ...deliverable, revision: null, file_url: 'legacy/private/final-video.mov' }]))
+    setup()
+    expect(await screen.findByRole('heading', { name: 'Sản phẩm và đánh giá' })).toBeVisible()
+    expect(await screen.findByText('legacy/private/final-video.mov')).toBeVisible()
+    expect(screen.queryByRole('link', { name: /Mở sản phẩm/ })).not.toBeInTheDocument()
+    expect(document.querySelector('input[type="file"]')).toBeNull()
+  })
+  it('retains the separate finished-product link for every submitted revision', async () => {
+    const older = { ...deliverable, file_url: 'https://drive.google.com/file/d/revision-one/view' }
+    const newer = { ...deliverable, id: '00000000-0000-4000-8000-000000000310', revision: 2, file_url: 'https://onedrive.live.com/synthetic-revision-two', review: null }
+    vi.mocked(collaborationApi.deliverables).mockResolvedValue(page([older, newer]))
+    setup()
+    const first = await screen.findByRole('article', { name: 'Phiên bản 1' })
+    const second = screen.getByRole('article', { name: 'Phiên bản 2' })
+    expect(within(first).getByRole('link', { name: /Mở sản phẩm/ })).toHaveAttribute('href', older.file_url)
+    expect(within(second).getByRole('link', { name: /Mở sản phẩm/ })).toHaveAttribute('href', newer.file_url)
   })
   it('uses useful empty states without fake submissions or comments', async () => {
     rows = []

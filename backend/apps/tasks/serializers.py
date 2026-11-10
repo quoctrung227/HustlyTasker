@@ -1,14 +1,54 @@
 from datetime import timezone as datetime_timezone
 from functools import cached_property
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from apps.reviews.models import Deliverable, Review
+from apps.reviews.validation import normalize_deliverable_url
 from apps.workspace.access import can_execute_workspace_tasks, can_review_workspace_deliverables
 from apps.workspace.models import ProfileMembership
 from apps.workspace.serializers import StrictInputSerializer
 
 from .models import Task
+from .brief import normalize_task_compensation, normalize_task_reference
+from .access import task_assignee_display_values, task_compensation_visible_to
+from .presentation import assignee_display_name
+
+
+class TaskReferenceField(serializers.Field):
+    def __init__(self, *, field_name, **kwargs):
+        self.reference_name = field_name
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        try:
+            return normalize_task_reference(data, field=self.reference_name)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict[self.reference_name]) from None
+
+    def to_representation(self, value):
+        return value
+
+
+class TaskCompensationField(serializers.Field):
+    def to_internal_value(self, data):
+        try:
+            return normalize_task_compensation(data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict["estimated_compensation_vnd"]) from None
+
+    def to_representation(self, value):
+        amount = normalize_task_compensation(value, allow_decimal=True)
+        return str(amount) if amount is not None else None
+
+
+class TaskBriefInputSerializer(StrictInputSerializer):
+    raw_video_url = TaskReferenceField(field_name="raw_video_url", required=False, allow_null=True)
+    reference_video_url = TaskReferenceField(field_name="reference_video_url", required=False, allow_null=True)
+    template_project_url = TaskReferenceField(field_name="template_project_url", required=False, allow_null=True)
+    script_url = TaskReferenceField(field_name="script_url", required=False, allow_null=True)
+    estimated_compensation_vnd = TaskCompensationField(required=False, allow_null=True)
 
 
 def _profile_membership_id(*, profile_id, user_id):
@@ -28,6 +68,7 @@ class TaskReadSerializer(serializers.ModelSerializer):
     active_assignment = serializers.SerializerMethodField()
     can_start = serializers.SerializerMethodField()
     can_submit = serializers.SerializerMethodField()
+    estimated_compensation_vnd = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
@@ -40,6 +81,11 @@ class TaskReadSerializer(serializers.ModelSerializer):
             "status",
             "priority",
             "deadline",
+            "raw_video_url",
+            "reference_video_url",
+            "template_project_url",
+            "script_url",
+            "estimated_compensation_vnd",
             "active_assignment",
             "can_start",
             "can_submit",
@@ -47,6 +93,29 @@ class TaskReadSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = fields
+
+    @cached_property
+    def _compensation_visible_task_ids(self):
+        request = self.context.get("request")
+        context = self.context.get("workspace_access_context")
+        if request is None or context is None:
+            return set()
+        # ListSerializer's bounded page is already evaluated when its child is
+        # called. One fresh permission query serves every row, never N+1 and
+        # never trusting stale Task._active_assignments for sensitive data.
+        instances = self.parent.instance if isinstance(self.parent, serializers.ListSerializer) else [self.instance]
+        task_ids = [task.pk for task in instances if isinstance(task, Task)]
+        return set(task_compensation_visible_to(
+            getattr(request, "user", None), context,
+        ).filter(pk__in=task_ids).values_list("pk", flat=True))
+
+    def get_estimated_compensation_vnd(self, task):
+        if task.pk not in self._compensation_visible_task_ids:
+            # Keep the candidate DTO shape while revealing neither the value
+            # nor whether a confidential amount was set. Do not normalize/read
+            # the stored amount before authorization.
+            return None
+        return TaskCompensationField().to_representation(task.estimated_compensation_vnd)
 
     def _active_assignments(self, task):
         assignments = getattr(task, "_active_assignments", None)
@@ -78,7 +147,24 @@ class TaskReadSerializer(serializers.ModelSerializer):
         return {
             "id": assignment.id,
             "profile_membership_id": membership_id,
+            "display_name": self._assignee_display_names.get(assignment.id),
             "assigned_at": assignment.assigned_at,
+        }
+
+    @cached_property
+    def _assignee_display_names(self):
+        request = self.context.get("request")
+        context = self.context.get("workspace_access_context")
+        if request is None or context is None:
+            return {}
+        instances = self.parent.instance if isinstance(self.parent, serializers.ListSerializer) else [self.instance]
+        task_ids = [task.pk for task in instances if isinstance(task, Task)]
+        return {
+            row["id"]: assignee_display_name(
+                first_name=row["user__first_name"], last_name=row["user__last_name"],
+                username=row["user__username"],
+            )
+            for row in task_assignee_display_values(getattr(request, "user", None), context, task_ids)
         }
 
     @cached_property
@@ -284,7 +370,7 @@ class TaskListQuerySerializer(StrictInputSerializer):
         return data
 
 
-class TaskCreateSerializer(StrictInputSerializer):
+class TaskCreateSerializer(TaskBriefInputSerializer):
     parent_id = serializers.UUIDField(required=False, allow_null=True)
     title = serializers.CharField(
         max_length=255,
@@ -304,7 +390,7 @@ class TaskCreateSerializer(StrictInputSerializer):
     deadline = TaskDeadlineField(required=False, allow_null=True)
 
 
-class TaskUpdateSerializer(StrictInputSerializer):
+class TaskUpdateSerializer(TaskBriefInputSerializer):
     parent_id = serializers.UUIDField(required=False, allow_null=True)
     title = serializers.CharField(
         required=False,
@@ -332,12 +418,19 @@ class EmptyTaskActionSerializer(StrictInputSerializer):
     pass
 
 
+class DeliverableProductLinkField(serializers.CharField):
+    def __init__(self, **kwargs):
+        super().__init__(max_length=500, allow_blank=False, trim_whitespace=False, **kwargs)
+
+    def to_internal_value(self, data):
+        try:
+            return normalize_deliverable_url(data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict["file_url"]) from None
+
+
 class DeliverableSubmitSerializer(StrictInputSerializer):
-    file_url = serializers.CharField(
-        max_length=500,
-        allow_blank=False,
-        trim_whitespace=True,
-    )
+    file_url = DeliverableProductLinkField()
 
 
 class DeliverableApproveSerializer(StrictInputSerializer):

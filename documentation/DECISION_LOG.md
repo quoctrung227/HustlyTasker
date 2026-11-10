@@ -1,5 +1,144 @@
 ---
 
+# Decision: Task description usability, finished-product URLs and assignee labels
+
+Date:2026-11-10. **OWNER-APPROVED SCOPE — HT-FE-TASK-UX-REFINEMENT-01**.
+
+- Reuse the existing Task description field in a bounded keyboard-focusable
+  scroll region with a stable desktop card and responsive short-content layout.
+  Do not truncate stored text or stretch adjacent deadline/assignment facts.
+- Every NEW Deliverable submission/resubmission uses the existing `file_url`
+  contract with a nonempty trimmed HTTP(S) URL, max500 Unicode code points.
+  Raw controls/invalid Unicode, internal whitespace, backslashes, embedded
+  credentials and invalid host/port are rejected by both serializer and service.
+  This supersedes the original arbitrary-text/text-or-URL **write** policy only.
+  Historical text/path/reference values remain unchanged and readable, and only
+  safe HTTP(S) references become explicit new-tab links. No upload, storage,
+  provider fetch, preview or external-access validation is introduced.
+- Retain existing immutable revision history, submit/current-assignee rules,
+  distinct reviewer/latest-revision checks, state machine, locks, atomic audit
+  and Notification consistency. The UI neither retries an unknown submission
+  automatically nor assumes approval/completion before server confirmation.
+- Stack the existing UTC deadline from/to filters as one semantic group without
+  changing query parameters, instant boundaries or timezone policy.
+- Add a read-only `active_assignment.display_name: string | null` to existing
+  Task DTOs. Use safe full name, then safe username, then a generic label for an
+  eligible current identity; never expose an email/UUID fallback. Verify the
+  current actor's tenant Task access and the assignee's active same-tenant access
+  in batched page SQL. A retained unavailable assignee has a null name; no active
+  assignment remains null. Display is not execution/membership/compensation
+  authority. No per-Task roster fetch, new role or privilege is authorized.
+- Keep existing teal/neutral components and scoped Vietnamese labels. No model,
+  migration, Task-brief schema, pay-disclosure policy, AI, SMTP or Invitation
+  behavior is changed. tasks.0005 is already APPLIED by the earlier approved
+  rollout; ai.0002 and public/production rollout remain outside this approval.
+
+Implementation and fresh isolated-test/preservation evidence are recorded in
+HANDOVER. This decision approves the bounded task scope, not automatic next work,
+manual Owner acceptance or deployment. Stop at the task's OWNER REVIEW GATE.
+
+---
+
+# Decision: Controlled development rollout of Task brief
+
+Date:2026-11-10. **APPROVED BY OWNER — HT-DB-TASK-BRIEF-ROLLOUT-01**.
+Owner authorizes fresh backup outside repository with restricted access, isolated
+restore/migration rehearsal and ONLY tasks.0005_task_brief on current PostgreSQL
+development after safety gates. This supersedes earlier wait-for-rollout-approval
+notes for Task0005, not the compensation policy or other business decisions.
+ai.0002, general migrate, production, fixtures, deletion, credential changes and
+automatic rollback/restore remain forbidden. Execution completed13:47:38Z,
+37historyrecords,Task0005APPLIED/AI0002UNAPPLIED; schema/data/ORM/GETsmoke gates
+PASS as documented in HANDOVER. Owner manual UI acceptance remains pending and
+does not authorize public rollout or another task.
+
+---
+
+# Decision: Restrict Task compensation disclosure before candidate rollout
+
+Date:2026-11-10. **APPROVED BY OWNER — HT-FE-TASK-COMPENSATION-RBAC-01**.
+
+- Supersedes only the broad compensation-read bullet in the earlier Task brief
+  decision below. Current authorized Profile OWNER/ADMIN, Workspace ADMIN and
+  effective current assignee may see whole-Task expected VND compensation.
+  Unassigned MEMBER, ordinary VIEWER, revoked/inactive/out-of-scope identities
+  must not receive its value. This never grants Task metadata write authority.
+- Existing Task read/tenant context is mandatory. An effective assignee requires
+  ACTIVE TaskAssignment plus current active User/Profile membership and eligible
+  Workspace MEMBER access. Historical assignments or a retained assignment after
+  MEMBER-to-VIEWER downgrade do not qualify. Domain still permits one ACTIVE
+  assignee per Task; no new assignment policy or multiplication is introduced.
+- Response projection keeps `estimated_compensation_vnd` present as NULL for
+  unauthorized and unset values; authorized amounts remain exact digit strings.
+  No flag or request parameter grants access. Managers retain existing metadata
+  writes; archived contexts retain existing readable, nonmutable semantics.
+- No model/migration change is needed. tasks.0005_task_brief and
+  ai.0002_dispatch_governance must remain UNAPPLIED on development. This approval
+  authorizes code/isolated tests only, not website acceptance, rollout or deploy.
+
+---
+
+# Decision: Task editing brief, Vietnamese24h inputs and ordinary hierarchy UI
+
+Date:2026-11-10. **OWNER-APPROVED SCOPE — HT-FE-TASK-BRIEF-24H-VI-01**.
+
+- Task gains four optional HTTP(S) resource links (raw/reference/template/script)
+  and optional nonnegative whole-Task expected compensation in VND. Script is a
+  URL, not a textarea. No URL fetch/upload, payroll/payment/budget or per-assignee
+  multiplication. Existing title/description and assignment/workflow remain.
+- HISTORICAL, SUPERSEDED by HT-FE-TASK-COMPENSATION-RBAC-01 above: Task read
+  scope was explicitly acceptable for this MVP: all current
+  authorized readers, including Viewer, may read compensation. A narrower
+  Owner/Manager+assigned-Editor policy would require separate Owner approval.
+  Current manager-only metadata write permissions are not expanded.
+- Ordinary Task UI removes Subtask creation/edit hierarchy controls, filters,
+  breadcrumbs/children sections while retaining all stored child Tasks, APIs,
+  parent relationships, audit/history and separate AI proposal hierarchy.
+- Ordinary date inputs display dd/mm/yyyy and only explicit24h hour/minute;
+  current device-local→UTC conversion remains. Untouched edit preserves actual
+  legacy deadline by omitting PATCH; explicit changes normalize to minutes.
+  Existing AI helper/date contracts are preserved, not globally rewritten.
+- Candidate schema/testing is permitted; persistent development apply/deployment
+  is NOT approved. Complete isolated verification and stop for rollout review.
+
+Technical implementation choices within that scope:2048-character URL bound;
+nullable numeric(18,0) with nonnegative CHECK, canonical digit-string money DTO to
+avoid JavaScript float loss; nullable defaults/no data backfill. These are storage
+and transport limits, not additional business budget/retention/RBAC decisions.
+No new dependency/current timezone/AI provider/SMTP/Workspace policy is introduced.
+The updated source requires tasks.0005 before development Task use. ai.0002 is
+unrelated and must remain UNAPPLIED. Actual test status belongs in HANDOVER.
+
+---
+
+# Decision: Workspace membership inheritance and accepted-invitation onboarding
+
+Date:2026-11-10. **APPROVED BY OWNER — HT-FE-WORKSPACE-INHERITANCE-01**.
+
+- Creation may explicitly select a readable same-Profile Workspace and snapshot
+  only valid direct ADMIN/MEMBER/VIEWER memberships and their current roles.
+  Revoked/inactive identities are excluded, no Tasks/Assignments/Reviews/Comments
+  copied, no source change and no later cascade. Profile Owner/Admin authority
+  stays inherited without redundant fabricated direct rows.
+- First Workspace may explicitly confirm active ordinary Profile members at
+  fixed MEMBER. Existing creation without membership options stays manual.
+- Only successful invitation acceptance may create an absent MEMBER assignment
+  in current ACTIVE same-Profile month. Never restore any existing revoked row,
+  grant past/future months, assign Tasks or attach grants to sending/login/replay.
+  Compatible Profile reactivation is eligible only for a genuinely missing
+  current assignment after existing stale-access cleanup.
+- Existing canonical period and Profile/month uniqueness plus configured Django
+  UTC provide a reliable current-month definition. Source choice remains explicit;
+  no latest(created_at) inference/current pointer. A readable archived source
+  is allowed for snapshot reading; current onboarding target must ACTIVE.
+- Membership grant/Workspace/acceptance/audits are transactional and tenant scoped;
+  existing role ceilings remain. No schema/migration/SMTP/AI change authorized.
+
+Implementation/tests status is in HANDOVER, not implied by this approval. Older
+no-automatic-Workspace-grant decisions are superseded only in this bounded scope.
+
+---
+
 # Decision: Backend Architecture Setup
 
 Date:

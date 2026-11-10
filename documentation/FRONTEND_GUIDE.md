@@ -1,5 +1,334 @@
 # HustlyTasker frontend guide
 
+## HT-FE-TASK-ASSIGNEE-NAME-FIX-01 — Reload the current local backend
+
+2026-11-10. Exact legacy fallback **Thành viên được phân công** was traced to an
+old Django --noreload process still answering8000. The current serializer/DTO/
+React rendering already support full name, username-only and current membership
+redaction. A unique anonymous request marker proved the old server answered;
+starting another server and checking health had not replaced it on Windows.
+
+Only the positively identified project server families were stopped. One fresh
+backend now handles direct/proxy requests; Vite5173 was absent and was started
+using its existing command after a free-port check. Both endpoints are available.
+The launcher below now rejects an occupied port before loading private config;
+it never kills another process automatically. Keep using the existing launcher:
+
+```powershell
+# Repository root; stop the existing backend's own terminal with Ctrl+C first.
+.\scripts\start-backend-dev.ps1
+```
+
+Because --noreload is intentional, restart that backend after Python source
+changes. Do not open a second backend on the same8000 endpoint. Do not run general
+migrate or apply ai.0002 for this display issue. Check/ValidateOnly remain usable
+while a server is running. No environment value or credential was edited.
+
+Owner acceptance: open http://127.0.0.1:5173, **Ctrl+F5**, then reopen an existing
+assigned Task. **Thời hạn và phân công** should show the account's current full
+name, or safe username if full name is blank. Network Task GET should contain
+active_assignment.display_name; an unassigned Task shows **Chưa phân công**.
+Existing assignee changes invalidate detail/list caches; no new roster request,
+User edit or email-based name lookup is introduced.
+
+Fresh focused PostgreSQL59/frontend122/launcher15 and typecheck/lint checks PASS;
+4existing Task list/detail handlers also matched account names in a READ ONLY
+in-process diagnostic. This was not authenticated browser/manual acceptance.
+Development snapshots are identical, tasks.0005APPLIED/ai.0002UNAPPLIED.
+Stop at **HT-FE-TASK-ASSIGNEE-NAME-FIX-01 — OWNER REVIEW GATE**.
+
+## HT-FE-TASK-UX-REFINEMENT-01 — Task reading and linked submissions
+
+2026-11-10. Current Owner-approved refinement keeps the existing Task workflow,
+tenant/RBAC, compensation projection and teal/neutral design system. No model or
+migration change is required. tasks.0005 remains APPLIED on development;
+ai.0002 remains UNAPPLIED. Do not run fixtures or mutation tests on development.
+
+Task Detail now bounds **Thông tin công việc** to24rem on desktop. Its heading
+sits outside the independently scrollable **Mô tả công việc** region, which is a
+named native section with keyboard focus and visible focus indication. Long text
+and URLs wrap without horizontal overflow; no description is truncated or given
+a new database limit. The neighboring **Thời hạn và phân công** card uses its
+own natural height rather than stretching with description content. Mobile
+stacks the cards, uses natural height for short descriptions and caps the long
+card at24rem. Empty descriptions retain their explanatory message.
+
+Filters place **Thời hạn từ ngày (UTC)** directly above **Thời hạn đến ngày
+(UTC)** in one native fieldset. Status/priority/order retain their controls;
+Apply/Clear occupy a clear full-width action row. UTC labels, from00:00:00Z,
+through23:59:59.999999Z, query names and range validation are unchanged. Editable
+Task deadlines still use device-local Vietnamese24h controls independently.
+
+Task list/detail use the current server-scoped
+`active_assignment.display_name`, not membership/User UUID labels or a roster
+request per Task. The server selects safe full name, safe username or a generic
+label only while the assignee remains currently readable in that tenant. Explicit
+NULL shows **Thành viên không còn khả dụng**; no assignment shows **Chưa phân
+công**. An older response without the additive name uses **Thành viên được phân
+công**, never UUID. Reassignment or a new NULL replaces the earlier name in the
+same scoped query; no last-known-name fallback grants access or reveals identity.
+
+**Sản phẩm và đánh giá** reuses the existing Deliverable model, `file_url`
+and scoped POST deliverables/ endpoint. New submissions/resubmissions require
+one valid HTTP(S) URL, max500 Unicode code points, labeled **Link sản phẩm hoàn
+thành** with a URL example and **Nộp sản phẩm** action. The inherited500-character
+storage bound is preserved. No upload, storage, external availability check,
+backend download or video preview is introduced. Private Drive/OneDrive/Dropbox/
+YouTube links can be submitted; external sharing remains the link owner's choice.
+Non-URL text, unsafe protocols, controls/NUL and invalid Unicode are rejected for
+new submissions by frontend and backend validation.
+
+Each existing revision retains its own stored link and Review. **Mở sản phẩm**
+opens safe HTTP(S) links with target_blank/rel=noopener noreferrer; legacy stored
+text/paths or unsafe links remain readable as inert text. They are not rewritten,
+deleted or silently made into links. Submit→Request Changes→resubmit→Approve,
+self-review/latest-revision checks, server capabilities, CSRF, safe field errors,
+pending/duplicate guards and deliberate recovery after an uncertain request are
+retained. No automatic mutation retry or optimistic Task completion.
+
+UI UX Pro Max full skill/master and actual offline searches were applied:
+Keyboard Navigation supports DOM-order focus and a keyboard-reachable scroll
+region; Long Token Resilience supports min-width0/overflow-wrap:anywhere. Initial
+generic results were narrowed rather than recorded as specific evidence. Native
+fieldset/section semantics replace redundant roles. The bounded scroll section
+has one justified element-local Biome tabindex exception; no global accessibility
+rule is disabled and no artificial interactive role is assigned.
+
+Fresh automated evidence: targeted191/full996 isolated PostgreSQL, full1123
+frontend and typecheck/lint/build exit0. All37 real browser cases across8suites
+passed, including new Task UX4, collaboration7, full business acceptance1 and
+25Workspace/Task/Brief/stability/Auth regressions. Four-size responsive/axe0,
+keyboard and375/1440 screenshot inspection passed. HANDOVER owns run IDs and
+exact preservation receipts. This is automated isolated verification; Owner
+manual acceptance remains pending. Earlier text-or-URL submission instructions
+below are historical and superseded for new writes.
+
+Local Django8000 and Vite5173 were started with existing launchers after tests;
+9/9 anonymous GET direct/proxy checks and read-only ORM3Tasks/2Deliverables passed.
+Development29-table data/schema/history/sequences match the initial snapshot:
+37migrations/5Users/2Sessions/3Tasks/2Deliverables. No fixture, real login, mail,
+AI call or mutation was run there. ai.0002 stays UNAPPLIED. Open
+http://127.0.0.1:5173 and reload before Owner acceptance. If the servers have
+stopped, use two terminals without starting duplicates on occupied ports:
+
+```powershell
+# Terminal1, repository root — existing private loader and venv, no migration
+.\scripts\start-backend-dev.ps1
+# Terminal2, frontend directory
+cd frontend
+npm.cmd run dev -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+The backend uses --noreload: restart only its own process after later code
+changes. An AI pending-migration warning does not authorize general migrate.
+For manual acceptance, inspect long/short descriptions with Tab/PageDown/End,
+date-filter order/UTC results, reassigned Editor name, and authorized product
+URL→changes→new revision→approval with each old link intact. Check Viewer lacks
+pay in UI/Network. Any records the Owner creates manually are real development
+data. No migration candidate is needed. **STOP OWNER REVIEW GATE.**
+
+## HT-DB-TASK-BRIEF-ROLLOUT-01 — Development ready for Owner acceptance
+
+2026-11-10: **DEVELOPMENT MIGRATION COMPLETE — OWNER UI ACCEPTANCE PENDING.**
+tasks.0005_task_brief is now APPLIED to the verified local development database;
+37migration records. ai.0002 remains UNAPPLIED and is outside this rollout.
+New Task fields are usable there; earlier candidate-only startup restrictions
+below describe historical checkpoints and are superseded by this rollout.
+
+Backend and Vite were started on loopback http://127.0.0.1:8000 and
+http://127.0.0.1:5173.9nonmutating HTTP GET checks passed, including proxied
+health/CSRF and anonymous denial; updated Task ORM reads2legacy rows correctly.
+No login/business mutation was performed by the rollout. Existing credentials
+are loaded privately by scripts/start-backend-dev.ps1; no env/security changes.
+The only remaining migration warning concerns intentionally pending ai.0002;
+do not run general migrate. Current running process receipts are in the ignored
+rollout evidence folder. Do not start duplicate servers on occupied ports.
+
+If local servers have been stopped, use the existing two-terminal workflow from
+repository root: `.\scripts\start-backend-dev.ps1` for Django; in the second
+terminal `cd frontend` then `npm run dev`. Keep PostgreSQL and its volume intact.
+
+Owner manual acceptance (not yet performed by Codex):
+
+1. Open http://127.0.0.1:5173 and log in as Profile Owner/Admin or legitimate
+   Workspace Manager; select the intended Profile/Workspace.
+2. Create a Task with a name.
+3. Enter any of the four optional raw/reference/template/script HTTP(S) URLs.
+4. Enter expected compensation500000; verify displayed500.000VNĐ.
+5. Choose the desired date and explicit24h18:30; save.
+6. Open Task Detail.
+7. Verify optional URLs, exact compensation and device-local18:30; this amount
+   is for the whole Task and is not payment confirmation.
+8. Edit/clear one URL and save; unchanged pay/deadline must remain intact.
+9. Assign a currently eligible MEMBER using existing assignment controls.
+10. Log in as that assignee: pay is readable, metadata Edit remains unavailable
+    unless that account independently has manager authority.
+11. Log in as unassigned MEMBER or ordinary VIEWER: no pay card/value; Network
+    Task list/detail returns estimated_compensation_vnd:null. Knowing the UUID
+    or supplying the field in PATCH must not bypass authorization.
+12. Confirm ordinary Subtask controls stay removed and labels/date/time are
+    Vietnamese/24h; stored historical child data has not been deleted.
+
+Tasks created manually in this acceptance are REAL development records. Owner
+decides what to create and whether to clean it afterwards; no automatic fixture
+or cleanup is authorized. Backup evidence and recovery limits are in HANDOVER.
+No public deployment, genuine mail/AI call, or production-readiness claim.
+
+## HT-FE-TASK-COMPENSATION-RBAC-01 — Current pay visibility
+
+Owner-approved policy now restricts expected compensation to current authorized
+Profile Owner/Admin, Workspace Admin/manager and the effective current assignee.
+Ordinary unassigned MEMBER/VIEWER does not receive its value in Task list/detail
+or action responses. Backend returns NULL for redacted or unset pay, with no
+new browser-side identity inference. Existing manager-only Create/Edit remains;
+an assigned Editor may read pay but cannot edit it. No amount is multiplied.
+
+Task Detail hides the entire pay card for NULL; Task list does not render pay.
+Explicit new NULL responses replace prior cache values. User/tenant-scoped keys,
+zero inactive cache lifetime and existing auth-refresh/logout/session cleanup are
+reused. The client does not preserve a formerly visible amount as fallback.
+Visibility reflects current server responses; this is not realtime revocation.
+Forms retain four URLs, exact string VND, Vietnamese24h calendar and draft rules.
+UI UX Pro Max/master guidance is applied to accurate read-only/privacy helper
+text, semantic controls, current response handling and existing visual consistency.
+
+The separate Owner-approved rollout above has now applied tasks.0005_task_brief.
+This RBAC implementation itself did not change schema; ai.0002 stays UNAPPLIED.
+No SMTP/Invitation/inheritance/AI change. Its earlier isolated test results remain
+historical in HANDOVER; current development rollout checks are recorded separately.
+
+Owner acceptance AFTER separately approved rollout: Manager creates a paid Task
+and assigns an eligible MEMBER; assignee reads exact VND without Edit control.
+Another MEMBER and VIEWER read the Task/URLs but no pay section; inspect Network
+detail/list for NULL, not the amount. Reassign; former assignee's next refresh
+must return NULL/hide pay. Unauthorized PATCH remains denied. These are future
+manual steps, not development writes or manual verification already performed.
+
+## HT-FE-TASK-BRIEF-24H-VI-01 — Editor work brief (candidate,2026-11-10)
+
+**CANDIDATE IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.** Code targets candidate
+tasks.0005_task_brief and must be tested only on isolated PostgreSQL now. Do not
+restart/use the updated backend for development Task paths until that migration
+is independently approved/applied; otherwise regular ORM reads select missing
+columns. Existing migration readiness is not rollout permission. ai.0002 stays
+unapplied; no .env/SMTP/provider/config change or real send here.
+
+Manager Create/Edit reuses Task form/modal with persistent Vietnamese labels,
+optional **Tài liệu cho biên tập viên** four URL fields and **Thông tin công việc**
+expected whole-Task VND pay. Empty create values may be omitted; Edit explicitly
+clears with null. Pay is a digit string, grouped with dots visually (e.g500.000);
+never parsed through Number/float. Null differs from0. Compensation visibility
+now follows the narrower Owner-approved section above; managers alone edit metadata.
+An Editor account is used to verify Detail/read and forbidden mutation, not to
+claim that Editor can Create/Edit under unchanged RBAC.
+
+Detail groups job information, material/document links and optional expected pay.
+Empty groups hide; links have meaningful actions and target_blank/noopener/
+noreferrer, never automatic fetch/embed. Money is not payroll/payment or a client
+price and is never multiplied by historical assignees.
+
+Ordinary deadline is a controlled **Ngày (dd/mm/yyyy)** text/calendar input plus
+**Giờ (00–23)** and **Phút (00–59)** selects, optional **Xóa thời hạn**. Calendar
+month/weekdays/navigation are literal Vietnamese, with keyboard arrows/Home/End/
+PageUp/PageDown/Enter/Escape, not browser datetime-local locale/AMPM controls.
+Device timezone is shown and local input becomes UTC ISO. Explicit edits use
+minute precision; unchanged deadline PATCH is omitted to retain actual old
+seconds/ms. UTC date filters stay UTC. Invalid/incomplete date drafts fail
+validation rather than silently clearing. Legacy AI proposal helpers remain
+unchanged in the separate Generator preview, outside ordinary Task forms.
+
+Ordinary Task list/detail/create/edit removes parent selectors, root/child labels,
+structure filters, ancestor/child queries/breadcrumbs/lists and create-child buttons.
+All Tasks remain in main lists; old child URLs still read the existing Task.
+Backend parent API/constraints/records and explicit AI proposal hierarchy stay
+intact; no progress/statistics algorithm is changed. Task status/priority/error/
+validation/input copy is Vietnamese; raw enum/API/model names remain unchanged.
+
+UI UX Pro Max full skill/master and actual offline Forms/React/date keyboard
+searches informed grouped optional fields, explicit feedback/validation, native
+controls, fixed edit baseline and request cleanup. Existing teal/neutral tokens
+and shared Dialog remain; Task-only wider scrollable dialog/sticky actions and
+new calendar styles reuse semantic tokens. No new UI package or visual reset.
+Final quality/browser/privacy/preservation are verified in HANDOVER: full1047
+frontend,132/full937PostgreSQL,47real Chromium cases, TypeScript/Biome100files/
+build20.37s all PASS/actual exits0/owned cleanup. Brief final4cases exercise exact
+large pay, safe links, null/clear, name-only create, Editor/Viewer, historical child
+read and18:30↔11:30Z with English browser locale/HCM timezone. Four sizes375/768/
+1440/812x375, open-calendar axe0, keyboard/Escape/focus/reflow pass. Root inspected
+final mobile calendar and desktop resources/pay; mobile month/year stack prevents
+the observed selector clipping. Earlier label/test-driver failures are retained.
+The final mobile CSS-only adjustment was checked by repeat fullfrontend/build/
+Brief4; other43browser regressions used identical JS/backend source. All data/
+schema/history fingerprints unchanged, new Task columns absent in development.
+597.46kB build chunk remains advisory, not a production readiness claim.
+
+Manual acceptance AFTER a separate approved Task migration rollout:
+
+1. Profile Owner/Admin or authorized Workspace Manager creates a Task with four
+   links, expected pay and date/time18:30, then opens Detail.
+2. Manager edits each field, verifies exact grouped pay and clear/null behavior;
+   reopen/save18:30 and verify same device-local time (API stores UTC).
+3. Assign an eligible Editor with the existing action. Editor reads Detail/links/
+   pay and may execute assigned work; Create/Edit remains denied by existing RBAC.
+4. Viewer may read the same authorized Task/links with pay redacted and cannot mutate. Foreign tenant
+   cannot read it. Old child Tasks remain readable with no hierarchy controls.
+
+These are Owner steps, not evidence of development writes performed by this task.
+
+## HT-FE-WORKSPACE-INHERITANCE-01 — Create with members (2026-11-10)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Existing Workspace create dialog
+adds **Thành viên Workspace** with an explicit same-Profile source selector,
+paginated safe-name/role preview, eligible total and aggregate exclusions. No
+automatic latest-created source. Archived readable sources can be snapshots;
+the UI labels them as archived. It explains that Tasks/assignments/Review/Comment
+are not copied and later source role changes do not cascade.
+
+Without a source, existing Profiles keep the manual grant path. On the first
+Workspace, the preview suggests active ordinary Profile Members at fixed MEMBER;
+Owner explicitly selects checkboxes before creation. Profile managers retain
+inherited governance without synthetic assignments. Preview/submit use existing
+credential/CSRF client, current User/Profile lifetime, abortable requests and no
+automatic mutation retry. Metadata draft remains mounted during normal auth
+background validation, source selection and preview pagination. Server errors
+retain input; new destination roster uses existing Workspace Members section.
+
+The full UI UX Pro Max skill/master were read. Focused offline form-selection
+and React async-cleanup searches informed labeled native controls, preview-before-
+commit, pending feedback, caught failures and aborts. Existing teal/neutral tokens,
+shared form/dialog/Pagination patterns remain; no new design system/dependency.
+
+After successful recipient accept, backend can add fixed MEMBER in the exact
+current UTC-month ACTIVE Workspace only. No old/future grants, no restoration of
+revoked current assignment, no Task assignment. Sending an invite never grants.
+Real Gmail SMTP is Owner-reported working; this task neither tests nor changes
+it. Historical delivery diagnosis below must not be treated as current config.
+
+Owner manual acceptance after review:
+
+1. Log in as Profile Owner/Admin and open Workspace list → **Tạo không gian**.
+2. Enter an unused month/name and choose **Workspace nguồn** explicitly.
+3. Check eligible names/roles, exclusions and the no-Task-copy explanation.
+4. Create once, open destination → **Thành viên / Quyền truy cập**; compare roles.
+5. Confirm a revoked source member is absent and source Tasks/members unchanged.
+6. For a Profile's first Workspace, select proposed MEMBER checkboxes explicitly.
+7. If Owner separately chooses to send a real invitation, recipient acceptance
+   should join only an ACTIVE exact-current-UTC-month Workspace with no previous
+   assignment row. No current Workspace must not prevent acceptance.
+
+These are manual steps, not claims that Owner website mutations were executed.
+
+Actual final checks: focused frontend68/full955 PASS, typecheck/Biome91files/
+build9.17s exit0; full backend905/905 and targeted132/132 PostgreSQL PASS/actual
+Python0. Six real isolated Chrome suites24/24 PASS (inheritance4,Workspace4,
+Members4,fake failure2,stability4,auth6), actual launcher/Playwright/backend0 and
+owned cleanup verified.375/768/1440/812x375 axe WCAG2/2.1AA0, keyboard/focus,
+reflow and reduced-motion checks pass; root inspected mobile/desktop scrolled
+preview PNGs in ignored task evidence. Final development fingerprint unchanged,
+ai.0002 still unapplied; no Gmail SMTP settings/send or Owner website write.
+Build's584.59kB chunk warning remains advisory; no unrelated bundling redesign.
+HANDOVER lists all changed files, receipts, corrected test-only failures and gate.
+
 ## HT-FE-INVITATION-DELIVERY-FIX-01 — Delivery diagnosis and safe recovery (2026-11-09)
 
 **APPLICATION FIX VERIFIED — REAL SMTP PENDING OWNER CONFIGURATION.** This
@@ -170,8 +499,9 @@ the management roster or candidates. Knowing a route/UUID never grants access.
 | Profile MEMBER with no effective Workspace row | None, tenant-safe404 | None |
 
 The real model is WorkspaceMember(User FK, unique Workspace+User), not a new
-WorkspaceMembership table. Profile acceptance and Workspace creation do not
-create these rows. The roster lists effective explicit assignments, not every
+WorkspaceMembership table. Legacy manual creation/membership alone grants none;
+current approved snapshot/accepted-current-month grants are defined above.
+The roster lists effective explicit assignments, not every
 inherited Profile manager. An inherited context's workspace_role may be null
 even when a lower explicit row exists; UI labels the access context rather than
 claiming that null proves no assignment. Workspace OWNER is unsupported legacy
@@ -1139,13 +1469,15 @@ creation or membership mutation UI; FE05 separately adds only Profile creation.
 
 Task list renders real title/description/status/priority/deadline, assignment
 membership code and update time. Filters/sort/page go to the server. Local
-"Tìm trong trang" searches only current-page titles. Root-only is a server
-filter; detail's direct-child link selects parent_id. Filter dates use UTC day
-bounds. No global search or aggregate Task dashboard is invented.
+"Tìm trong trang" searches only current-page titles. Root-only/parent_id remain
+backend filters, but the current work-brief candidate removes those ordinary UI
+controls/direct-child links. Filter dates use UTC day bounds. No global search
+or aggregate Task dashboard is invented.
 
-Detail requests one Task, paginated direct children and at most3 ancestors.
-Breadcrumb shows root0/child1–3; a fourth child level is unavailable. Create
-child fixes parent_id from current context. Each Task keeps its own workflow;
+Historical FE02 detail requested one Task, direct children and at most3 ancestors
+with parent/child creation controls. The current work-brief candidate removes
+those UI requests/affordances without deleting backend hierarchy/records.
+Each Task keeps its own workflow;
 there is no completion/priority/deadline cascade or arbitrary status PATCH.
 Metadata edit sends changed fields only; assignment is a separate action.
 Empty deadline sends null; browser-local datetime is validated and converted
@@ -1276,8 +1608,10 @@ membership, assignment and state again at POST/PATCH/DELETE time. OPTIONS alone
 is not used as proof for Submit, Review decisions or existing Comment authorship.
 
 `CollaborationActions` reuses native Dialog and the established work-form/error
-patterns. Submit sends `{file_url}` as text or URL (maximum500 Unicode code
-points), not a file upload. Approve sends optional `{comment}`; Request Changes
+patterns. Current Submit sends `{file_url}` as an HTTP(S) URL (maximum500 Unicode
+code points), not a file upload. The earlier API03A text-or-URL write contract is
+historical and superseded by HT-FE-TASK-UX-REFINEMENT-01 above; existing stored
+text/path revisions remain readable. Approve sends optional `{comment}`; Request Changes
 requires nonblank `{comment}`. Forms reject NUL/unpaired Unicode, retain drafts
 and focused linked errors on failure, prevent duplicate submission, abort on
 unmount and disable dismissal while pending. No success or Task status is shown

@@ -5,6 +5,10 @@ import { isApiError } from '../../services/api/client'
 import type { Page } from '../../services/api/types'
 import { taskPriorities } from '../../services/api/work-management'
 import type { Task, TaskCreateInput, TaskPriority, TaskUpdateInput, WorkspaceMember } from '../../services/api/work-management'
+import { TaskDeadlineInput } from './TaskDeadlineInput'
+import { formatMinuteDeadline, parseMinuteDeadline } from './task-deadline'
+import { formatEstimatedCompensation, parseEstimatedCompensation, parseTaskDocumentUrl, taskDocumentFields, TASK_DOCUMENT_URL_MAX_LENGTH } from './task-brief'
+import type { TaskDocumentField } from './task-brief'
 
 const priorities: Record<TaskPriority, string> = { LOW: 'Thấp', MEDIUM: 'Trung bình', HIGH: 'Cao', URGENT: 'Khẩn cấp' }
 
@@ -42,7 +46,6 @@ type SavedProps = { onSaved?: (task: Task) => void; onDenied?: () => void }
 type ScopeProps = { profileId: string; workspaceId: string }
 type TaskCreateProps = ScopeProps & SavedProps & {
   canCreate?: boolean
-  fixedParentId?: string
   onCreate: (input: TaskCreateInput, signal?: AbortSignal) => Promise<Task>
 }
 type TaskEditProps = ScopeProps & SavedProps & {
@@ -56,10 +59,10 @@ type TaskStartProps = ScopeProps & SavedProps & {
   onStart: (signal?: AbortSignal) => Promise<Task>
 }
 type FormProps = { onCancel: () => void; onPendingChange: (pending: boolean) => void } & SavedProps & (
-  | { mode: 'create'; fixedParentId?: string; onSubmit: TaskCreateProps['onCreate'] }
+  | { mode: 'create'; onSubmit: TaskCreateProps['onCreate'] }
   | { mode: 'edit'; task: Task; onSubmit: TaskEditProps['onUpdate'] }
 )
-type Field = 'title' | 'description' | 'priority' | 'deadline' | 'parent_id' | 'target_profile_membership_id'
+type Field = 'title' | 'description' | 'priority' | 'deadline' | 'parent_id' | 'target_profile_membership_id' | TaskDocumentField | 'estimated_compensation_vnd'
 type Failure = { message: string; fields: Partial<Record<Field, string>> }
 
 function FormFailure({ failure, ids, title = 'Chưa thể lưu công việc' }: { failure: Failure; ids: Partial<Record<Field, string>>; title?: string }) {
@@ -84,22 +87,31 @@ function formFailure(error: unknown, fields: readonly Field[], onDenied?: () => 
   const messages: Failure['fields'] = {}
   for (const field of fields) if (apiError?.fieldErrors[field]) messages[field] = apiError.fieldErrors[field]
   if (apiError?.kind === 'forbidden' || apiError?.status === 404) onDenied?.()
-  return { message: apiError?.message ?? 'Chưa thể lưu công việc. Vui lòng thử lại sau.', fields: messages }
+  return { message: apiError && apiError.status > 0 && apiError.status < 500 ? apiError.message : 'Chưa xác nhận được kết quả lưu. Hãy kiểm tra danh sách công việc trước khi gửi lại.', fields: messages }
 }
 
 function TaskForm(props: FormProps) {
-  const initial = props.mode === 'edit' ? props.task : null
+  const [initial] = useState(props.mode === 'edit' ? props.task : null)
   const id = useId()
   const [title, setTitle] = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [priority, setPriority] = useState<TaskPriority>(initial?.priority ?? 'MEDIUM')
-  const initialDeadline = formatLocalDeadline(initial?.deadline ?? null)
+  const initialDeadline = formatMinuteDeadline(initial?.deadline ?? null)
   const [deadline, setDeadline] = useState(initialDeadline)
+  const [documents, setDocuments] = useState<Record<TaskDocumentField, string>>({
+    raw_video_url: initial?.raw_video_url ?? '', reference_video_url: initial?.reference_video_url ?? '',
+    template_project_url: initial?.template_project_url ?? '', script_url: initial?.script_url ?? '',
+  })
+  const [compensation, setCompensation] = useState(formatEstimatedCompensation(initial?.estimated_compensation_vnd))
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const request = useRef<AbortController | null>(null)
-  const ids = { title: `${id}-title`, description: `${id}-description`, priority: `${id}-priority`, deadline: `${id}-deadline` }
-  const changed = !initial || title.trim() !== initial.title || description !== (initial.description ?? '') || priority !== initial.priority || deadline !== initialDeadline
+  const ids = { title: `${id}-title`, description: `${id}-description`, priority: `${id}-priority`, deadline: `${id}-deadline`,
+    raw_video_url: `${id}-raw`, reference_video_url: `${id}-reference`, template_project_url: `${id}-template`, script_url: `${id}-script`, estimated_compensation_vnd: `${id}-compensation` }
+  let currentCompensation: string | null | undefined
+  try { currentCompensation = parseEstimatedCompensation(compensation) } catch { currentCompensation = undefined }
+  const changed = !initial || title.trim() !== initial.title || description !== (initial.description ?? '') || priority !== initial.priority || deadline !== initialDeadline ||
+    taskDocumentFields.some(({ key }) => documents[key].trim() !== (initial[key] ?? '')) || currentCompensation !== (initial.estimated_compensation_vnd ?? null)
   useEffect(() => () => { request.current?.abort() }, [])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -109,7 +121,13 @@ function TaskForm(props: FormProps) {
     if (!title.trim() || title.trim().length > 255) fields.title = 'Nhập tên công việc từ 1 đến 255 ký tự.'
     if (!taskPriorities.some((value) => value === priority)) fields.priority = 'Chọn mức ưu tiên hợp lệ.'
     let parsedDeadline: string | null = null
-    try { parsedDeadline = parseLocalDeadline(deadline) } catch { fields.deadline = 'Nhập thời hạn hợp lệ trong khoảng năm 0001–9999.' }
+    try { parsedDeadline = parseMinuteDeadline(deadline) } catch { fields.deadline = 'Nhập ngày dd/mm/yyyy hợp lệ, giờ 00–23 và phút 00–59.' }
+    const parsedDocuments: Partial<Record<TaskDocumentField, string | null>> = {}
+    for (const { key } of taskDocumentFields) {
+      try { parsedDocuments[key] = parseTaskDocumentUrl(documents[key]) } catch { fields[key] = 'Nhập liên kết http:// hoặc https:// hợp lệ, tối đa 2.048 ký tự.' }
+    }
+    let parsedCompensation: string | null = null
+    try { parsedCompensation = parseEstimatedCompensation(compensation) } catch { fields.estimated_compensation_vnd = 'Nhập số nguyên VNĐ không âm, tối đa 999.999.999.999.999.999; dấu chấm chỉ dùng để phân cách hàng nghìn.' }
     if (Object.keys(fields).length) { setFailure({ message: 'Vui lòng kiểm tra các thông tin bên dưới.', fields }); return }
     const controller = new AbortController()
     request.current = controller
@@ -120,18 +138,22 @@ function TaskForm(props: FormProps) {
     try {
       if (props.mode === 'create') {
         saved = await props.onSubmit({ title: title.trim(), description, priority, deadline: parsedDeadline,
-          ...(props.fixedParentId ? { parent_id: props.fixedParentId } : {}) }, controller.signal)
+          ...Object.fromEntries(Object.entries(parsedDocuments).filter(([, value]) => value !== null)),
+          ...(parsedCompensation !== null ? { estimated_compensation_vnd: parsedCompensation } : {}),
+        }, controller.signal)
       } else {
         const input: TaskUpdateInput = {
-          ...(title.trim() !== props.task.title ? { title: title.trim() } : {}),
-          ...(description !== (props.task.description ?? '') ? { description } : {}),
-          ...(priority !== props.task.priority ? { priority } : {}),
+          ...(title.trim() !== initial?.title ? { title: title.trim() } : {}),
+          ...(description !== (initial?.description ?? '') ? { description } : {}),
+          ...(priority !== initial?.priority ? { priority } : {}),
           ...(deadline !== initialDeadline ? { deadline: parsedDeadline } : {}),
+          ...Object.fromEntries(taskDocumentFields.filter(({ key }) => parsedDocuments[key] !== (initial?.[key] ?? null)).map(({ key }) => [key, parsedDocuments[key]])),
+          ...(parsedCompensation !== (initial?.estimated_compensation_vnd ?? null) ? { estimated_compensation_vnd: parsedCompensation } : {}),
         }
         saved = await props.onSubmit(input, controller.signal)
       }
     } catch (error) {
-      if (!controller.signal.aborted) setFailure(formFailure(error, ['title', 'description', 'priority', 'deadline', 'parent_id'], props.onDenied))
+      if (!controller.signal.aborted) setFailure(formFailure(error, ['title', 'description', 'priority', 'deadline', ...taskDocumentFields.map(({ key }) => key), 'estimated_compensation_vnd'], props.onDenied))
     } finally {
       if (!controller.signal.aborted) { request.current = null; setPending(false); props.onPendingChange(false) }
     }
@@ -150,39 +172,53 @@ function TaskForm(props: FormProps) {
       {failure?.fields.description && <p className="field__error" id={`${ids.description}-error`}>{failure.fields.description}</p>}
     </div>
     <div className={`field${failure?.fields.priority ? ' field--invalid' : ''}`}>
-      <label className="field__label" htmlFor={ids.priority}>Ưu tiên</label>
+      <label className="field__label" htmlFor={ids.priority}>Mức ưu tiên</label>
       <select className="input" id={ids.priority} value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)} disabled={pending}
         aria-invalid={failure?.fields.priority ? true : undefined} aria-describedby={failure?.fields.priority ? `${ids.priority}-error` : undefined}>
         {taskPriorities.map((value) => <option key={value} value={value}>{priorities[value]}</option>)}
       </select>
       {failure?.fields.priority && <p className="field__error" id={`${ids.priority}-error`}>{failure.fields.priority}</p>}
     </div>
-    <FormField id={ids.deadline} label="Thời hạn" hint="Không bắt buộc. Nhập theo múi giờ trên thiết bị; để trống khi chưa có thời hạn." error={failure?.fields.deadline}>
-      <Input type="datetime-local" step="0.001" min="0001-01-01T00:00" max="9999-12-31T23:59:59.999" value={deadline} onChange={(event) => setDeadline(event.target.value)} disabled={pending} />
-    </FormField>
-    <div className="work-actions">
-      <Button type="submit" busy={pending} disabled={!changed}>{props.mode === 'edit' ? 'Lưu thay đổi' : props.fixedParentId ? 'Tạo công việc con' : 'Tạo công việc'}</Button>
+    <TaskDeadlineInput id={ids.deadline} value={deadline} onChange={setDeadline} disabled={pending} error={failure?.fields.deadline} />
+    <fieldset className="task-brief-fields" disabled={pending}>
+      <legend>Tài liệu cho biên tập viên</legend>
+      <p className="field__hint">Không bắt buộc. Liên kết có thể yêu cầu đăng nhập; hệ thống không tải nội dung hoặc tạo bản xem trước.</p>
+      {taskDocumentFields.map(({ key, label }) => <FormField id={ids[key]} key={key} label={label} error={failure?.fields[key]}>
+        <Input type="url" value={documents[key]} maxLength={TASK_DOCUMENT_URL_MAX_LENGTH} autoComplete="off" disabled={pending} onChange={(event) => setDocuments((current) => ({ ...current, [key]: event.target.value }))} />
+      </FormField>)}
+    </fieldset>
+    <fieldset className="task-brief-fields" disabled={pending}>
+      <legend>Thông tin công việc</legend>
+      <FormField id={ids.estimated_compensation_vnd} label="Tiền công dự kiến (VNĐ)" error={failure?.fields.estimated_compensation_vnd} hint="Cho toàn bộ công việc, không nhân theo số người nhận; không phải xác nhận đã thanh toán.">
+        <Input type="text" inputMode="numeric" value={compensation} maxLength={23} disabled={pending} autoComplete="off" onChange={(event) => setCompensation(event.target.value)} onBlur={() => {
+          try { setCompensation(formatEstimatedCompensation(parseEstimatedCompensation(compensation))) } catch { /* Retain invalid draft for linked submit feedback. */ }
+        }} />
+      </FormField>
+      <p className="field__hint">Chỉ quản lý có thẩm quyền và người đang được giao công việc hợp lệ được xem tiền công dự kiến.</p>
+    </fieldset>
+    <div className="work-actions task-form-actions">
+      <Button type="submit" busy={pending} disabled={!changed}>{props.mode === 'edit' ? 'Lưu thay đổi' : 'Tạo công việc'}</Button>
       <Button variant="secondary" disabled={pending} onClick={props.onCancel}>Hủy</Button>
     </div>
   </form>
 }
 
 export function TaskCreate(props: TaskCreateProps) {
-  return <ScopedTaskCreate key={`${props.profileId}:${props.workspaceId}:${props.fixedParentId ?? 'root'}`} {...props} />
+  return <ScopedTaskCreate key={`${props.profileId}:${props.workspaceId}`} {...props} />
 }
 
-function ScopedTaskCreate({ profileId, workspaceId, canCreate = false, fixedParentId, onCreate, onSaved, onDenied }: TaskCreateProps) {
+function ScopedTaskCreate({ profileId, workspaceId, canCreate = false, onCreate, onSaved, onDenied }: TaskCreateProps) {
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(false)
   const allowed = canCreate && Boolean(profileId) && Boolean(workspaceId)
   useEffect(() => { if (!allowed) { setOpen(false); setPending(false) } }, [allowed])
   if (!allowed) return null
-  const label = fixedParentId ? 'Tạo công việc con' : 'Tạo công việc'
+  const label = 'Tạo công việc'
   const close = () => { if (!pending) setOpen(false) }
   return <>
     <Button onClick={() => setOpen(true)}>{label}</Button>
-    {open && <Dialog open busy={pending} title={label} onClose={close}>
-      <TaskForm mode="create" fixedParentId={fixedParentId} onSubmit={onCreate} onPendingChange={setPending} onCancel={close} onDenied={onDenied}
+    {open && <Dialog open busy={pending} title={label} className="task-form-dialog" onClose={close}>
+      <TaskForm mode="create" onSubmit={onCreate} onPendingChange={setPending} onCancel={close} onDenied={onDenied}
         onSaved={(task) => { setOpen(false); onSaved?.(task) }} />
     </Dialog>}
   </>
@@ -201,7 +237,7 @@ function ScopedTaskEdit({ profileId, workspaceId, task, canEdit = false, onUpdat
   const close = () => { if (!pending) setOpen(false) }
   return <>
     <Button variant="secondary" onClick={() => setOpen(true)}>Chỉnh sửa công việc</Button>
-    {open && <Dialog open busy={pending} title="Chỉnh sửa công việc" onClose={close}>
+    {open && <Dialog open busy={pending} title="Chỉnh sửa công việc" className="task-form-dialog" onClose={close}>
       <TaskForm mode="edit" task={task} onSubmit={onUpdate} onPendingChange={setPending} onCancel={close} onDenied={onDenied}
         onSaved={(saved) => { setOpen(false); onSaved?.(saved) }} />
     </Dialog>}

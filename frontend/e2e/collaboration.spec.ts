@@ -95,10 +95,10 @@ test.describe('Collaboration UI — real isolated Django/PostgreSQL, no API mock
   test('Viewer reads revision/review history and safe product links without mutation authority', async ({ page }) => {
     await loginUI(page, 'viewer')
     await page.goto(`${taskBase}/${historyId}`)
-    await expect(page.getByRole('heading', { name: 'Deliverable & Review', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Sản phẩm và đánh giá', exact: true })).toBeVisible()
     const first = page.getByRole('article', { name: 'Phiên bản 1', exact: true })
     await expect(first.getByText('Improve contrast in the first revision.', { exact: true })).toBeVisible()
-    await expect(first.getByRole('link', { name: /Mở sản phẩm bàn giao/ })).toHaveAttribute('href', 'https://example.test/isolated-deliverable-v1')
+    await expect(first.getByRole('link', { name: /Mở sản phẩm/ })).toHaveAttribute('href', 'https://example.test/isolated-deliverable-v1')
     const second = page.getByRole('article', { name: 'Phiên bản 2', exact: true })
     await expect(second.getByText('Approved contrast revision.', { exact: true })).toBeVisible()
     await expect(second.getByText('javascript:unsafe-deliverable-text', { exact: true })).toBeVisible()
@@ -185,7 +185,7 @@ test.describe('Collaboration UI — real isolated Django/PostgreSQL, no API mock
       const submit = async (taskId: string, url: string) => {
         await page.getByRole('button', { name: 'Nộp sản phẩm', exact: true }).click()
         const dialog = page.getByRole('dialog', { name: 'Nộp sản phẩm', exact: true })
-        await dialog.getByLabel('Đường dẫn hoặc nội dung sản phẩm', { exact: true }).fill(url)
+        await dialog.getByLabel('Link sản phẩm hoàn thành', { exact: true }).fill(url)
         const response = page.waitForResponse((item) => new URL(item.url()).pathname === `${apiTasks}${taskId}/deliverables/` && item.request().method() === 'POST')
         await dialog.getByRole('button', { name: 'Nộp sản phẩm', exact: true }).click()
         const saved = await response
@@ -269,7 +269,7 @@ test.describe('Collaboration UI — real isolated Django/PostgreSQL, no API mock
     expect(target).toMatch(/^\/profiles\/[a-f0-9-]+\/workspaces\/[a-f0-9-]+\/tasks\/[a-f0-9-]+$/)
     await firstRead.getByRole('link', { name: 'Mở công việc', exact: true }).click()
     await expect(page).toHaveURL(target ?? '')
-    await expect(page.getByRole('heading', { name: 'Deliverable & Review', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Sản phẩm và đánh giá', exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Mở thông báo', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Thông báo của bạn', exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
@@ -289,7 +289,7 @@ test.describe('Collaboration UI — real isolated Django/PostgreSQL, no API mock
     for (const size of [{ width: 375, height: 812 }, { width: 768, height: 1024 }, { width: 812, height: 375 }, { width: 1440, height: 1000 }]) {
       await page.setViewportSize(size)
       await page.goto(`${taskBase}/${historyId}`)
-      await expect(page.getByRole('heading', { name: 'Deliverable & Review', exact: true })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Sản phẩm và đánh giá', exact: true })).toBeVisible()
       await expect(page.getByLabel('Nội dung bình luận', { exact: true })).toBeVisible()
       await expect(page.getByRole('article', { name: 'Phiên bản 2', exact: true })).toBeVisible()
       await verify('collaboration-task', size.width)

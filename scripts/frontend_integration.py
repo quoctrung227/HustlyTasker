@@ -209,6 +209,66 @@ def seed_fixtures(run_id):
                 username=f"fixture_{label}", email=f"{label}.{run_id}@example.test",
                 password=password, first_name="Người mới", last_name="Kiểm thử",
             )
+        # Membership inheritance has its own actors/tenant so the previous
+        # membership/Invitation suites retain their exact access assumptions.
+        # This function only runs after fresh isolated-cluster/database gates.
+        inheritance_owner = User.objects.create_user(
+            username="fixture_inheritance_owner", email=f"inheritance_owner.{run_id}@example.test",
+            password=password, first_name="Chủ", last_name="Kế thừa",
+        )
+        inheritance_profile = Profile.objects.create(
+            id=fixture_id(run_id, "inheritance_profile"), name="Workspace Inheritance Integration",
+        )
+        ProfileMembership.objects.create(
+            profile=inheritance_profile, user=inheritance_owner, role=ProfileMembership.Role.OWNER,
+        )
+        current_month = datetime.now(timezone.utc).date().replace(day=1)
+        previous_month = (current_month - timedelta(days=1)).replace(day=1)
+        next_month = (current_month + timedelta(days=32)).replace(day=1)
+        inheritance_source = Workspace.objects.create(
+            id=fixture_id(run_id, "inheritance_source"), profile=inheritance_profile,
+            owner=inheritance_owner, name="Nguồn kế thừa kiểm thử", period=previous_month,
+        )
+        Workspace.objects.create(
+            id=fixture_id(run_id, "inheritance_future"), profile=inheritance_profile,
+            owner=inheritance_owner, name="Workspace tương lai kiểm thử", period=next_month,
+        )
+        for label, role, profile_active, workspace_active in (
+            ("inheritance_admin", "ADMIN", True, True),
+            ("inheritance_member", "MEMBER", True, True),
+            ("inheritance_viewer", "VIEWER", True, True),
+            ("inheritance_revoked", "MEMBER", True, False),
+            ("inheritance_inactive", "MEMBER", False, True),
+        ):
+            actor = User.objects.create_user(
+                username=f"fixture_{label}", email=f"{label}.{run_id}@example.test",
+                password=password, first_name=label, last_name="Kiểm thử",
+            )
+            profile_membership = ProfileMembership.objects.create(
+                id=fixture_id(run_id, f"{label}_profile_membership"), profile=inheritance_profile,
+                user=actor, role="MEMBER", is_active=True,
+            )
+            WorkspaceMember.objects.create(
+                id=fixture_id(run_id, f"{label}_source_membership"), workspace=inheritance_source,
+                user=actor, role=role, is_active=workspace_active,
+            )
+            if not profile_active:
+                # Simulate a once-valid Workspace assignment whose Profile
+                # membership was later revoked. Creation must still respect
+                # WorkspaceMember's normal active-Profile validation.
+                ProfileMembership.objects.filter(pk=profile_membership.pk).update(is_active=False)
+        Task.objects.create(
+            id=fixture_id(run_id, "inheritance_source_task"), workspace=inheritance_source,
+            created_by=inheritance_owner, title="Source work must not be copied",
+        )
+        first_profile = Profile.objects.create(
+            id=fixture_id(run_id, "inheritance_first_profile"), name="First Workspace Inheritance Integration",
+        )
+        ProfileMembership.objects.create(profile=first_profile, user=inheritance_owner, role="OWNER")
+        ProfileMembership.objects.create(
+            id=fixture_id(run_id, "inheritance_first_candidate"), profile=first_profile,
+            user=User.objects.get(username="fixture_inheritance_member"), role="MEMBER",
+        )
         # Dedicated AI fixture actors/empty Workspaces keep quotas and state
         # independent. No proposal or Task is seeded in these new scopes.
         ai_profiles = {}
@@ -456,13 +516,16 @@ def seed_fixtures(run_id):
         )
         second_revision = submit_deliverable(
             actor=participants["editor"], **scope, task_id=history_task.id,
-            # Stored URLs are arbitrary text in the existing backend. This
-            # proves the UI does not turn unsafe protocols into active links.
-            file_url="javascript:unsafe-deliverable-text",
+            file_url="https://example.test/isolated-deliverable-v2",
         )
         approve_deliverable(
             actor=participants["manager"], **scope, task_id=history_task.id,
             deliverable_id=second_revision.id, comment="Approved contrast revision.",
+        )
+        # Isolated historical fixture only: legacy storage accepted non-URL text.
+        # New submit APIs reject it; history must still read as escaped text.
+        history_task.deliverables.filter(pk=second_revision.id).update(
+            file_url="javascript:unsafe-deliverable-text",
         )
         for number in range(22):
             create_comment(

@@ -1,4 +1,5 @@
 /** Mock transport/contract tests, not real permission or mutation proof. */
+import { QueryClient } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient, ApiError, apiClient } from './client'
 import { taskQuery, workApi, workKeys } from './work-management'
@@ -10,7 +11,8 @@ const otherId = '00000000-0000-4000-8000-000000000103'
 const taskId = '00000000-0000-4000-8000-000000000104'
 const memberId = '00000000-0000-4000-8000-000000000105'
 const timestamp = '2026-10-26T00:00:00Z'
-const task: Task = { id: taskId, workspace_id: workspaceId, parent_id: null, title: 'Allowed fixture', description: null, status: 'PENDING', priority: 'MEDIUM', deadline: null, active_assignment: null, can_start: false, can_submit: false, created_at: timestamp, updated_at: timestamp }
+const task: Task = { id: taskId, workspace_id: workspaceId, parent_id: null, title: 'Allowed fixture', description: null, status: 'PENDING', priority: 'MEDIUM', deadline: null, active_assignment: null, can_start: false, can_submit: false, created_at: timestamp, updated_at: timestamp,
+  raw_video_url: null, reference_video_url: null, template_project_url: null, script_url: null, estimated_compensation_vnd: null }
 const workspace = { id: workspaceId, profile_id: profileId, name: 'Scoped fixture', description: null, period: '2026-10-01', status: 'ACTIVE', created_at: timestamp, updated_at: timestamp }
 const member: WorkspaceMember = { id: otherId, profile_membership_id: memberId, role: 'MEMBER', is_active: true, display_label: 'An Nguyễn', is_assignable: true, joined_at: timestamp, updated_at: timestamp }
 const page = <T,>(results: T[]) => ({ count: results.length, next: null, previous: null, results })
@@ -46,6 +48,65 @@ describe('safe OPTIONS and localized field errors', () => {
 })
 
 describe('Task filters, scope and read contracts', () => {
+  it('normalizes missing legacy brief fields to null without rejecting older Task responses', async () => {
+    const legacy = { ...task }
+    delete legacy.raw_video_url; delete legacy.reference_video_url; delete legacy.template_project_url; delete legacy.script_url; delete legacy.estimated_compensation_vnd
+    vi.mocked(apiClient.request).mockResolvedValue(legacy)
+    expect(await workApi.task(profileId, workspaceId, taskId)).toEqual(task)
+    vi.mocked(apiClient.request).mockResolvedValue(page([legacy]))
+    expect(await workApi.tasks(profileId, workspaceId)).toEqual(page([task]))
+  })
+  it('preserves exact large compensation strings and allowed private document links in read responses', async () => {
+    const brief = { ...task, raw_video_url: 'https://drive.google.com/file/d/synthetic/view', script_url: 'https://docs.google.com/document/d/synthetic/edit', estimated_compensation_vnd: '9007199254740993' }
+    vi.mocked(apiClient.request).mockResolvedValue(brief)
+    expect(await workApi.task(profileId, workspaceId, taskId)).toEqual(brief)
+  })
+  it.each(['detail', 'list', 'subtasks', 'create', 'update', 'assign', 'start'] as const)('keeps server-redacted null compensation in the %s response without reconstructing a hidden amount', async (action) => {
+    const redacted = { ...task, script_url: 'https://example.test/script', estimated_compensation_vnd: null }
+    vi.mocked(apiClient.request).mockResolvedValue(
+      action === 'list' ? page([redacted]) : action === 'subtasks' ? page([{ ...redacted, id: otherId, parent_id: taskId }]) : redacted,
+    )
+    let result: Task | undefined
+    switch (action) {
+      case 'list': result = (await workApi.tasks(profileId, workspaceId)).results[0]; break
+      case 'subtasks': result = (await workApi.subtasks(profileId, workspaceId, taskId)).results[0]; break
+      case 'create': result = await workApi.createTask(profileId, workspaceId, { title: 'Allowed metadata' }); break
+      case 'update': result = await workApi.updateTask(profileId, workspaceId, taskId, { description: 'Only metadata' }); break
+      case 'assign': result = await workApi.assignTask(profileId, workspaceId, taskId, { target_profile_membership_id: memberId }); break
+      case 'start': result = await workApi.startTask(profileId, workspaceId, taskId); break
+      default: result = await workApi.task(profileId, workspaceId, taskId)
+    }
+    expect(result?.estimated_compensation_vnd).toBeNull()
+    expect(result?.script_url).toBe('https://example.test/script')
+    expect(JSON.stringify(result)).not.toContain('9007199254740993')
+    if (action === 'update') expect(apiClient.request).toHaveBeenCalledWith(`${taskPath}${taskId}/`, expect.objectContaining({ method: 'PATCH', body: { description: 'Only metadata' } }))
+  })
+  it('replaces cached detail and list amounts with server-redacted nulls under the same tenant keys', async () => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } })
+    const visible = { ...task, estimated_compensation_vnd: '9007199254740993' }
+    const redacted = { ...task, estimated_compensation_vnd: null }
+    const detailKey = workKeys.task(profileId, workspaceId, taskId)
+    const listKey = workKeys.tasks(profileId, workspaceId)
+    try {
+      cache.setQueryData(detailKey, visible)
+      cache.setQueryData(listKey, page([visible]))
+      vi.mocked(apiClient.request).mockResolvedValueOnce(redacted).mockResolvedValueOnce(page([redacted]))
+      await cache.fetchQuery({ queryKey: detailKey, queryFn: () => workApi.task(profileId, workspaceId, taskId) })
+      await cache.fetchQuery({ queryKey: listKey, queryFn: () => workApi.tasks(profileId, workspaceId) })
+      expect(cache.getQueryData<Task>(detailKey)?.estimated_compensation_vnd).toBeNull()
+      expect(cache.getQueryData<{ results: Task[] }>(listKey)?.results[0]?.estimated_compensation_vnd).toBeNull()
+      expect(JSON.stringify(cache.getQueryData(detailKey))).not.toContain('9007199254740993')
+      expect(JSON.stringify(cache.getQueryData(listKey))).not.toContain('9007199254740993')
+    } finally { cache.clear() }
+  })
+  it.each([
+    { raw_video_url: 'javascript:alert(1)' }, { reference_video_url: 'data:text/plain,x' }, { template_project_url: 42 }, { script_url: 'not a URL' },
+    { estimated_compensation_vnd: -1 }, { estimated_compensation_vnd: 500000 }, { estimated_compensation_vnd: '1.5' }, { estimated_compensation_vnd: '1e6' },
+    { estimated_compensation_vnd: '1000000000000000000' },
+  ])('rejects malformed/unsafe brief metadata %#', async (metadata) => {
+    vi.mocked(apiClient.request).mockResolvedValue({ ...task, ...metadata })
+    await expect(workApi.task(profileId, workspaceId, taskId)).rejects.toMatchObject({ kind: 'invalid-response' })
+  })
   it.each([undefined, null, 'true', 1])('rejects a missing or non-boolean submission capability (%s)', async (can_submit) => {
     vi.mocked(apiClient.request).mockResolvedValue({ ...task, can_submit })
     await expect(workApi.task(profileId, workspaceId, taskId)).rejects.toMatchObject({ kind: 'invalid-response' })
@@ -79,6 +140,30 @@ describe('Task filters, scope and read contracts', () => {
     expect((await workApi.task(profileId, workspaceId, taskId)).active_assignment?.profile_membership_id).toBeNull()
     vi.mocked(apiClient.request).mockResolvedValue({ ...task, active_assignment: { id: otherId, profile_membership_id: 'not-a-uuid', assigned_at: timestamp } })
     await expect(workApi.task(profileId, workspaceId, taskId)).rejects.toMatchObject({ kind: 'invalid-response' })
+  })
+  it.each(['An Nguyễn', null, undefined])('accepts the additive scoped assignee name %s without requiring a global User ID', async (display_name) => {
+    const active_assignment = { id: otherId, profile_membership_id: memberId, assigned_at: timestamp, display_name }
+    vi.mocked(apiClient.request).mockResolvedValue({ ...task, active_assignment })
+    const result = await workApi.task(profileId, workspaceId, taskId)
+    expect(result.active_assignment).toEqual(active_assignment)
+    expect(result.active_assignment).not.toHaveProperty('user_id')
+  })
+  it.each([true, 12, {}, '', '   '])('rejects malformed assignee display labels %j', async (display_name) => {
+    vi.mocked(apiClient.request).mockResolvedValue({ ...task, active_assignment: { id: otherId, profile_membership_id: memberId, assigned_at: timestamp, display_name } })
+    await expect(workApi.task(profileId, workspaceId, taskId)).rejects.toMatchObject({ kind: 'invalid-response' })
+  })
+  it('replaces a formerly readable assignee name with the current nullable projection in the same query cache', async () => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } })
+    const key = workKeys.task(profileId, workspaceId, taskId)
+    const visible = { ...task, active_assignment: { id: otherId, profile_membership_id: memberId, assigned_at: timestamp, display_name: 'Tên cũ' } }
+    const redacted = { ...task, active_assignment: { ...visible.active_assignment, display_name: null } }
+    try {
+      cache.setQueryData(key, visible)
+      vi.mocked(apiClient.request).mockResolvedValue(redacted)
+      await cache.fetchQuery({ queryKey: key, queryFn: () => workApi.task(profileId, workspaceId, taskId) })
+      expect(cache.getQueryData<Task>(key)?.active_assignment?.display_name).toBeNull()
+      expect(JSON.stringify(cache.getQueryData(key))).not.toContain('Tên cũ')
+    } finally { cache.clear() }
   })
   it('requests exactly one direct child level and rejects a mismatched parent', async () => {
     vi.mocked(apiClient.request).mockResolvedValue(page([{ ...task, id: otherId, parent_id: taskId }]))

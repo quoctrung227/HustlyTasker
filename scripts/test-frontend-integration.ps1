@@ -2,7 +2,7 @@
 param(
     [ValidateRange(1024,65535)]
     [int]$BackendPort = 8001,
-    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members','workspace-members','invitation-delivery-failure')]
+    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members','workspace-members','invitation-delivery-failure','workspace-inheritance','task-brief','task-ux')]
     [string]$Suite = 'foundation'
 )
 
@@ -29,6 +29,9 @@ $htCreatedPg = $false
 $htCreatedServer = $false
 $htServerReady = $false
 $htSpec = switch ($Suite) {
+    'task-ux' {'e2e/task-ux.spec.ts'}
+    'task-brief' {'e2e/task-brief.spec.ts'}
+    'workspace-inheritance' {'e2e/workspace-inheritance.spec.ts'}
     'invitation-delivery-failure' {'e2e/invitation-delivery-failure.spec.ts'}
     'workspace-members' {'e2e/workspace-members.spec.ts'}
     'members' {'e2e/members.spec.ts'}
@@ -45,6 +48,9 @@ $htSpec = switch ($Suite) {
     default {'e2e/real-api.spec.ts'}
 }
 $htArtifactTask = switch ($Suite) {
+    'task-ux' {'HT-FE-TASK-UX-REFINEMENT-01'}
+    'task-brief' {'HT-FE-TASK-BRIEF-24H-VI-01'}
+    'workspace-inheritance' {'HT-FE-WORKSPACE-INHERITANCE-01'}
     'invitation-delivery-failure' {'HT-FE-INVITATION-DELIVERY-FIX-01'}
     'workspace-members' {'HT-FE-WORKSPACE-MEMBERS-01'}
     'members' {'HT-FE-MEMBERS-01'}

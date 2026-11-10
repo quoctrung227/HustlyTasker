@@ -1,5 +1,132 @@
 # HT-RBAC-DESIGN-P0-01
 
+## HT-FE-TASK-UX-REFINEMENT-01 — Scoped display only (2026-11-10)
+
+Task active_assignment.display_name is read-only display data, not permission.
+The authenticated actor must currently read that exact scoped Task, and the
+assignee must have an active account/Profile membership and effective current
+Workspace read access (including inherited Profile manager access). Unavailable
+identity yields NULL; historical or stale assignment/name caches do not disclose
+names. Safe fullname, then safe nonemail/nonUUID username, then generic label;
+no global User ID/email directory or per-Task roster request. Existing eligibility
+for assign/start/submit, reviewer/self-review/latest checks, metadata writes and
+compensation projection remain unchanged. A name alone never grants any action.
+
+New linked Deliverable submissions keep existing Editor/current-assignee/WORKING
+and revision/review transaction checks. HTTP(S)/500char input validation does not
+alter tenant access; all existing legacy references remain readable, unsafe URI
+text is not made clickable. No schema, new role, live fetch or client authority.
+Current PostgreSQL/browser/CSRF/compensation evidence is in HANDOVER.
+
+## HT-DB-TASK-BRIEF-ROLLOUT-01 — Schema availability only (2026-11-10)
+
+The Owner-approved controlled development rollout applied only tasks.0005_task_brief
+at2026-11-10T13:47:38Z after backup and isolated restore/migration rehearsal.
+Development now has37 migration records; ai.0002 remains UNAPPLIED. This does not
+change any permission/capability or broaden the compensation policy below.
+Manager-only metadata writes, effective current-assignee read eligibility,
+unauthorized NULL projection, tenant isolation and SessionAuthentication/CSRF
+remain unchanged. All29-table legacy data and two existing Task rows are preserved;
+their five new metadata fields are NULL. Read-only ORM/check/startup and anonymous
+HTTP GET smoke9/9 pass; actual Owner business/UI acceptance remains pending.
+Historical pending-Task-migration statements below retain their dated task scope
+and are superseded for the now-applied schema. AI/production migration remains
+unapproved. Full security/UI regression counts belong to the prior RBAC task,
+not tests rerun in this rollout; current evidence is in HANDOVER.
+
+## HT-FE-TASK-COMPENSATION-RBAC-01 — Approved compensation disclosure (2026-11-10)
+
+Current Owner approval supersedes the earlier all-Task-readers pay policy only.
+No role, assignment invariant, tenant scope or metadata-write grant is added.
+
+| Currently Task-readable actor | Expected compensation | Metadata create/edit |
+|---|---|---|
+| Active Profile OWNER/ADMIN | Exact string/null, own legitimate scope | Existing manager policy only |
+| Active Profile MEMBER + Workspace ADMIN | Exact string/null, managed Workspace | Existing manager policy only |
+| Active Profile MEMBER + Workspace MEMBER + current ACTIVE assignment to this Task | Exact string/null | Denied |
+| Unassigned MEMBER or ordinary VIEWER | NULL, no value/existence disclosure | Denied |
+| Historical assignment or retained assignment after VIEWER downgrade | NULL | Denied |
+| Revoked/inactive/foreign/unknown tenant | Existing read denial; no pay | Denied |
+
+Active User and current Profile membership are required even for assignees and
+delegated Workspace Admin. Profile managers retain inherited Workspace authority;
+staff/global User IDs/transitional Workspace.owner never grant pay privileges.
+Existing archived Profile/Workspace Task reads remain permitted to valid actors,
+with the same field projection; existing metadata/execute writes stay denied.
+Single ACTIVE assignee uniqueness remains intact, regardless of historical rows.
+
+The reusable task compensation selector starts with existing readable Task scope
+and rechecks current role/membership/assignment predicates in SQL. Serializer
+authorization is batched per page and fails closed without matching authenticated
+request/context. URLs remain governed by normal Task read permission. React hides
+the pay section when server returns NULL; its role labels are never authority.
+Existing user/tenant query keys, logout/session cleanup and current-response
+replacement apply; no realtime revocation promise is made before revalidation.
+That RBAC implementation made no schema/migration edit. The separately approved
+rollout above subsequently applied tasks.0005 only; it does not grant AI migration
+or production authority. HANDOVER records current rollout/preservation evidence;
+old test counts below remain historical.
+
+## Historical Task brief authority — superseded compensation visibility
+
+**CANDIDATE VERIFIED — DEVELOPMENT MIGRATION PENDING OWNER.** New optional documents and expected
+whole-Task VND compensation use the existing Task read boundary. Every authorized
+Task reader could read that amount under the earlier approval. This broad-read
+part is now superseded by the current Owner-approved section above.
+Create/edit metadata remains manager-only. Assigned Editor can read/execute its
+authorized work, but this task does not grant Editor/Viewer metadata writes.
+Existing one-active-assignee constraint/history, self-review/stale-revision
+protection, Session/CSRF and tenant checks remain unchanged.
+
+Hiding ordinary Subtask creation/filters/breadcrumbs/children lists changes UI
+affordances only, not authorization, stored parent relations, APIs or AI fixture
+proposal contracts. All readable Tasks, including old child rows, remain visible
+and directly addressable. No compensation multiplication, payroll/payment or
+role elevation. New metadata audits log changed names only. Candidate schema must
+pass isolated tests and a separate development rollout gate before manual use.
+Current targeted132/full937 PostgreSQL, frontend1047 and47 real isolated browser
+cases passed/actual exits0. Assigned Editor and Viewer previously read pay but could not
+edit; cross-tenant/CSRF/revoked/archived boundaries and previous Task/Review/
+Workspace/Invitation/inheritance workflows remain protected. No policy broadened.
+
+## HT-FE-WORKSPACE-INHERITANCE-01 — Approved bounded grants (2026-11-10)
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Current Owner explicitly approves source
+Workspace role snapshots and current-month onboarding after accepted invitation.
+Older no-auto-grant statements below are historical outside this bounded scope.
+No new roles, global authority, model/migration or authentication mechanism.
+
+Only active Profile OWNER/ADMIN may preview/create a Workspace with memberships.
+Source is explicitly selected, same-Profile and readable, including archived
+readable months. Supported active source rows plus active ordinary Profile MEMBER
+and active User determine ADMIN/MEMBER/VIEWER snapshots. Revoked/stale/inactive
+rows and redundant Profile manager rows are skipped. Source remains unchanged;
+no tasks/assignments copied, no later cascade. First Workspace allows explicitly
+confirmed eligible Profile memberships only at fixed MEMBER. No client role list.
+Legacy creation without options remains manual. Existing membership services,
+grant ceilings, audits and Profile-first serialization remain authoritative.
+
+Invitation accept may create MEMBER in the ACTIVE Workspace with exact current
+canonical month (existing UTC policy and unique Profile+period). It never uses
+latest(created_at), past/future or null-period legacy rows. Skip absent target,
+Profile Admins and any existing target assignment history, even revoked. Existing
+rejoin cleanup still revokes stale access before considering a missing current
+row. A compatible Profile reactivation may receive a genuinely new current row;
+no login/send/replay hook restores access. Accept, new grant and audits share one
+transaction. No TaskAssignment row or Task status is mutated. Existing access/
+assignment predicates still decide the effect of historical assignments.
+
+Read-only preview shows safe labels/roles and excluded count, no private contact
+or global User identifiers. Actor scope and eligibility are rechecked on write.
+See [API contract](API_DOCUMENTATION.md#ht-fe-workspace-inheritance-01--workspace-creation-membership-snapshot).
+
+Verified on final source: targeted132/full905 PostgreSQL and24real isolated
+browser tests PASS, actual Python/launcher/Playwright/backend exits0. Includes
+3new concurrency tests, revoked/role-ceiling/tenant/CSRF and current-period guards.
+Final frontend955, four-sizeaxe0/keyboard/focus and development/source preservation
+also pass; exact evidence and earlier fixture failures are in HANDOVER. No live
+email, schema/AI flags or production authority is added.
+
 ## HT-FE-WORKSPACE-MEMBERS-01 — Workspace access UI contract (2026-11-09)
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** The current Owner authorizes
@@ -23,8 +150,9 @@ Session authentication/CSRF and current database identity/membership remain
 authoritative. Profile selection, known UUIDs, staff flags, legacy Workspace
 OWNER and transitional Workspace.owner never confer privileges. Active Profile
 membership is required even for delegated Workspace Admin. Profile Owner/Admin
-need no WorkspaceMember record; ordinary Members do. Neither Workspace creation
-nor Profile invitation acceptance automatically creates a Workspace assignment.
+need no WorkspaceMember record; ordinary Members do. Legacy manual creation and
+membership alone grant none; the bounded approved snapshot/current-month
+acceptance exceptions are defined in the current inheritance section above.
 
 Existing GET/POST members and PATCH/DELETE member-detail are reused. The new
 GET member-candidates endpoint is scoped to one authorized Workspace and returns
@@ -1117,13 +1245,16 @@ Hard delete is not exposed.
 
 Current Workspace write-validation contract:
 
-- Workspace creation accepts exactly required `name`, required `period`, and
-  optional `description`. `period` must be the first day of the represented
+- Workspace creation accepts required `name`, required `period`, optional
+  `description`, and either optional `source_workspace_id` or
+  `initial_profile_membership_ids` under the current inheritance contract.
+  `period` must be the first day of the represented
   month, is immutable through supported paths, and is unique per Profile even
   when the existing Workspace is archived. Metadata update accepts only
   `name`/`description`; empty/unchanged input is a no-op with no audit event.
   `profile`, transitional `owner`, lifecycle `status`, IDs, timestamps,
-  membership data, roles, and unknown fields are rejected. Profile and owner
+  arbitrary membership data, roles, and unknown fields are rejected. Only the
+  approved source/initial reference fields select server-validated grants. Profile and owner
   are server-set from the authorized parent/actor, so a body cannot reparent or
   impersonate ownership.
 - Direct Workspace add accepts `{target_profile_membership_id, role}`, not a
@@ -1313,7 +1444,9 @@ only with the isolated locmem adapter; **REAL EMAIL DELIVERY NOT VERIFIED**.
 - Invitation expiry uses the approved seven-day TTL; resend/reinvite invalidates
   the previous credential. Creation enforces five attempts per recipient email
   and 30 invitations per inviter in 24 hours.
-- Invitation acceptance never creates Workspace membership automatically.
+- Invitation acceptance creates an absent current ACTIVE month MEMBER assignment
+  only under HT-FE-WORKSPACE-INHERITANCE-01; existing revoked rows never reactivate,
+  and send/login/replay grant none.
 - Direct Workspace add still rejects missing/inactive/cross-Profile membership.
 - Raw token/hash is absent from serialized responses, AuditLog, and captured
   application/access logs.
@@ -1391,7 +1524,7 @@ only with the isolated locmem adapter; **REAL EMAIL DELIVERY NOT VERIFIED**.
 | Workspace lifecycle/period extension — implementation and development rollout complete | Additive lifecycle/period schema; canonical immutable unique Profile/month; Owner-only Profile lifecycle; Owner/Admin Workspace lifecycle; archived reads with normal writes blocked; same-row member revoke/reactivate; lock/role/audit/CSRF/IDOR boundaries; tenant hard-delete API absent | Isolated PostgreSQL `0002→0003` preservation test; controlled development backup/restore/apply/post-check; direct non-mutating smoke; 17/17 targeted lifecycle/schema, 140/140 Workspace, 29/29 auth/API and 169/169 full PostgreSQL tests; dependency/system/migration checks |
 | Task/internal Review workflow — implementation complete; development migration pending | Nested tenant scope; manager vs current-assignee role split; one active assignment; revisioned submission; latest-only non-self review; completion only after approval; strict/no-PII API; transactional audit; no Client/Payroll side effects | 33/33 targeted, 169/169 existing regression and 202/202 full PostgreSQL tests; dependency/system/migration-drift checks and independent code review PASS; controlled development migration remains pending |
 | Invitation schema/migration | Additive migration only; token digest/status/role constraints and pending uniqueness match approved policy; existing rows are preserved; no plaintext token field | Migration consistency plus empty/populated PostgreSQL forward tests and constraint tests |
-| Invitation service | Authorized sender/recipient binding; expiry/replay/reinvite semantics; exactly one active membership and one terminal winner; Workspace membership is never implicit; audit is atomic | Token secrecy/log capture, duplicate/case variants, wrong-user/inactive/expired/revoked/replay, concurrent accept/accept and accept/revoke tests |
+| Invitation service | Authorized sender/recipient binding; expiry/replay/reinvite semantics; exactly one active Profile membership and terminal winner; only approved accepted-current-month missing MEMBER grant, never send/login/revoked-row revival; atomic audit | Token secrecy/log capture, duplicate/case variants, wrong-user/inactive/expired/revoked/replay, concurrent accept/accept and accept/revoke; current-month/no-history tests |
 | Invitation API/delivery | Authenticated session and CSRF; non-enumerating failures; scoped manager lists; no token/hash serialization; send only after commit; approved throttle/cache contract | API contract, CSRF, throttle, cache/header, delivery-failure, and cross-Profile negative tests |
 | Business-domain onboarding | Domain has a canonical non-null/reconciled tenant path and same-tenant relationship service before route exposure | Domain migration rehearsal, cross-tenant relationship tests, API matrix tests, and full PostgreSQL regression |
 

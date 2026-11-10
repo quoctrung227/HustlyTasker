@@ -1,7 +1,7 @@
 /** Mock transport contracts; these tests do not establish live permissions. */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient, ApiError, apiClient } from './client'
-import { collaborationApi, collaborationKeys, notificationApi, notificationKeys, notificationTaskPath, safeDeliverableUrl } from './collaboration'
+import { collaborationApi, collaborationKeys, deliverableSubmissionError, notificationApi, notificationKeys, notificationTaskPath, safeDeliverableUrl } from './collaboration'
 import type { AppNotification, Deliverable, TaskComment } from './collaboration'
 
 const profileId = '00000000-0000-4000-8000-000000000101'
@@ -44,6 +44,13 @@ describe('Deliverable and nested Review read contracts', () => {
       review: { id: reviewId, status: 'REQUEST_CHANGE', comment: 'Cần chỉnh sửa', reviewer_profile_membership_id: null, created_at: created, updated_at: created } }
     vi.mocked(apiClient.request).mockResolvedValue(page([value]))
     expect((await collaborationApi.deliverables(profileId, workspaceId, taskId)).results[0]).toEqual(value)
+  })
+  it('keeps old non-URL product references verbatim while new submissions use a separate URL validator', async () => {
+    const value = { ...deliverable, revision: null, file_url: 'legacy/private/final-video.mov' }
+    vi.mocked(apiClient.request).mockResolvedValue(page([value]))
+    expect((await collaborationApi.deliverables(profileId, workspaceId, taskId)).results[0]?.file_url).toBe(value.file_url)
+    expect(safeDeliverableUrl(value.file_url)).toBeNull()
+    expect(deliverableSubmissionError(value.file_url)).not.toBeNull()
   })
   it.each([{ ...deliverable, task_id: otherId }, { ...deliverable, revision: 0 }, { ...deliverable, status: 'COMPLETED' }, { ...deliverable, review: { id: reviewId, status: 'APPROVED' } }])('rejects wrong-parent or malformed deliverables', async (value) => {
     vi.mocked(apiClient.request).mockResolvedValue(page([value]))
@@ -183,9 +190,36 @@ describe('Untrusted external Deliverable links', () => {
     expect(safeDeliverableUrl(value)).toBe(value)
   })
   it.each(['javascript:alert(1)', 'data:text/html,<h1>test</h1>', '//files.example.invalid/result', '/relative', 'ftp://files.example.invalid/result',
-    'https://name:password@files.example.invalid/result', 'https://files.example.invalid/with space', 'https://files.example.invalid/\nnext', 'https://files.example.invalid/\u0000next', 'https://files.example.invalid/\u0085next', 'https://files.example.invalid\\@else.invalid', ' https://files.example.invalid/result', 'not a link'])('keeps unsafe/ambiguous legacy values as plain text %s', (value) => {
+    'https://name:password@files.example.invalid/result', 'https://files.example.invalid/with space', 'https://files.example.invalid/\nnext', 'https://files.example.invalid/\u0000next', 'https://files.example.invalid/\u0085next', 'https://files.example.invalid/\uD800', 'https://files.example.invalid\\@else.invalid', ' https://files.example.invalid/result', 'not a link'])('keeps unsafe/ambiguous legacy values as plain text %s', (value) => {
     expect(safeDeliverableUrl(value)).toBeNull()
     expect(apiClient.request).not.toHaveBeenCalled()
+  })
+})
+
+describe('Finished-product submission URL validation', () => {
+  it.each([
+    'https://drive.google.com/file/d/synthetic/view?usp=sharing',
+    'https://onedrive.live.com/synthetic-final-video',
+    'https://www.dropbox.com/s/synthetic/final.mp4?dl=0',
+    'https://www.youtube.com/watch?v=synthetic',
+    'http://files.example.test/private/final.mp4',
+  ])('accepts a private-capable HTTP(S) product link without fetching it (%s)', (value) => {
+    expect(deliverableSubmissionError(` ${value} `)).toBeNull()
+    expect(apiClient.request).not.toHaveBeenCalled()
+  })
+  it.each(['', 'not a link', 'javascript:alert(1)', 'data:video/mp4,test', 'ftp://example.test/video', '//example.test/video', '/legacy/file.mp4',
+    'https://user:password@example.test/video', 'https://example.test/with space', 'https://example.test/\nnext', '\thttps://example.test/video', 'https://example.test/\0', 'https://example.test/\u0085', 'https://example.test/\uD800', 'https://example.test\\@else.test'])('rejects unsafe new submission input (%#)', (value) => {
+    expect(deliverableSubmissionError(value)).not.toBeNull()
+    expect(apiClient.request).not.toHaveBeenCalled()
+  })
+  it('keeps the existing 500-Unicode-character storage bound without rewriting valid URLs', () => {
+    const prefix = 'https://example.test/'
+    const maximum = prefix + 'a'.repeat(500 - prefix.length)
+    expect(deliverableSubmissionError(maximum)).toBeNull()
+    expect(deliverableSubmissionError(`${maximum}a`)).toBe('Link sản phẩm tối đa 500 ký tự.')
+    const unicode = prefix + '🎬'.repeat(500 - prefix.length)
+    expect(deliverableSubmissionError(unicode)).toBeNull()
+    expect(deliverableSubmissionError(`${unicode}a`)).toBe('Link sản phẩm tối đa 500 ký tự.')
   })
 })
 

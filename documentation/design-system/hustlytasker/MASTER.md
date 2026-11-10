@@ -103,6 +103,82 @@ No colors/layout/placeholder claim introduces Project or new permission rules.
 
 ## Workspace and Task patterns — HT-FE-P3-02
 
+### Task UX refinement — HT-FE-TASK-UX-REFINEMENT-01
+
+Reuse the established tokens and shared components; no new visual direction,
+dependency, palette, typography or Workspace-wide styling override. Task-only
+description card is24rem on desktop, flex-column with a fixed outside heading
+and an independently scrollable, named native section. min-height0/min-width0
+allow the body to shrink; overflow-y:auto and overflow-wrap:anywhere keep all
+content readable without horizontal clipping. Short content has no scrollbar.
+Neighboring facts card aligns to the grid's start at its natural height. Mobile
+stacks both cards and uses natural description height capped at24rem.
+
+The scroll region remains a normal named section with tabIndex0 and the shared
+focus ring, allowing keyboard scrolling without moving the page heading or
+inventing a widget role. Its single element-local Biome exception explains that
+keyboard requirement. Native fieldset groups the from/to UTC date filters in
+one column, with the end bound directly below the start. Reset only that
+fieldset's border/padding/margin; preserve UTC semantics and existing date picker.
+Apply/Clear use a full-row action group; controls reflow at existing breakpoints.
+
+Assignee labels come from the current server-scoped display_name. Use readable
+unassigned/unavailable/legacy fallbacks instead of UUIDs or remembered names.
+Names are presentation data, never permission evidence. Existing compensation
+NULL projection and manager-only metadata writes remain unchanged.
+
+Collaboration now says **Sản phẩm và đánh giá**. Submit uses a persistent
+**Link sản phẩm hoàn thành** URL label/example, **Nộp sản phẩm**, explicit
+pending/error/success states and the existing native decision dialogs. Each
+revision's **Mở sản phẩm** action opens its own safe HTTP(S) URL in a new tab;
+legacy non-URL values remain inert readable text. New URL-only500-code-point
+validation supersedes earlier text-or-URL writes, without changing models or
+rendering old paths as links. No upload/preview/realtime interaction is added.
+
+Actual offline focused searches refined generic results to Web Keyboard
+Navigation and html-tailwind Long Token Resilience. Relevant full-skill web
+guidance informed visible focus, preserved DOM order, grouping and long-token
+wrapping; native-only advice and unrelated generated styling were not adopted.
+Geometry/scrolling,375/768/1440/landscape, keyboard and axe require real browser
+verification; HANDOVER records actual final evidence and Owner review status.
+
+### Task work-brief override — HT-FE-TASK-BRIEF-24H-VI-01 candidate
+
+Ordinary Task forms now use the existing teal/neutral tokens, grouped optional
+resource inputs and expected VND compensation, with a Task-only scrollable720px
+native dialog and reachable sticky actions. No shared Dialog/theme reset.
+Detail has job information, safe labeled resource actions and optional exact-pay
+card; empty groups hide,0 remains visible. Links do not auto-fetch/embed.
+
+HT-FE-TASK-COMPENSATION-RBAC-01 supersedes broad pay visibility: the server returns
+NULL for unauthorized or unset compensation, and the entire pay card stays absent.
+Helper text names legitimate management/current-assignee access and distinguishes
+read from manager-only write. Do not render a misleading disabled financial card,
+derive authority from role labels, or retain a previous response's amount. Reuse
+the same teal/neutral surface, exact string formatting and semantic form controls;
+this is privacy behavior/copy, not a new design system. Current tests belong in
+HANDOVER, not an inferred visual or deployment acceptance claim.
+Full local skill/master and offline focused React `async request cleanup`
+search were actually used. Verified effect-cleanup guidance supports retaining
+existing scope-bound requests and replacing current server responses; it does
+not call for a new permission store, role inference or changed form layout.
+
+Task deadline and date filters use a controlled dd/mm/yyyy text field with an
+optional inline Vietnamese calendar, explicit24h hour/minute selects and clear.
+Calendar month/weekday/control names are Vietnamese and keyboard accessible;
+normal Task UI does not depend on browser datetime-local/AMPM localization.
+Device-local input→UTC and UTC filter semantics remain. Unchanged edit timestamp
+is not resubmitted; new/changed deadlines use minutes. Existing separate AI
+proposal helpers/precision remain intact, outside this ordinary-form override.
+Ordinary hierarchy affordances are removed; stored child data/API/AI proposal
+relations remain. No fabricated progress algorithm or hidden Task rows.
+
+Full local skill/master and focused Forms/date keyboard/React cleanup searches
+were actually applied. Native labels/grouping, safe errors, precise string money,
+retained scope-bound drafts and explicit submit/no automatic retry are reused.
+Current isolated test/preservation/rollout status belongs in HANDOVER; candidate
+schema does not authorize development migration or manual production claims.
+
 No palette/font/layout reset. Task list uses semantic list rows, wrapping into
 cards on mobile instead of forcing a wide table across the viewport. Titles
 are primary links; status/priority always include text. Teal/canvas semantic
@@ -113,8 +189,9 @@ the active filters, never dashboard analytics inferred from a single page.
 Filter controls are persistent labeled native selects/date inputs in a compact
 responsive grid, with explicit Apply/Clear. "Tìm trong trang" searches only
 loaded rows. Date range labels state UTC; editable Task deadlines state browser
-timezone and are converted to UTC instants. Scope breadcrumbs and at most three
-ancestor requests keep hierarchy navigation bounded; direct children paginate.
+timezone and are converted to UTC instants. Historical HT-FE-P3-02 used bounded
+ancestor breadcrumbs/direct-child pagination; the current Task work-brief override
+above removes those ordinary UI affordances while preserving the backend contract.
 
 Reuse native Dialog, FormField, Button, Alert and Pagination. Create/edit forms
 retain drafts on recoverable failures; focused error summary links complement
@@ -154,8 +231,10 @@ PNG inspection; actual results belong in HANDOVER, not a design claim alone.
 
 No visual direction, token or layout change. Submit, Approve and Request Changes
 reuse native Dialog, the existing work-form/field/button styles and a focused
-error summary with links plus inline messages. Submit explicitly accepts text
-or URL, not a fake file-upload control. Request Changes has a required feedback
+error summary with links plus inline messages. New Submit accepts an HTTP(S) URL
+under the current Task UX refinement above. API03A's earlier text-or-URL policy
+is historical; stored legacy values remain readable. There is no fake file-upload
+control. Request Changes has a required feedback
 field; Approve has optional feedback and explicit confirmation. Pending controls
 prevent duplicate submission and dismissal; drafts survive recoverable errors.
 Current server capability booleans decide action visibility, without client-side

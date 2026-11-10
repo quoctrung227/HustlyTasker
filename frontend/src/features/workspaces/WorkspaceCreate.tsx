@@ -4,6 +4,8 @@ import { Alert, Button, Dialog, FormField, Input } from '../../components/ui'
 import { isApiError } from '../../services/api/client'
 import type { Workspace } from '../../services/api/types'
 import type { WorkspaceCreateInput, WorkspaceUpdateInput } from '../../services/api/work-management'
+import type { WorkspaceMembershipInput } from '../../services/api/workspace-inheritance'
+import { WorkspaceMembershipSetup } from './WorkspaceMembershipSetup'
 export type { WorkspaceCreateInput, WorkspaceUpdateInput } from '../../services/api/work-management'
 
 type CommonFormProps = {
@@ -14,11 +16,11 @@ type CommonFormProps = {
 }
 
 type WorkspaceFormProps = CommonFormProps & (
-  | { mode: 'create'; onSubmit: (input: WorkspaceCreateInput, signal?: AbortSignal) => Promise<Workspace> }
+  | { mode: 'create'; membershipProfileId?: string; onSubmit: (input: WorkspaceCreateInput, signal?: AbortSignal) => Promise<Workspace> }
   | { mode: 'edit'; workspace: Workspace; onSubmit: (input: WorkspaceUpdateInput, signal?: AbortSignal) => Promise<Workspace> }
 )
 
-type FieldErrors = Partial<Record<'name' | 'description' | 'period', string>>
+type FieldErrors = Partial<Record<'name' | 'description' | 'period' | 'source_workspace_id' | 'initial_profile_membership_ids', string>>
 
 // Both forms submit only the fields explicitly accepted by the existing API.
 export function WorkspaceForm(props: WorkspaceFormProps) {
@@ -27,17 +29,19 @@ export function WorkspaceForm(props: WorkspaceFormProps) {
   const [description, setDescription] = useState(props.mode === 'edit' ? props.workspace.description ?? '' : '')
   const [month, setMonth] = useState('')
   const [pending, setPending] = useState(false)
+  const [memberships, setMemberships] = useState<WorkspaceMembershipInput>({})
+  const [membershipsReady, setMembershipsReady] = useState(!('membershipProfileId' in props && props.membershipProfileId))
   const [failure, setFailure] = useState<{ message: string; fields: FieldErrors } | null>(null)
   const summary = useRef<HTMLDivElement>(null)
   const request = useRef<AbortController | null>(null)
-  const fieldIds = { name: `${id}-name`, description: `${id}-description`, period: `${id}-period` }
+  const fieldIds = { name: `${id}-name`, description: `${id}-description`, period: `${id}-period`, source_workspace_id: `${id}-members`, initial_profile_membership_ids: `${id}-members` }
 
   useEffect(() => () => { request.current?.abort() }, [])
   useEffect(() => { if (failure) summary.current?.focus() }, [failure])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (request.current) return
+    if (request.current || (props.mode === 'create' && !membershipsReady)) return
     const fields: FieldErrors = {}
     if (!name.trim() || name.trim().length > 255) fields.name = 'Nhập tên không gian từ 1 đến 255 ký tự.'
     if (props.mode === 'create' && !/^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
@@ -57,16 +61,17 @@ export function WorkspaceForm(props: WorkspaceFormProps) {
     try {
       const metadata = { name: name.trim(), description }
       saved = props.mode === 'create'
-        ? await props.onSubmit({ ...metadata, period: `${month}-01` }, controller.signal)
+        ? await props.onSubmit({ ...metadata, period: `${month}-01`, ...memberships }, controller.signal)
         : await props.onSubmit(metadata, controller.signal)
     } catch (error) {
       if (!controller.signal.aborted) {
         const apiError = isApiError(error) ? error : null
         const errors: FieldErrors = {}
-        for (const field of ['name', 'description', 'period'] as const) {
+        for (const field of ['name', 'description', 'period', 'source_workspace_id', 'initial_profile_membership_ids'] as const) {
           if (apiError?.fieldErrors[field]) errors[field] = apiError.fieldErrors[field]
         }
-        setFailure({ message: apiError?.message ?? 'Chưa thể lưu không gian. Vui lòng thử lại sau.', fields: errors })
+        const uncertain = !apiError || apiError.status === 0 || apiError.status >= 500
+        setFailure({ message: uncertain ? 'Chưa xác nhận được kết quả. Hãy đóng biểu mẫu và kiểm tra danh sách Workspace trước khi thử lại.' : apiError.message, fields: errors })
         if (apiError?.kind === 'forbidden' || apiError?.status === 404) props.onDenied?.()
       }
     } finally {
@@ -104,8 +109,12 @@ export function WorkspaceForm(props: WorkspaceFormProps) {
       {props.mode === 'create' ? <FormField id={fieldIds.period} label="Tháng làm việc" error={failure?.fields.period} hint="Mỗi tháng có một không gian trong tổ chức. Tháng không thể thay đổi sau khi tạo.">
         <Input type="month" min="0001-01" max="9999-12" value={month} onChange={(event) => setMonth(event.target.value)} required disabled={pending} />
       </FormField> : <p className="field__hint">Tháng làm việc không thể thay đổi sau khi tạo.</p>}
+      {props.mode === 'create' && props.membershipProfileId && <div id={fieldIds.source_workspace_id} tabIndex={-1}>
+        <WorkspaceMembershipSetup profileId={props.membershipProfileId} pending={pending} onChange={setMemberships} onReady={setMembershipsReady} />
+        {(failure?.fields.source_workspace_id || failure?.fields.initial_profile_membership_ids) && <p className="field__error">{failure.fields.source_workspace_id || failure.fields.initial_profile_membership_ids}</p>}
+      </div>}
       <div className="work-actions">
-        <Button type="submit" busy={pending}>{props.mode === 'create' ? 'Tạo không gian' : 'Lưu thay đổi'}</Button>
+        <Button type="submit" busy={pending} disabled={props.mode === 'create' && !membershipsReady}>{props.mode === 'create' ? 'Tạo không gian' : 'Lưu thay đổi'}</Button>
         <Button variant="secondary" disabled={pending} onClick={props.onCancel}>Hủy</Button>
       </div>
     </form>
@@ -114,6 +123,7 @@ export function WorkspaceForm(props: WorkspaceFormProps) {
 
 type WorkspaceCreateProps = {
   profileId: string
+  currentUserId?: string
   canCreate?: boolean
   onCreate: (input: WorkspaceCreateInput, signal?: AbortSignal) => Promise<Workspace>
   onCreated?: (workspace: Workspace) => void
@@ -121,10 +131,10 @@ type WorkspaceCreateProps = {
 }
 
 export function WorkspaceCreate(props: WorkspaceCreateProps) {
-  return <ScopedWorkspaceCreate key={props.profileId} {...props} />
+  return <ScopedWorkspaceCreate key={`${props.currentUserId || ''}:${props.profileId}`} {...props} />
 }
 
-function ScopedWorkspaceCreate({ profileId, canCreate = false, onCreate, onCreated, onDenied }: WorkspaceCreateProps) {
+function ScopedWorkspaceCreate({ profileId, currentUserId, canCreate = false, onCreate, onCreated, onDenied }: WorkspaceCreateProps) {
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState(false)
   const close = () => { if (!pending) setOpen(false) }
@@ -136,7 +146,7 @@ function ScopedWorkspaceCreate({ profileId, canCreate = false, onCreate, onCreat
   return <>
     <Button onClick={() => setOpen(true)}>Tạo không gian</Button>
     {open && <Dialog open busy={pending} title="Tạo không gian làm việc" onClose={close}>
-      <WorkspaceForm key={profileId} mode="create" onSubmit={onCreate} onPendingChange={setPending} onDenied={onDenied}
+      <WorkspaceForm key={profileId} mode="create" membershipProfileId={currentUserId ? profileId : undefined} onSubmit={onCreate} onPendingChange={setPending} onDenied={onDenied}
         onCancel={close} onSaved={(workspace) => { setOpen(false); onCreated?.(workspace) }} />
     </Dialog>}
   </>

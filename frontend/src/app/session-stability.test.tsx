@@ -28,7 +28,7 @@ const capabilities: WorkCapabilities = { createWorkspace: true, manageWorkspace:
 const base = `/profiles/${profileId}/workspaces/${workspaceId}/tasks`
 const otherBase = `/profiles/${otherProfileId}/workspaces/${otherWorkspaceId}/tasks`
 const tasksKey = workKeys.tasks(profileId, workspaceId, { ordering: '-created_at' }, 1)
-const draft = { title: 'Bản nháp tổng hợp', description: 'Mô tả tổng hợp chưa gửi.', priority: 'HIGH', deadline: '2026-12-03T15:45' }
+const draft = { title: 'Bản nháp tổng hợp', description: 'Mô tả tổng hợp chưa gửi.', priority: 'HIGH', date: '03/12/2026', hour: '15', minute: '45', script: 'https://example.test/stability-script', compensation: '500.000' }
 const page = <T,>(results: T[]): Page<T> => ({ count: results.length, results, next: null, previous: null })
 
 function deferred<T>() {
@@ -55,8 +55,12 @@ async function openDraft() {
   const dialog = screen.getByRole('dialog', { name: 'Tạo công việc' })
   await interaction.type(within(dialog).getByLabelText('Tên công việc'), draft.title)
   await interaction.type(within(dialog).getByLabelText('Mô tả'), draft.description)
-  await interaction.selectOptions(within(dialog).getByLabelText('Ưu tiên'), draft.priority)
-  fireEvent.change(within(dialog).getByLabelText('Thời hạn'), { target: { value: draft.deadline } })
+  await interaction.selectOptions(within(dialog).getByLabelText('Mức ưu tiên'), draft.priority)
+  fireEvent.change(within(dialog).getByLabelText('Ngày (dd/mm/yyyy)'), { target: { value: draft.date } })
+  await interaction.selectOptions(within(dialog).getByLabelText('Giờ (00–23)'), draft.hour)
+  await interaction.selectOptions(within(dialog).getByLabelText('Phút (00–59)'), draft.minute)
+  fireEvent.change(within(dialog).getByLabelText('Link kịch bản'), { target: { value: draft.script } })
+  fireEvent.change(within(dialog).getByLabelText('Tiền công dự kiến (VNĐ)'), { target: { value: draft.compensation } })
   return dialog
 }
 
@@ -64,8 +68,12 @@ function expectSameDraft(dialog: HTMLElement) {
   expect(screen.getByRole('dialog', { name: 'Tạo công việc' })).toBe(dialog)
   expect(within(dialog).getByLabelText('Tên công việc')).toHaveValue(draft.title)
   expect(within(dialog).getByLabelText('Mô tả')).toHaveValue(draft.description)
-  expect(within(dialog).getByLabelText('Ưu tiên')).toHaveValue(draft.priority)
-  expect(within(dialog).getByLabelText('Thời hạn')).toHaveValue(draft.deadline)
+  expect(within(dialog).getByLabelText('Mức ưu tiên')).toHaveValue(draft.priority)
+  expect(within(dialog).getByLabelText('Ngày (dd/mm/yyyy)')).toHaveValue(draft.date)
+  expect(within(dialog).getByLabelText('Giờ (00–23)')).toHaveValue(draft.hour)
+  expect(within(dialog).getByLabelText('Phút (00–59)')).toHaveValue(draft.minute)
+  expect(within(dialog).getByLabelText('Link kịch bản')).toHaveValue(draft.script)
+  expect(within(dialog).getByLabelText('Tiền công dự kiến (VNĐ)')).toHaveValue(draft.compensation)
   expect(screen.getByTestId('stability-location')).toHaveTextContent(base)
   expect(workApi.createTask).not.toHaveBeenCalled()
 }
@@ -190,6 +198,8 @@ describe('authenticated Task draft continuity', () => {
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Tạo công việc' }))
     expect(screen.getByLabelText('Tên công việc')).toHaveValue('')
     expect(screen.getByLabelText('Mô tả')).toHaveValue('')
+    expect(screen.getByLabelText('Link kịch bản')).toHaveValue('')
+    expect(screen.getByLabelText('Tiền công dự kiến (VNĐ)')).toHaveValue('')
   })
 
   it('clears the previous tenant draft on an explicit route context switch', async () => {
@@ -200,9 +210,15 @@ describe('authenticated Task draft continuity', () => {
     expect(dialog.isConnected).toBe(false)
     expect(screen.queryByRole('dialog', { name: 'Tạo công việc' })).not.toBeInTheDocument()
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Tạo công việc' }))
-    expect(screen.getByLabelText('Tên công việc')).toHaveValue('')
-    expect(screen.getByLabelText('Mô tả')).toHaveValue('')
-    expect(screen.getByLabelText('Ưu tiên')).toHaveValue('MEDIUM')
+    const nextDialog = screen.getByRole('dialog', { name: 'Tạo công việc' })
+    expect(within(nextDialog).getByLabelText('Tên công việc')).toHaveValue('')
+    expect(within(nextDialog).getByLabelText('Mô tả')).toHaveValue('')
+    expect(within(nextDialog).getByLabelText('Mức ưu tiên')).toHaveValue('MEDIUM')
+    expect(within(nextDialog).getByLabelText('Ngày (dd/mm/yyyy)')).toHaveValue('')
+    expect(within(nextDialog).getByLabelText('Giờ (00–23)')).toHaveValue('')
+    expect(within(nextDialog).getByLabelText('Phút (00–59)')).toHaveValue('')
+    expect(within(nextDialog).getByLabelText('Link kịch bản')).toHaveValue('')
+    expect(within(nextDialog).getByLabelText('Tiền công dự kiến (VNĐ)')).toHaveValue('')
     expect(workApi.createTask).not.toHaveBeenCalled()
   })
 

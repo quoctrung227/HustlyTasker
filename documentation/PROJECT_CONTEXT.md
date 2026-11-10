@@ -1,5 +1,63 @@
 # HustlyTasker Project Context
 
+## Task description and linked product review — 2026-11-10
+
+HT-FE-TASK-UX-REFINEMENT-01 retains the existing Task/Deliverable/internal Review
+architecture and adds bounded UI/API presentation improvements. Long descriptions
+remain complete in storage/API and scroll inside a focusable stable Task card;
+paired UTC filters retain their existing instant/query semantics. The current
+assignee's safe display name is a batched, tenant-authorized read-only projection
+on `active_assignment`, not a new User identity endpoint or authority grant.
+Unavailable assignees have null labels; UI does not show membership UUIDs.
+Safe full name, safe username and generic label fallbacks omit contact/UUID data.
+Compensation disclosure remains limited to legitimate managers/current eligible
+assignee; seeing a name never expands execution or financial authority.
+
+New product submissions and resubmissions use the existing `file_url` field with
+strict HTTP(S) validation, trimmed nonblank content and its existing500-character
+bound. Controls, invalid Unicode, internal whitespace, backslashes and embedded
+credentials are rejected; historical text/path references remain readable
+unchanged. Safe revision links open only on explicit user action. There is no
+upload, external URL fetch or media/storage integration. Existing immutable
+revisions, distinct-reviewer/latest-state checks, atomic audit/notifications and
+human review workflow are preserved; the UI does not auto-retry unknown outcomes.
+No new schema/migration is needed. Development keeps tasks.0005 APPLIED and
+ai.0002 UNAPPLIED; current inventory and final tests belong in HANDOVER.
+
+## Task work brief and historical development rollout — 2026-11-10
+
+HT-FE-TASK-BRIEF-24H-VI-01 authorizes optional raw/reference/template/script URLs
+and exact whole-Task expected VND compensation. Owner-approved
+HT-FE-TASK-COMPENSATION-RBAC-01 subsequently restricts compensation to current
+Task-readable Profile Owner/Admin, Workspace Admin and effective ACTIVE assignee;
+other members/Viewer receive NULL. Metadata writes remain manager-only,
+not Editor self-edit or payroll/payment functionality. Owner separately approved
+HT-DB-TASK-BRIEF-ROLLOUT-01; targeted tasks.0005_task_brief is now APPLIED on
+development after backup/restore/migration rehearsal. Development has37 applied
+records and all five optional Task metadata columns; old data is preserved and
+ai.0002 remains UNAPPLIED. Updated Task ORM, Django checks and anonymous9GET
+Django/Vite connectivity pass. Owner authenticated UI acceptance remains pending.
+Ordinary Task UI hides hierarchy while retaining stored children, parent APIs and
+separate AI proposal contracts. Controlled Vietnamese date/24h-minute inputs retain
+device-local→UTC policy and old unchanged edit timestamps. No new provider,
+timezone policy, SMTP/inheritance change or public rollout. The rollout performed
+no automatic business fixtures or mutation tests on development. HANDOVER owns
+current backup/rehearsal/preservation/approval evidence; prior regression counts
+are historical, not rerun by this schema rollout.
+
+## Approved Workspace membership snapshots — 2026-11-10
+
+HT-FE-WORKSPACE-INHERITANCE-01 authorizes optional same-Profile source membership
+snapshots at Workspace creation, confirmed first-Workspace fixed MEMBER selection
+and current-month onboarding after accepted Profile invitation. Implementation
+verification status belongs in HANDOVER. No source relationship column/new
+schema, auto Task copy or role/status cascade is introduced. Profile managers
+retain inherited authority; ordinary members need effective direct assignments.
+Existing canonical Workspace.period and unique(Profile,period), with Django UTC,
+define current month. No latest-created inference or new current pointer.
+Only absent current assignment can be created on acceptance; revoked history is
+never restored. SMTP/configuration and separate ai.0002 rollout are unaffected.
+
 ## Project Overview
 
 HustlyTasker is a workflow management system designed for content production teams and agencies.
@@ -60,7 +118,7 @@ Container:
 - Docker
 
 
-## Current Development Status
+## Historical development checkpoint — 2026-11-09
 
 Current Phase:
 

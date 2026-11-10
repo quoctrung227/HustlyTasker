@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { fillTaskDeadline } from './task-deadline'
 
 function required(name: string): string {
   const value = process.env[name]
@@ -22,7 +23,6 @@ const profileId = fixtureId('management_profile'), workspaceId = fixtureId('mana
 const apiTasks = `/api/v1/profiles/${profileId}/workspaces/${workspaceId}/tasks/`
 const taskBase = `/profiles/${profileId}/workspaces/${workspaceId}/tasks`
 const taskTitle = 'MVP acceptance task Integration'
-const childTitle = 'MVP acceptance subtask Integration'
 type Role = 'manager' | 'editor' | 'viewer'
 type Task = { id: string; parent_id: string | null; status: string; priority: string; deadline: string | null; can_start: boolean; can_submit: boolean; active_assignment: { profile_membership_id: string } | null }
 type Deliverable = { id: string; revision: number; can_approve: boolean; can_request_changes: boolean }
@@ -73,7 +73,7 @@ async function openWorkspaceThroughNavigation(page: Page) {
 async function submitFromUI(page: Page, taskId: string, product: string): Promise<Deliverable> {
   await page.getByRole('button', { name: 'Nộp sản phẩm', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Nộp sản phẩm', exact: true })
-  await dialog.getByLabel('Đường dẫn hoặc nội dung sản phẩm', { exact: true }).fill(product)
+  await dialog.getByLabel('Link sản phẩm hoàn thành', { exact: true }).fill(product)
   const request = page.waitForResponse((response) => new URL(response.url()).pathname === `${apiTasks}${taskId}/deliverables/` && response.request().method() === 'POST')
   await dialog.getByRole('button', { name: 'Nộp sản phẩm', exact: true }).click()
   const response = await request
@@ -102,8 +102,8 @@ test('MVP acceptance: one UI-created Task passes assignment, execution, revision
   await expect(dialog.getByLabel('Tên công việc', { exact: true })).toHaveAttribute('aria-invalid', 'true')
   await dialog.getByLabel('Tên công việc', { exact: true }).fill(taskTitle)
   await dialog.getByLabel('Mô tả', { exact: true }).fill('Created, assigned and reviewed only through the React MVP.')
-  await dialog.getByLabel('Ưu tiên', { exact: true }).selectOption('HIGH')
-  await dialog.getByLabel('Thời hạn', { exact: true }).fill('2027-01-25T16:30')
+  await dialog.getByLabel('Mức ưu tiên', { exact: true }).selectOption('HIGH')
+  await fillTaskDeadline(dialog, '2027-01-25T16:30')
   const createdResponse = page.waitForResponse((response) => new URL(response.url()).pathname === apiTasks && response.request().method() === 'POST')
   await dialog.getByRole('button', { name: 'Tạo công việc', exact: true }).click()
   const created = await createdResponse
@@ -116,17 +116,14 @@ test('MVP acceptance: one UI-created Task passes assignment, execution, revision
   await page.getByRole('link', { name: taskTitle, exact: true }).click()
   await expect(page).toHaveURL(`${taskBase}/${task.id}`)
 
-  await page.getByRole('button', { name: 'Tạo công việc con', exact: true }).click()
-  dialog = page.getByRole('dialog', { name: 'Tạo công việc con', exact: true })
-  await dialog.getByLabel('Tên công việc', { exact: true }).fill(childTitle)
-  const childResponse = page.waitForResponse((response) => new URL(response.url()).pathname === apiTasks && response.request().method() === 'POST')
-  await dialog.getByRole('button', { name: 'Tạo công việc con', exact: true }).click()
-  const child = await (await childResponse).json() as Task
-  expect(child.parent_id).toBe(task.id)
-  await expect(dialog).not.toBeVisible()
-  await page.getByRole('link', { name: childTitle, exact: true }).click()
-  await expect(page.getByRole('navigation', { name: 'Phân cấp công việc' }).getByRole('link', { name: taskTitle, exact: true })).toBeVisible()
-  await page.getByRole('navigation', { name: 'Phân cấp công việc' }).getByRole('link', { name: taskTitle, exact: true }).click()
+  // Owner removed ordinary hierarchy UI. Existing fixture child data remains
+  // readable; this is preservation readback, not a newly created UI Subtask.
+  await expect(page.getByRole('button', { name: 'Tạo công việc con', exact: true })).toHaveCount(0)
+  const child = await getTask(page, fixtureId('task_child'))
+  expect(child.parent_id).toBe(fixtureId('task_root'))
+  await page.goto(`${taskBase}/${child.id}`)
+  await expect(page.getByRole('navigation', { name: 'Phân cấp công việc', exact: true })).toHaveCount(0)
+  await page.goto(`${taskBase}/${task.id}`)
   expect((await getTask(page, task.id)).status).toBe('PENDING')
 
   await page.getByRole('button', { name: 'Phân công', exact: true }).click()

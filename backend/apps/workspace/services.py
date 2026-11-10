@@ -5,6 +5,7 @@ from apps.audit.models import AuditLog
 
 from .access import (
     TenantAccessNotFound,
+    can_create_workspace,
     can_edit_workspace,
     can_manage_profile_lifecycle,
     can_manage_workspace_lifecycle,
@@ -432,8 +433,104 @@ def update_profile_membership(
     return membership
 
 
+def _workspace_inheritance_source(*, profile_context, source_workspace_id, lock=False):
+    """Resolve a readable same-tenant snapshot, including archived months."""
+
+    context = resolve_workspace_access_context(profile_context, source_workspace_id)
+    queryset = Workspace.objects.filter(
+        id=context.workspace_id, profile_id=context.profile_id,
+    )
+    if lock:
+        queryset = queryset.select_for_update()
+    source = queryset.first()
+    if source is None:
+        raise TenantAccessNotFound()
+    return source
+
+
+def _workspace_inheritance_rows(*, profile_id, source=None, lock=False):
+    """Select actual assignments; Profile managers already inherit governance.
+
+    Caller holds the Profile lock for creation. All supported roster/lifecycle
+    writers hold that same lock, so source roles cannot change mid-snapshot.
+    Preview is only a hint and is recomputed under locks at creation time.
+    """
+
+    source_rows = None
+    roles_by_user = None
+    if source is not None:
+        source_rows = WorkspaceMember.objects.filter(workspace=source)
+        if lock:
+            source_rows = source_rows.select_for_update()
+        source_rows = list(source_rows.order_by("id"))
+        roles_by_user = {
+            row.user_id: row.role for row in source_rows
+            if row.is_active and row.role in (
+                WorkspaceMember.Role.ADMIN, WorkspaceMember.Role.MEMBER,
+                WorkspaceMember.Role.VIEWER,
+            )
+        }
+
+    queryset = ProfileMembership.objects.filter(
+        profile_id=profile_id, is_active=True, user__is_active=True,
+        role=ProfileMembership.Role.MEMBER,
+    ).select_related("user").order_by("joined_at", "id")
+    if roles_by_user is not None:
+        queryset = queryset.filter(user_id__in=roles_by_user)
+    if lock:
+        queryset = queryset.select_for_update()
+    rows = list(queryset)
+    return [
+        (row, roles_by_user[row.user_id] if roles_by_user is not None
+         else WorkspaceMember.Role.MEMBER)
+        for row in rows
+    ], (len(source_rows) - len(rows) if source_rows is not None else 0)
+
+
+def workspace_inheritance_preview(*, actor, profile_id, source_workspace_id=None):
+    """Read-only, manager-only candidate preview without account identifiers."""
+
+    context = resolve_profile_access_context(actor, profile_id)
+    if not can_create_workspace(context):
+        raise PermissionDenied("Workspace creation is not allowed.")
+    has_workspaces = Workspace.objects.filter(profile_id=context.profile_id).exists()
+    source = None
+    if source_workspace_id is not None:
+        source = _workspace_inheritance_source(
+            profile_context=context, source_workspace_id=source_workspace_id,
+        )
+        mode = "inheritance"
+    else:
+        mode = "manual" if has_workspaces else "initial"
+    rows, excluded_count = (
+        _workspace_inheritance_rows(profile_id=context.profile_id, source=source)
+        if mode != "manual" else ([], 0)
+    )
+    # Fail closed if the actor's membership/lifecycle changed during selection.
+    if not can_create_workspace(context):
+        raise TenantAccessNotFound()
+    return {
+        "mode": mode,
+        "source_workspace": ({
+            "id": str(source.id), "name": source.name,
+            "period": source.period.isoformat() if source.period else None,
+        } if source is not None else None),
+        "excluded_count": excluded_count,
+        "has_workspaces": has_workspaces,
+        "results": [{
+            "profile_membership_id": str(membership.id),
+            "display_name": (membership.user.get_full_name().strip()
+                             or f"Thành viên {str(membership.id)[:8]}"),
+            "role": role,
+        } for membership, role in rows],
+    }
+
+
 @transaction.atomic
-def create_workspace(*, actor, profile_id, name, period, description=None):
+def create_workspace(
+    *, actor, profile_id, name, period, description=None,
+    source_workspace_id=None, initial_profile_membership_ids=None,
+):
     profile_context = resolve_profile_access_context(actor, profile_id)
 
     profile = Profile.objects.select_for_update().filter(
@@ -475,6 +572,35 @@ def create_workspace(*, actor, profile_id, name, period, description=None):
     ).exists():
         raise WorkspacePeriodConflict()
 
+    if source_workspace_id is not None and initial_profile_membership_ids is not None:
+        raise ValidationError({
+            "initial_profile_membership_ids": "Choose a source or initial members, not both."
+        })
+
+    source = None
+    seeds = []
+    if source_workspace_id is not None:
+        source = _workspace_inheritance_source(
+            profile_context=profile_context, source_workspace_id=source_workspace_id,
+            lock=True,
+        )
+        seeds, _ = _workspace_inheritance_rows(
+            profile_id=profile.id, source=source, lock=True,
+        )
+    elif initial_profile_membership_ids is not None:
+        if Workspace.objects.filter(profile=profile).exists():
+            raise ValidationError({
+                "initial_profile_membership_ids": "Initial members are only available for the first Workspace."
+            })
+        eligible, _ = _workspace_inheritance_rows(profile_id=profile.id, lock=True)
+        selected_ids = [str(value) for value in initial_profile_membership_ids]
+        if len(selected_ids) != len(set(selected_ids)):
+            raise ValidationError({"initial_profile_membership_ids": "Duplicate membership references are not allowed."})
+        eligible_by_id = {str(membership.id): (membership, role) for membership, role in eligible}
+        if any(value not in eligible_by_id for value in selected_ids):
+            raise InvalidWorkspaceMembershipReference(field="initial_profile_membership_ids")
+        seeds = [eligible_by_id[value] for value in selected_ids]
+
     workspace = Workspace(
         profile=profile,
         owner=actor,
@@ -494,18 +620,31 @@ def create_workspace(*, actor, profile_id, name, period, description=None):
             raise WorkspacePeriodConflict() from None
         raise
 
+    creation_metadata = {
+        "name": workspace.name, "description": workspace.description,
+        "period": workspace.period.isoformat(), "status": workspace.status,
+    }
+    if source is not None:
+        creation_metadata.update({
+            "source_workspace_id": str(source.id),
+            "inherited_membership_count": len(seeds),
+        })
+    elif initial_profile_membership_ids is not None:
+        creation_metadata["initial_membership_count"] = len(seeds)
+
     _write_workspace_audit(
         actor=actor,
         workspace=workspace,
         action="workspace.created",
         before=None,
-        after={
-            "name": workspace.name,
-            "description": workspace.description,
-            "period": workspace.period.isoformat(),
-            "status": workspace.status,
-        },
+        after=creation_metadata,
     )
+
+    for membership, role in seeds:
+        add_workspace_member(
+            actor=actor, profile_id=profile.id, workspace_id=workspace.id,
+            target_profile_membership_id=membership.id, role=role,
+        )
 
     return workspace
 

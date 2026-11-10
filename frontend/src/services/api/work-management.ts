@@ -1,6 +1,9 @@
 /** Existing Django contracts; these UI hints never replace service authorization. */
 import { ApiError, apiClient, invalidResponse } from './client'
 import type { LifecycleStatus, Page, Workspace } from './types'
+import type { WorkspaceMembershipInput } from './workspace-inheritance'
+import { isTaskBrief, normalizeTaskBrief } from '../../features/tasks/task-brief'
+import type { TaskBrief } from '../../features/tasks/task-brief'
 
 export const taskStatuses = ['PENDING', 'ASSIGNED', 'WORKING', 'REVIEW', 'COMPLETED', 'CANCELLED'] as const
 export const taskPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const
@@ -12,9 +15,11 @@ export type TaskOrdering = typeof taskOrderings[number]
 export interface TaskAssignment {
   id: string
   profile_membership_id: string | null
+  /** Server-scoped name; null means unavailable, absence supports old DTOs. */
+  display_name?: string | null
   assigned_at: string
 }
-export interface Task {
+export interface Task extends TaskBrief {
   id: string
   workspace_id: string
   parent_id: string | null
@@ -51,7 +56,7 @@ export interface TaskFilters {
   readonly deadline_after?: string
   readonly ordering?: TaskOrdering
 }
-export interface TaskCreateInput {
+export interface TaskCreateInput extends TaskBrief {
   readonly title: string
   readonly description?: string | null
   readonly priority?: TaskPriority
@@ -59,7 +64,7 @@ export interface TaskCreateInput {
   readonly parent_id?: string | null
 }
 export type TaskUpdateInput = Partial<TaskCreateInput>
-export interface WorkspaceCreateInput {
+export interface WorkspaceCreateInput extends WorkspaceMembershipInput {
   readonly name: string
   readonly description?: string | null
   readonly period: string
@@ -92,11 +97,12 @@ function pageNumber(page: number): number {
   return page
 }
 function isTask(value: unknown): value is Task {
-  return record(value) && uuid(value.id) && uuid(value.workspace_id) && nullableUuid(value.parent_id) &&
+  return record(value) && isTaskBrief(value) && uuid(value.id) && uuid(value.workspace_id) && nullableUuid(value.parent_id) &&
     text(value.title) && nullableText(value.description) && contains(taskStatuses, value.status) &&
     contains(taskPriorities, value.priority) && typeof value.can_start === 'boolean' && typeof value.can_submit === 'boolean' && (value.deadline === null || dateTime(value.deadline)) &&
     dateTime(value.created_at) && dateTime(value.updated_at) && (value.active_assignment === null ||
-      (record(value.active_assignment) && uuid(value.active_assignment.id) && nullableUuid(value.active_assignment.profile_membership_id) && dateTime(value.active_assignment.assigned_at)))
+      (record(value.active_assignment) && uuid(value.active_assignment.id) && nullableUuid(value.active_assignment.profile_membership_id) && dateTime(value.active_assignment.assigned_at) &&
+        (value.active_assignment.display_name === undefined || value.active_assignment.display_name === null || (text(value.active_assignment.display_name) && value.active_assignment.display_name.trim().length > 0))))
 }
 function isMember(value: unknown): value is WorkspaceMember {
   return record(value) && uuid(value.id) && uuid(value.profile_membership_id) && memberRole(value.role) &&
@@ -115,7 +121,7 @@ function asPage<T>(payload: unknown, guard: (value: unknown) => value is T): Pag
 }
 function taskResult(payload: unknown, workspaceId: string, taskId?: string): Task {
   if (!isTask(payload) || !sameId(payload.workspace_id, workspaceId) || (taskId !== undefined && !sameId(payload.id, taskId))) throw invalidResponse()
-  return payload
+  return { ...payload, ...normalizeTaskBrief(payload) }
 }
 function workspaceResult(payload: unknown, profileId: string, workspaceId?: string): Workspace {
   if (!isWorkspace(payload) || !sameId(payload.profile_id, profileId) || (workspaceId !== undefined && !sameId(payload.id, workspaceId))) throw invalidResponse()
@@ -182,7 +188,7 @@ export const workApi = {
   async tasks(profileId: string, workspaceId: string, filters: TaskFilters = {}, page = 1, signal?: AbortSignal): Promise<Page<Task>> {
     const data = asPage(await apiClient.request<unknown>(`${taskPath(profileId, workspaceId)}?${taskQuery(filters, page)}`, { signal, protected: true }), isTask)
     if (data.results.some((task) => !sameId(task.workspace_id, workspaceId))) throw invalidResponse()
-    return data
+    return { ...data, results: data.results.map((task) => ({ ...task, ...normalizeTaskBrief(task) })) }
   },
   async task(profileId: string, workspaceId: string, taskId: string, signal?: AbortSignal): Promise<Task> {
     return taskResult(await apiClient.request<unknown>(taskPath(profileId, workspaceId, taskId), { signal, protected: true }), workspaceId, taskId)
@@ -190,7 +196,7 @@ export const workApi = {
   async subtasks(profileId: string, workspaceId: string, taskId: string, filters: TaskFilters = {}, page = 1, signal?: AbortSignal): Promise<Page<Task>> {
     const data = asPage(await apiClient.request<unknown>(`${taskPath(profileId, workspaceId, taskId)}subtasks/?${taskQuery(filters, page)}`, { signal, protected: true }), isTask)
     if (data.results.some((task) => !sameId(task.workspace_id, workspaceId) || task.parent_id === null || !sameId(task.parent_id, taskId))) throw invalidResponse()
-    return data
+    return { ...data, results: data.results.map((task) => ({ ...task, ...normalizeTaskBrief(task) })) }
   },
   async members(profileId: string, workspaceId: string, page = 1, signal?: AbortSignal): Promise<Page<WorkspaceMember>> {
     return asPage(await apiClient.request<unknown>(`${workspacePath(profileId, workspaceId)}members/?page=${pageNumber(page)}`, { signal, protected: true }), isMember)

@@ -1,13 +1,19 @@
 from datetime import datetime, timezone as datetime_timezone
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxLengthValidator
+from django.core.validators import MaxLengthValidator, MinValueValidator, URLValidator
 from django.db import models
 from django.utils import timezone
 
 from apps.common.models import BaseModel
 from apps.accounts.models import User
 from apps.workspace.models import Workspace
+
+from .brief import (
+    TASK_BRIEF_URL_FIELDS,
+    normalize_task_compensation,
+    normalize_task_reference,
+)
 
 
 class Task(BaseModel):
@@ -76,6 +82,27 @@ class Task(BaseModel):
         null=True
     )
 
+    raw_video_url = models.URLField(
+        max_length=2048, null=True, blank=True,
+        validators=[URLValidator(schemes=("http", "https"))],
+    )
+    reference_video_url = models.URLField(
+        max_length=2048, null=True, blank=True,
+        validators=[URLValidator(schemes=("http", "https"))],
+    )
+    template_project_url = models.URLField(
+        max_length=2048, null=True, blank=True,
+        validators=[URLValidator(schemes=("http", "https"))],
+    )
+    script_url = models.URLField(
+        max_length=2048, null=True, blank=True,
+        validators=[URLValidator(schemes=("http", "https"))],
+    )
+    estimated_compensation_vnd = models.DecimalField(
+        max_digits=18, decimal_places=0, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+
 
     created_by = models.ForeignKey(
         User,
@@ -114,6 +141,13 @@ class Task(BaseModel):
                 ),
                 name="task_valid_priority",
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(estimated_compensation_vnd__isnull=True)
+                    | models.Q(estimated_compensation_vnd__gte=0)
+                ),
+                name="task_compensation_vnd_nonnegative",
+            ),
         ]
         indexes = [
             models.Index(
@@ -125,6 +159,19 @@ class Task(BaseModel):
                 name="task_ws_status_created_idx",
             ),
         ]
+
+    def clean_fields(self, exclude=None):
+        # Validate raw Python inputs before DecimalField can coerce a float.
+        # Respect Django's deferred-field/exclude contract.
+        excluded = set(exclude or ())
+        for field in TASK_BRIEF_URL_FIELDS:
+            if field not in excluded and field in self.__dict__:
+                setattr(self, field, normalize_task_reference(getattr(self, field), field=field))
+        if "estimated_compensation_vnd" not in excluded and "estimated_compensation_vnd" in self.__dict__:
+            self.estimated_compensation_vnd = normalize_task_compensation(
+                self.estimated_compensation_vnd, allow_decimal=True,
+            )
+        super().clean_fields(exclude=exclude)
 
     def clean(self):
         super().clean()

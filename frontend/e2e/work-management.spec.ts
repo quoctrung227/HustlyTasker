@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+import { fillTaskDeadline } from './task-deadline'
 
 function required(name: string): string {
   const value = process.env[name]
@@ -124,7 +125,7 @@ test.describe('Real work-management UI — isolated Django/PostgreSQL, no API mo
     expect((await response.json() as { status: string }).status).toBe('ACTIVE')
   })
 
-  test('Workspace manager creates, edits, assigns and adds Subtasks without bypassing workflow', async ({ page }) => {
+  test('Workspace manager creates, edits and assigns work without ordinary Subtask controls', async ({ page }) => {
     await loginUI(page, 'manager')
     await page.goto(workspacePage)
     await expect(page.getByRole('heading', { name: 'Team Workspace Integration', exact: true })).toBeVisible()
@@ -143,8 +144,8 @@ test.describe('Real work-management UI — isolated Django/PostgreSQL, no API mo
     let dialog = page.getByRole('dialog', { name: 'Tạo công việc', exact: true })
     await dialog.getByLabel('Tên công việc', { exact: true }).fill('Created Task Integration')
     await dialog.getByLabel('Mô tả', { exact: true }).fill('Task written only inside the owned test database.')
-    await dialog.getByLabel('Ưu tiên', { exact: true }).selectOption('HIGH')
-    await dialog.getByLabel('Thời hạn', { exact: true }).fill('2027-03-05T09:30')
+    await dialog.getByLabel('Mức ưu tiên', { exact: true }).selectOption('HIGH')
+    await fillTaskDeadline(dialog, '2027-03-05T09:30')
     const expectedDeadline = await page.evaluate(() => new Date('2027-03-05T09:30').toISOString())
     const createdResponse = page.waitForResponse((response) => new URL(response.url()).pathname === apiTasks && response.request().method() === 'POST')
     await dialog.getByRole('button', { name: 'Tạo công việc', exact: true }).click()
@@ -161,8 +162,8 @@ test.describe('Real work-management UI — isolated Django/PostgreSQL, no API mo
     await page.getByRole('button', { name: 'Chỉnh sửa công việc', exact: true }).click()
     dialog = page.getByRole('dialog', { name: 'Chỉnh sửa công việc', exact: true })
     await dialog.getByLabel('Tên công việc', { exact: true }).fill('Updated Task Integration')
-    await dialog.getByLabel('Ưu tiên', { exact: true }).selectOption('URGENT')
-    await dialog.getByLabel('Thời hạn', { exact: true }).fill('')
+    await dialog.getByLabel('Mức ưu tiên', { exact: true }).selectOption('URGENT')
+    await fillTaskDeadline(dialog, '')
     await dialog.getByRole('button', { name: 'Lưu thay đổi', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Updated Task Integration', exact: true })).toBeVisible()
     const updated = await getTask(page.request, task.id)
@@ -191,16 +192,8 @@ test.describe('Real work-management UI — isolated Django/PostgreSQL, no API mo
     expect(assigned.status).toBe('ASSIGNED')
     expect(assigned.active_assignment?.profile_membership_id).toBe(editorMembershipId)
 
-    await page.getByRole('button', { name: 'Tạo công việc con', exact: true }).click()
-    dialog = page.getByRole('dialog', { name: 'Tạo công việc con', exact: true })
-    await dialog.getByLabel('Tên công việc', { exact: true }).fill('Created Subtask Integration')
-    const childResponse = page.waitForResponse((result) => new URL(result.url()).pathname === apiTasks && result.request().method() === 'POST')
-    await dialog.getByRole('button', { name: 'Tạo công việc con', exact: true }).click()
-    const child = await childResponse
-    expect(child.status()).toBe(201)
-    const childTask = await child.json() as TaskResponse
-    expect(childTask.parent_id).toBe(task.id)
-    expect(childTask.status).toBe('PENDING')
+    await expect(page.getByRole('button', { name: 'Tạo công việc con', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Công việc con', exact: true })).toHaveCount(0)
     expect((await getTask(page.request, task.id)).status).toBe('ASSIGNED')
     await expect(page.getByRole('button', { name: 'Bắt đầu công việc', exact: true })).toHaveCount(0)
   })
@@ -232,7 +225,12 @@ test.describe('Real work-management UI — isolated Django/PostgreSQL, no API mo
     await page.getByRole('button', { name: 'Xóa bộ lọc', exact: true }).click()
     await page.goto(`${taskPage}/${rootId}`)
     await expect(page.getByRole('heading', { name: 'Hierarchy root Integration', exact: true })).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Hierarchy child Integration', exact: true })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: 'Phân cấp công việc', exact: true })).toHaveCount(0)
+    const legacyChild = await getTask(page.request, fixtureId('task_child'))
+    expect(legacyChild.parent_id).toBe(rootId)
+    await page.goto(`${taskPage}/${legacyChild.id}`)
+    await expect(page.getByRole('heading', { name: 'Hierarchy child Integration', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Tạo công việc con', exact: true })).toHaveCount(0)
     const token = await csrf(page.request)
     const headers = { 'X-CSRFToken': token }
     const reject = async (id: string, parent: string) => {

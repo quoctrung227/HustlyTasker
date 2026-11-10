@@ -286,10 +286,18 @@ select.input { appearance: auto; padding-right: 28px; }
 .workspace-task-link h2 { margin-block: 8px; }
 .workspace-task-link p:last-child { color: var(--color-muted); font-size: 13px; }
 .task-filter-card { padding: 20px 24px; margin-top: 24px; }
-.task-filters { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
+.task-filters { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; align-items: start; }
 .task-filters label,.page-search { display: grid; gap: 8px; font-size: 12px; font-weight: 600; min-width: 0; }
-.task-filters .work-actions { grid-column: span 2; align-self: end; margin: 0; }
+.task-filter-dates { display: grid; gap: 16px; min-width: 0; border: 0; margin: 0; padding: 0; }
+.task-filters .work-actions { grid-column: 1 / -1; justify-content: flex-end; margin: 0; }
 .task-filters > .alert { grid-column: 1 / -1; }
+.task-detail-grid { align-items: start; }
+.task-detail-grid > * { min-width: 0; }
+.task-description-card { height: 24rem; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.task-description-card > h2 { flex: 0 0 auto; margin: 0 0 20px; }
+.task-description-scroll { min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; overflow-wrap: anywhere; scrollbar-gutter: stable; overscroll-behavior-y: contain; color: var(--color-muted); font-size: 14px; }
+.task-description-text { margin: 0; overflow-wrap: anywhere; }
+.task-description-scroll:focus-visible { outline-offset: 2px; }
 .page-search { width: 260px; }
 .task-list { list-style: none; padding: 0; margin: 0; border: 1px solid var(--color-border); border-radius: var(--radius-card); background: var(--color-surface); overflow: hidden; }
 .task-row { display: grid; grid-template-columns: minmax(0,1fr) 175px 165px 40px; gap: 20px; align-items: center; padding: 22px 24px; }
@@ -305,6 +313,24 @@ select.input { appearance: auto; padding-right: 28px; }
 .member-list li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; padding-block: 16px; font-size: 12px; }
 .member-list li + li { border-top: 1px solid var(--color-border); }
 .member-list code { overflow-wrap: anywhere; min-width: 0; }
+.workspace-member-fields { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--color-border); border-radius: 12px; display: grid; gap: 16px; }
+.workspace-member-fields legend { font-weight: 600; }
+.workspace-member-fields .member-list { padding-inline: 0; }
+.workspace-member-fields .member-list li { font-size: 14px; overflow-wrap: anywhere; }
+.workspace-member-fields .checkbox-label { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+.workspace-member-fields input[type="checkbox"] { width: 20px; height: 20px; flex: 0 0 20px; }
+.task-form-dialog { width: min(720px,calc(100% - 32px)); overflow: hidden; }
+.task-form-dialog[open] { display: flex; flex-direction: column; }
+.task-form-dialog .dialog__header { flex: 0 0 auto; }
+.task-form-dialog .dialog__body { min-height: 0; overflow-y: auto; padding-right: 4px; }
+.task-brief-fields { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); display: grid; gap: 16px; }
+.task-brief-fields legend { font-weight: 600; }
+.task-form-actions { position: sticky; bottom: 0; z-index: 1; background: var(--color-surface); border-top: 1px solid var(--color-border); padding-block: 16px; }
+.task-brief-documents,.task-brief-compensation { margin-top: 24px; }
+.task-brief-documents ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 16px; }
+.task-brief-documents li.task-document-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 16px; min-width: 0; overflow-wrap: anywhere; }
+.task-brief-documents .text-link { min-height: 44px; }
+.task-brief-amount { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .task-row__deadline { font-size: 12px; }
 .task-pills { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; font-weight: 650; }
 .task-status,.task-priority { display: inline-flex; padding: 5px 9px; border-radius: 6px; background: var(--color-canvas); border: 1px solid var(--color-border); }
@@ -320,7 +346,7 @@ select.input { appearance: auto; padding-right: 28px; }
 .task-breadcrumbs > * { overflow-wrap: anywhere; min-width: 0; }
 .break-code { overflow-wrap: anywhere; }
 @media (max-width: 1199px) { .task-filters { grid-template-columns: repeat(2,minmax(0,1fr)); } .task-row { grid-template-columns: minmax(0,1fr) 145px 125px 32px; gap: 12px; padding: 20px; } }
-@media (max-width: 639px) { .work-actions { gap: 10px; } .task-filters { grid-template-columns: minmax(0,1fr); } .task-filters .work-actions { grid-column: auto; } .task-filter-card { padding: 20px; } .page-search { width: 100%; } .task-row { grid-template-columns: minmax(0,1fr) 44px; gap: 12px; } .task-row__main { grid-column: 1; } .task-row > .task-pills { grid-column: 1; } .task-row__deadline { grid-column: 1; } .task-open { grid-column: 2; grid-row: 1; } .work-actions .button { flex-grow: 1; } .workspace-task-link { padding: 20px; } .task-row .eyebrow { letter-spacing: .08em; } }
+@media (max-width: 639px) { .work-actions { gap: 10px; } .task-filters { grid-template-columns: minmax(0,1fr); } .task-filters .work-actions { grid-column: auto; } .task-filter-card { padding: 20px; } .task-description-card { height: auto; max-height: 24rem; } .page-search { width: 100%; } .task-row { grid-template-columns: minmax(0,1fr) 44px; gap: 12px; } .task-row__main { grid-column: 1; } .task-row > .task-pills { grid-column: 1; } .task-row__deadline { grid-column: 1; } .task-open { grid-column: 2; grid-row: 1; } .work-actions .button { flex-grow: 1; } .workspace-task-link { padding: 20px; } .task-row .eyebrow { letter-spacing: .08em; } }
 .collaboration-section { margin-top: 40px; scroll-margin-top: 24px; }
 .collaboration-list,.notification-list { list-style: none; padding: 0; margin: 20px 0; display: grid; gap: 16px; }
 .collaboration-item,.notification-item { padding: 24px; }

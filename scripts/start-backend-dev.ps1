@@ -84,6 +84,22 @@ function New-HustlyDevelopmentProcessInfo([string]$Repository, [hashtable]$Value
     return $htInfo
 }
 
+function Assert-HustlyDevelopmentPortAvailable([int]$ListenPort) {
+    if ($ListenPort -lt 1024 -or $ListenPort -gt 65535) { throw 'Unsupported development listen port.' }
+    # Windows can let two SO_REUSEADDR Django servers bind the same endpoint.
+    # An exclusive socket probe detects the old --noreload server without
+    # relying on process-name guesses or unavailable listener inventory tools.
+    $htProbe = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, $ListenPort)
+    $htProbe.ExclusiveAddressUse = $true
+    try {
+        $htProbe.Start()
+    } catch [Net.Sockets.SocketException] {
+        throw "Local development port $ListenPort is unavailable. Stop the existing HustlyTasker backend before restarting; an older --noreload process can serve stale API responses. This launcher does not stop processes automatically."
+    } finally {
+        $htProbe.Stop()
+    }
+}
+
 # Pure parser/launch-plan functions are imported by the guard test script.
 # Dot-sourcing never loads private files or starts Python.
 if ($MyInvocation.InvocationName -eq '.') { return }
@@ -92,6 +108,7 @@ $htProcess = $null
 $htStarted = $false
 try {
     $htRepository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    if ($PSCmdlet.ParameterSetName -eq 'Run') { Assert-HustlyDevelopmentPortAvailable -ListenPort $Port }
     $htEnvironmentPath = if ([IO.Path]::IsPathRooted($EnvFile)) { [IO.Path]::GetFullPath($EnvFile) } else { [IO.Path]::GetFullPath((Join-Path $htRepository $EnvFile)) }
     if (-not $htEnvironmentPath.StartsWith("$htRepository$([IO.Path]::DirectorySeparatorChar)", [StringComparison]::OrdinalIgnoreCase)) { throw 'The local environment file must be inside this repository and Git-ignored.' }
     if (-not (Test-Path -LiteralPath $htEnvironmentPath -PathType Leaf)) {

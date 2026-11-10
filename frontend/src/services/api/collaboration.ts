@@ -123,12 +123,27 @@ export function safeDeliverableUrl(value: string): string | null {
     const code = character.charCodeAt(0)
     return code <= 31 || (code >= 127 && code <= 159)
   })
-  if (!/^https?:\/\//i.test(value) || /[\s\\]/u.test(value) || hasControl) return null
+  const invalidUnicode = Array.from(value).some((character) => character.length === 1 && /[\uD800-\uDFFF]/u.test(character))
+  if (!/^https?:\/\//i.test(value) || /[\s\\]/u.test(value) || hasControl || invalidUnicode) return null
   try {
     const url = new URL(value)
     if (!['http:', 'https:'].includes(url.protocol) || !url.hostname || url.username || url.password) return null
     return url.href
   } catch { return null }
+}
+
+export const DELIVERABLE_URL_MAX_LENGTH = 500
+
+/** New submissions are links; legacy read payloads remain unchanged above. */
+export function deliverableSubmissionError(value: string): string | null {
+  const clean = value.trim()
+  if (!clean) return 'Nhập link sản phẩm hoàn thành.'
+  if (Array.from(clean).length > DELIVERABLE_URL_MAX_LENGTH) return 'Link sản phẩm tối đa 500 ký tự.'
+  if (Array.from(value).some((character) => character.charCodeAt(0) <= 31 || (character.charCodeAt(0) >= 127 && character.charCodeAt(0) <= 159) || (character.length === 1 && /[\uD800-\uDFFF]/u.test(character)))) {
+    return 'Link sản phẩm chứa ký tự không hợp lệ. Vui lòng kiểm tra lại.'
+  }
+  if (!safeDeliverableUrl(clean)) return 'Nhập liên kết HTTP(S) hợp lệ dẫn tới sản phẩm hoàn thành.'
+  return null
 }
 
 export function notificationTaskPath(notification: Pick<AppNotification, 'profile_id' | 'workspace_id' | 'task_id'>): string {

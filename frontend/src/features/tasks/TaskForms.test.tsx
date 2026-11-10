@@ -50,6 +50,13 @@ function start(overrides: Partial<Parameters<typeof TaskStart>[0]> = {}) {
   return { ...render(<TaskStart {...props} />), props }
 }
 
+async function fillDeadline(date: string, hour: string, minute: string) {
+  fireEvent.change(screen.getByLabelText('Ngày (dd/mm/yyyy)'), { target: { value: date } })
+  const user = userEvent.setup()
+  await user.selectOptions(screen.getByLabelText('Giờ (00–23)'), hour)
+  await user.selectOptions(screen.getByLabelText('Phút (00–59)'), minute)
+}
+
 describe('local deadline conversion', () => {
   it('uses the browser-local timezone, preserves instants, and permits no deadline', () => {
     const source = '2026-10-21T10:30:15.120Z'
@@ -98,28 +105,29 @@ describe('Task creation and editing', () => {
     const dialog = screen.getByRole('dialog', { name: 'Tạo công việc' })
     await user.type(screen.getByLabelText('Tên công việc'), '  Viết báo cáo  ')
     await user.type(screen.getByLabelText('Mô tả'), 'Nội dung cần làm')
-    await user.selectOptions(screen.getByLabelText('Ưu tiên'), 'HIGH')
-    fireEvent.change(screen.getByLabelText('Thời hạn'), { target: { value: '2026-10-30T15:00' } })
+    await user.selectOptions(screen.getByLabelText('Mức ưu tiên'), 'HIGH')
+    await fillDeadline('30/10/2026', '15', '00')
     await user.click(within(dialog).getByRole('button', { name: 'Tạo công việc' }))
     await waitFor(() => expect(props.onSaved).toHaveBeenCalledWith(task))
     expect(props.onCreate).toHaveBeenCalledWith({ title: 'Viết báo cáo', description: 'Nội dung cần làm', priority: 'HIGH', deadline: parseLocalDeadline('2026-10-30T15:00') }, expect.any(AbortSignal))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
-  it('creates a child with its fixed parent and no implicit inherited deadline', async () => {
-    const { props } = create({ fixedParentId: 'parent-a' })
+  it('creates an ordinary Task without exposing child creation or assigning a parent', async () => {
+    const { props } = create()
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Tạo công việc con' }))
-    const dialog = screen.getByRole('dialog', { name: 'Tạo công việc con' })
-    await user.type(screen.getByLabelText('Tên công việc'), 'Việc con')
-    await user.click(within(dialog).getByRole('button', { name: 'Tạo công việc con' }))
-    expect(props.onCreate).toHaveBeenCalledWith({ title: 'Việc con', description: '', priority: 'MEDIUM', deadline: null, parent_id: 'parent-a' }, expect.any(AbortSignal))
+    expect(screen.queryByRole('button', { name: 'Tạo công việc con' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Tạo công việc' }))
+    const dialog = screen.getByRole('dialog', { name: 'Tạo công việc' })
+    await user.type(screen.getByLabelText('Tên công việc'), 'Việc mới')
+    await user.click(within(dialog).getByRole('button', { name: 'Tạo công việc' }))
+    expect(props.onCreate).toHaveBeenCalledWith({ title: 'Việc mới', description: '', priority: 'MEDIUM', deadline: null }, expect.any(AbortSignal))
   })
   it('edits only changed metadata and sends no status, identity, parent or assignment', async () => {
     const { props } = edit()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Chỉnh sửa công việc' }))
     expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeDisabled()
-    await user.selectOptions(screen.getByLabelText('Ưu tiên'), 'URGENT')
+    await user.selectOptions(screen.getByLabelText('Mức ưu tiên'), 'URGENT')
     await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
     expect(props.onUpdate).toHaveBeenCalledWith({ priority: 'URGENT' }, expect.any(AbortSignal))
   })
@@ -127,7 +135,7 @@ describe('Task creation and editing', () => {
     const { props } = edit({ task: { ...task, deadline: '2026-10-30T15:00:00Z' } })
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Chỉnh sửa công việc' }))
-    fireEvent.change(screen.getByLabelText('Thời hạn'), { target: { value: '' } })
+    await user.click(screen.getByRole('button', { name: 'Xóa thời hạn' }))
     await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
     expect(props.onUpdate).toHaveBeenCalledWith({ deadline: null }, expect.any(AbortSignal))
   })
@@ -151,7 +159,7 @@ describe('Task creation and editing', () => {
     await user.click(screen.getByRole('button', { name: 'Tạo công việc' }))
     await user.type(screen.getByLabelText('Tên công việc'), 'Bản nháp')
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Tạo công việc' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Vui lòng thử lại sau.')
+    expect(screen.getByRole('alert')).toHaveTextContent('Hãy kiểm tra danh sách công việc trước khi gửi lại.')
     expect(screen.getByRole('alert')).not.toHaveTextContent('private diagnostics')
   })
   it.each([403, 404])('invalidates authority after HTTP %s and never calls success', async (status) => {
@@ -196,6 +204,128 @@ describe('Task creation and editing', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await act(async () => { pending.resolve(task) })
     expect(props.onSaved).not.toHaveBeenCalled()
+  })
+})
+
+describe('Task document and compensation brief', () => {
+  it('creates every optional document and an exact large VNĐ amount, retaining the standard workflow body', async () => {
+    const { props } = create()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Tạo công việc' }))
+    await user.type(screen.getByLabelText('Tên công việc'), 'Dựng video quảng cáo')
+    const documents = {
+      raw_video_url: 'https://drive.google.com/file/d/synthetic/raw',
+      reference_video_url: 'http://example.test/reference',
+      template_project_url: 'https://example.test/template',
+      script_url: 'https://docs.google.com/document/d/synthetic/edit',
+    }
+    for (const [label, value] of [
+      ['Link video gốc (raw)', documents.raw_video_url], ['Link video tham khảo', documents.reference_video_url],
+      ['Link dự án mẫu', documents.template_project_url], ['Link kịch bản', documents.script_url],
+    ]) fireEvent.change(screen.getByLabelText(label as string), { target: { value } })
+    const pay = screen.getByLabelText('Tiền công dự kiến (VNĐ)')
+    fireEvent.change(pay, { target: { value: '9007199254740993' } })
+    fireEvent.blur(pay)
+    expect(pay).toHaveValue('9.007.199.254.740.993')
+    expect(screen.getByText('Chỉ quản lý có thẩm quyền và người đang được giao công việc hợp lệ được xem tiền công dự kiến.')).toBeVisible()
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Tạo công việc' }))
+    expect(props.onCreate).toHaveBeenCalledWith({ title: 'Dựng video quảng cáo', description: '', priority: 'MEDIUM', deadline: null, ...documents, estimated_compensation_vnd: '9007199254740993' }, expect.any(AbortSignal))
+  })
+  it('edits and clears all existing document links and compensation explicitly', async () => {
+    const { props } = edit({ task: { ...task, raw_video_url: 'https://example.test/raw', reference_video_url: 'https://example.test/reference', template_project_url: 'https://example.test/template', script_url: 'https://example.test/script', estimated_compensation_vnd: '500000' } })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Chỉnh sửa công việc' }))
+    expect(screen.getByLabelText('Tiền công dự kiến (VNĐ)')).toHaveValue('500.000')
+    for (const label of ['Link video gốc (raw)', 'Link video tham khảo', 'Link dự án mẫu', 'Link kịch bản', 'Tiền công dự kiến (VNĐ)']) {
+      fireEvent.change(screen.getByLabelText(label), { target: { value: '' } })
+    }
+    await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ raw_video_url: null, reference_video_url: null, template_project_url: null, script_url: null, estimated_compensation_vnd: null }, expect.any(AbortSignal))
+  })
+  it.each([null, '9007199254740993'])('does not overwrite untouched compensation (%s) when changing other metadata', async (estimated_compensation_vnd) => {
+    const { props } = edit({ task: { ...task, estimated_compensation_vnd } })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Chỉnh sửa công việc' }))
+    await user.type(screen.getByLabelText('Mô tả'), 'Chỉ cập nhật mô tả')
+    await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ description: 'Chỉ cập nhật mô tả' }, expect.any(AbortSignal))
+    expect(vi.mocked(props.onUpdate).mock.calls[0]?.[0]).not.toHaveProperty('estimated_compensation_vnd')
+  })
+  it('does not grant an edit form to an assignee who can view compensation without metadata authority', () => {
+    edit({ task: { ...task, estimated_compensation_vnd: '500000' }, canEdit: false })
+    expect(screen.queryByRole('button', { name: 'Chỉnh sửa công việc' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Tiền công dự kiến (VNĐ)')).not.toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent('500.000')
+  })
+  it('keeps untouched historical seconds and milliseconds out of a metadata-only PATCH', async () => {
+    const { props } = edit({ task: { ...task, deadline: '2026-10-30T15:00:18.123Z' } })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Chỉnh sửa công việc' }))
+    await user.selectOptions(screen.getByLabelText('Mức ưu tiên'), 'HIGH')
+    expect(screen.queryByLabelText(/giây/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog').querySelector('input[type="datetime-local"]')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ priority: 'HIGH' }, expect.any(AbortSignal))
+  })
+  it.each(['javascript:alert(1)', 'data:text/plain,synthetic', 'https://example.test/bad link'])('retains and rejects an unsafe document draft %#', async (value) => {
+    const { props } = create()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Tạo công việc' }))
+    await user.type(screen.getByLabelText('Tên công việc'), 'Bản nháp nguyên liệu')
+    fireEvent.change(screen.getByLabelText('Link kịch bản'), { target: { value } })
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Tạo công việc' }))
+    expect(screen.getByLabelText('Link kịch bản')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText('Link kịch bản')).toHaveValue(value)
+    expect(props.onCreate).not.toHaveBeenCalled()
+  })
+  it.each(['-1', '1.5', '1e3', '1000000000000000000'])('blocks invalid/overflow money draft %s without mutation', async (value) => {
+    const { props } = create()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Tạo công việc' }))
+    await user.type(screen.getByLabelText('Tên công việc'), 'Tiền công chưa hợp lệ')
+    fireEvent.change(screen.getByLabelText('Tiền công dự kiến (VNĐ)'), { target: { value } })
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Tạo công việc' }))
+    expect(screen.getByLabelText('Tiền công dự kiến (VNĐ)')).toHaveAttribute('aria-invalid', 'true')
+    expect(props.onCreate).not.toHaveBeenCalled()
+  })
+  it('allows zero compensation and preserves new-field drafts after a failed request without automatic retries', async () => {
+    const onCreate = vi.fn().mockRejectedValue(new ApiError(500, 'server', 'Provider internal text'))
+    create({ onCreate })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Tạo công việc' }))
+    await user.type(screen.getByLabelText('Tên công việc'), 'Bản nháp không gửi lại')
+    fireEvent.change(screen.getByLabelText('Link video gốc (raw)'), { target: { value: 'https://example.test/raw' } })
+    fireEvent.change(screen.getByLabelText('Tiền công dự kiến (VNĐ)'), { target: { value: '0' } })
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Tạo công việc' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Hãy kiểm tra danh sách công việc trước khi gửi lại.')
+    expect(screen.getByLabelText('Link video gốc (raw)')).toHaveValue('https://example.test/raw')
+    expect(screen.getByLabelText('Tiền công dự kiến (VNĐ)')).toHaveValue('0')
+    expect(onCreate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ estimated_compensation_vnd: '0' }), expect.any(AbortSignal))
+  })
+  it('keeps document and compensation drafts on a same-scope background rerender', async () => {
+    const { props, rerender } = create()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Tạo công việc' }))
+    const dialog = screen.getByRole('dialog')
+    await user.type(screen.getByLabelText('Tên công việc'), 'Bản nháp đang mở')
+    fireEvent.change(screen.getByLabelText('Link kịch bản'), { target: { value: 'https://example.test/script-draft' } })
+    fireEvent.change(screen.getByLabelText('Tiền công dự kiến (VNĐ)'), { target: { value: '500.000' } })
+    rerender(<TaskCreate {...props} onCreate={(input, signal) => props.onCreate(input, signal)} />)
+    expect(screen.getByRole('dialog')).toBe(dialog)
+    expect(screen.getByLabelText('Tên công việc')).toHaveValue('Bản nháp đang mở')
+    expect(screen.getByLabelText('Link kịch bản')).toHaveValue('https://example.test/script-draft')
+    expect(screen.getByLabelText('Tiền công dự kiến (VNĐ)')).toHaveValue('500.000')
+    expect(props.onCreate).not.toHaveBeenCalled()
+  })
+  it('does not overwrite untouched document data after a newer server snapshot refreshes behind an open edit', async () => {
+    const original = { ...task, script_url: 'https://example.test/original' }
+    const { props, rerender } = edit({ task: original })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Chỉnh sửa công việc' }))
+    await user.type(screen.getByLabelText('Mô tả'), 'Chỉ sửa mô tả')
+    rerender(<TaskEdit {...props} task={{ ...original, script_url: 'https://example.test/newer' }} />)
+    await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }))
+    expect(props.onUpdate).toHaveBeenCalledWith({ description: 'Chỉ sửa mô tả' }, expect.any(AbortSignal))
   })
 })
 

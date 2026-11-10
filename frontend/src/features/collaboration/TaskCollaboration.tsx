@@ -20,7 +20,7 @@ function DeliverableCard({ item, children }: { item: Deliverable; children?: Rea
   return <Card className="collaboration-item"><article aria-label={item.revision === null ? 'Sản phẩm bàn giao cũ' : `Phiên bản ${item.revision}`}>
     <div className="section-heading"><h3>{item.revision === null ? 'Bản ghi cũ · chưa có phiên bản' : `Phiên bản ${item.revision}`}</h3><span className="collaboration-status">{deliverableLabels[item.status]}</span></div>
     <p className="collaboration-meta">{memberLabel(item.uploaded_by_profile_membership_id)} · <time dateTime={item.created_at}>{dateTime(item.created_at)}</time></p>
-    {href ? <a className="text-link comment-content" href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Mở sản phẩm bàn giao<span className="sr-only"> (mở trong thẻ mới)</span></a>
+    {href ? <a className="text-link comment-content" href={href} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Mở sản phẩm<span className="sr-only"> (mở trong thẻ mới)</span></a>
       : <p className="comment-content">{item.file_url || 'Chưa có đường dẫn sản phẩm.'}</p>}
     {item.review ? <div className="collaboration-review"><h4>{reviewLabels[item.review.status]}</h4>
       <p className="collaboration-meta">{memberLabel(item.review.reviewer_profile_membership_id)} · <time dateTime={item.review.created_at}>{dateTime(item.review.created_at)}</time></p>
@@ -190,7 +190,8 @@ function ScopedTaskCollaboration({ profileId, workspaceId, task, currentUserId, 
   const close = () => { if (!pending) { setAction(null); setDeleteError('') } }
 
   return <>
-    <section id="deliverables" className="collaboration-section" aria-labelledby="deliverables-title"><div className="section-heading"><div><p className="eyebrow">SẢN PHẨM VÀ PHẢN HỒI</p><h2 id="deliverables-title">Deliverable &amp; Review</h2></div></div>
+    {notice && <Alert kind="success">{notice}</Alert>}{denial && <Alert kind="error">{denial}</Alert>}
+    <section id="deliverables" className="collaboration-section" aria-labelledby="deliverables-title"><div className="section-heading"><div><p className="eyebrow">SẢN PHẨM VÀ PHẢN HỒI</p><h2 id="deliverables-title">Sản phẩm và đánh giá</h2></div></div>
       <p className="read-note">Lịch sử nộp và đánh giá của riêng công việc này. Quy trình duyệt được quản lý trên máy chủ.</p>
       <SubmitDeliverable profileId={profileId} workspaceId={workspaceId} taskId={task.id} active={active} canSubmit={task.can_submit && task !== blockedSubmitTask} onSaved={saveDeliverable} onFailure={failed} />
       {deliverables.isPending ? <PageSkeleton label="Đang tải sản phẩm bàn giao…" /> : deliverables.isError ? <ErrorState error={deliverables.error} onRetry={() => void deliverables.refetch()} />
@@ -198,7 +199,6 @@ function ScopedTaskCollaboration({ profileId, workspaceId, task, currentUserId, 
           : <EmptyState title="Chưa có sản phẩm bàn giao" description="Các phiên bản và nhận xét đánh giá sẽ xuất hiện tại đây khi được nộp." />}<Pagination page={deliverablePage} count={deliverables.data.count} onPageChange={setDeliverablePage} /></>}
     </section>
     <section id="comments" className="collaboration-section" aria-labelledby="comments-title"><div className="section-heading"><div><p className="eyebrow">CÙNG LÀM RÕ CÔNG VIỆC</p><h2 id="comments-title">Thảo luận</h2></div></div>
-      {notice && <Alert kind="success">{notice}</Alert>}{denial && <Alert kind="error">{denial}</Alert>}
       {!active && <p className="read-note">Không gian hoặc tổ chức đã lưu trữ. Thảo luận được giữ ở chế độ chỉ đọc.</p>}
       {comments.isPending ? <PageSkeleton label="Đang tải bình luận…" /> : comments.isError ? <ErrorState error={comments.error} onRetry={() => void comments.refetch()} /> : <>
         {comments.data.results.length ? <ol className="collaboration-list">{comments.data.results.map((comment) => <li key={comment.id} id={`comment-${comment.id}`}><Card className="collaboration-item"><article aria-label={`Bình luận ${comment.id.slice(0, 8)}`}>

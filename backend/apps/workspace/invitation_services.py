@@ -24,6 +24,7 @@ from .models import (
     Profile,
     ProfileInvitation,
     ProfileMembership,
+    Workspace,
     WorkspaceMember,
 )
 
@@ -572,6 +573,46 @@ def _revoke_stale_workspace_access(*, actor, profile, user, now):
         )
 
 
+def _join_current_workspace_after_acceptance(*, actor, profile, membership, now):
+    """Grant only the actual current month after a successful member acceptance.
+
+    The caller holds the Profile lock and has accepted the invitation inside
+    the same transaction. Never reinterpret latest(created_at) as current and
+    never reactivate a historical Workspace row, even one already inactive.
+    """
+
+    if membership.role != ProfileMembership.Role.MEMBER:
+        # Profile Admins already inherit same-tenant Workspace governance.
+        return
+    month = timezone.localdate(now, timezone.get_default_timezone()).replace(day=1)
+    current = list(Workspace.objects.select_for_update().filter(
+        profile=profile, period=month, status=Workspace.Status.ACTIVE,
+    ).order_by("id")[:2])
+    if len(current) != 1:
+        return
+    workspace = current[0]
+    if WorkspaceMember.objects.select_for_update().filter(
+        workspace=workspace, user=actor,
+    ).exists():
+        return
+    workspace_membership = WorkspaceMember(
+        workspace=workspace, user=actor, role=WorkspaceMember.Role.MEMBER,
+        is_active=True,
+    )
+    workspace_membership.save()
+    AuditLog.objects.create(
+        user=actor,
+        action="workspace.membership.created_by_invitation",
+        entity_name="WorkspaceMember",
+        entity_id=workspace_membership.id,
+        metadata={
+            "profile_id": str(profile.id), "workspace_id": str(workspace.id),
+            "target_user_id": str(actor.id), "before": None,
+            "after": {"role": workspace_membership.role, "is_active": True},
+        },
+    )
+
+
 @sensitive_variables("token")
 def accept_profile_invitation(*, actor, token):
     candidate, digest = _lookup_token_candidate(token)
@@ -665,6 +706,9 @@ def accept_profile_invitation(*, actor, token):
                 action="profile.invitation.accepted",
                 before=before,
                 after={"status": invitation.status},
+            )
+            _join_current_workspace_after_acceptance(
+                actor=actor, profile=profile, membership=membership, now=now,
             )
             result = membership
 

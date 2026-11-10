@@ -1,6 +1,281 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-11-09
+Last updated: 2026-11-10
+
+## HT-FE-TASK-UX-REFINEMENT-01 — Product links and assignee labels
+
+Current Owner-approved contract supersedes earlier **new submission** text/URL
+wording in this document. Existing routes, SessionAuthentication, CSRF, tenant
+scope, mutation capabilities, transactions and internal Review rules are retained.
+No model or migration is added or changed.
+
+### New submissions and resubmissions
+
+`POST /api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/deliverables/`
+still accepts exactly `{ "file_url": "https://example.test/finished-product" }`
+and returns the existing Deliverable DTO with `201`. For every new revision,
+`file_url` must be a nonempty HTTP(S) URL of at most **500 Unicode code points**
+after trimming leading/trailing whitespace. Raw control characters (C0/C1) and
+invalid Unicode are rejected before trimming; internal whitespace, backslashes,
+embedded username/password, invalid host/port, nonstrings and other schemes are
+rejected with field-level `400`. Both the strict serializer and existing domain
+submission service enforce the same validation. This does not validate external
+sharing permissions, existence or media contents: no server fetch, preview,
+upload, storage integration or external request is performed.
+
+Historical `file_url` values remain unchanged in storage and read responses,
+including old text or paths. They are not revalidated, normalized, backfilled or
+made unconditionally clickable. React renders legacy non-URL references as
+escaped text; a safe HTTP(S) reference has an explicit **Mở sản phẩm** link with
+`target="_blank"` and `rel="noopener noreferrer"`. Each revision retains its own
+reference. The form is **Link sản phẩm hoàn thành** / **Nộp sản phẩm**, validates
+before sending and prevents concurrent duplicate submits. An unknown network
+outcome preserves the draft and asks the user to inspect history; it does not
+automatically retry or assume a submission succeeded.
+
+Only the current eligible assigned Editor may submit while the Task is WORKING
+and has no unresolved Deliverable. Submission allocates the next revision and
+sets REVIEW through the existing locked service. A distinct authorized reviewer
+may request changes or approve only the latest eligible revision; request changes
+returns WORKING, approval completes the Task. Capability hints never replace
+live authorization/state checks. No parent/child cascade or optimistic completion
+is introduced; existing `403`/tenant-safe `404`/workflow `409` behavior is retained.
+
+### Additive read-only assignee display
+
+Every existing Task response using `TaskReadSerializer` retains
+`active_assignment: null` when no active assignment exists. An assignment object
+retains `id`, `profile_membership_id` and `assigned_at`, and gains
+`display_name: string | null`. This is a display label, not a writable assignment
+field or permission/capability. For an eligible current assignee, the backend
+uses a safe full name, then a safe username, then **Thành viên được giao**; it
+never falls back to an email/contact value or UUID. No separate global User ID,
+email or username field is exposed.
+
+The actor must currently read the Task in the verified Profile/Workspace, and
+the assignee must have an active account and current same-tenant access. A retained
+assignment whose assignee no longer qualifies gets `display_name: null`; missing
+or mismatched request/access context also fails closed. Existing archived-context
+read rules remain. React distinguishes no assignment from an unavailable label
+without showing membership UUIDs. Existing membership IDs are unchanged for
+compatibility and must not be used to infer authority.
+
+The projection reuses tenant-scoped SQL predicates and batches the bounded page
+in one current-identity lookup rather than issuing a User/roster request for each
+Task. Detail and mutation responses use the same projection. It grants no Task
+execution, reassignment, metadata or compensation access: the narrower existing
+`estimated_compensation_vnd` policy below is unchanged. Display-only access does
+not establish valid assignee execution rights.
+
+UTC deadline filter query names, instant boundaries and ordering semantics are
+unchanged; React only stacks the existing from/to fields within **Khoảng thời hạn
+(UTC)**. No timezone or deadline storage policy changes. Current read-only
+development inventory records 37 applied migrations, 5 Users, 2 Sessions,
+3 Tasks and 2 Deliverables; tasks.0005 is APPLIED and ai.0002 remains UNAPPLIED.
+The earlier rollout inventory below is historical, not a current count.
+See [HANDOVER](HANDOVER.md) for final verification and Owner review evidence.
+
+## Historical HT-DB-TASK-BRIEF-ROLLOUT-01 — Development availability
+
+**DEVELOPMENT MIGRATION COMPLETE — OWNER UI ACCEPTANCE PENDING.** The separately
+Owner-approved targeted tasks.0005_task_brief rollout completed at
+2026-11-10T13:47:38Z, exit0, after backup/restore/migration rehearsal. Development
+now has37 applied records and all five Task brief columns; ai.0002 stays UNAPPLIED.
+This changes schema availability, not API fields, capabilities, RBAC or workflow.
+The field-level compensation projection below remains authoritative.
+
+Read-only updated Task ORM reads both existing Tasks; Django checks/model
+consistency and empty targeted plan PASS. The two Task rows retain all five new
+metadata fields NULL. Normal
+development Django/Vite startup and anonymous GET-only smoke9/9 PASS at13:49:20Z
+(health/CSRF200, unauthenticated private endpoints403, Vite proxy working). No
+authenticated business mutation or Owner UI acceptance was performed. Historical
+isolated test counts below were not rerun in this rollout. Old candidate/no-apply
+instructions are superseded for tasks.0005 only; AI/production apply remains
+unapproved. HANDOVER contains backup and preservation evidence and manual steps.
+
+## HT-FE-TASK-COMPENSATION-RBAC-01 — Field-level disclosure
+
+Current Owner-approved policy supersedes the original broad compensation-read
+policy of the candidate below. All Task DTOs keep the same field shape:
+`estimated_compensation_vnd` is an exact canonical digit STRING only for current
+authorized managers or the effective current Task assignee; otherwise NULL,
+indistinguishable from an unset amount. No new capability flag or endpoint.
+
+Existing authenticated tenant Task read access is mandatory. Profile OWNER/ADMIN
+and Workspace ADMIN may read pay in their legitimate scope. An assignee needs
+current ACTIVE assignment to that exact Task plus active User/Profile membership
+and effective Workspace MEMBER access. Another Task's assignment, historical
+assignment, VIEWER downgrade or staff/superuser flag grants no extra authority.
+Revoked/out-of-scope actors retain existing safe404/denial behavior. Existing
+archived-context read policy is retained; mutation remains lifecycle-restricted.
+
+The shared TaskReadSerializer protects list/filter, detail, direct children,
+create/PATCH and assign/start responses. Compensation authorization is batched
+for the bounded serialized page with live membership/assignment SQL predicates;
+prefetched assignment history cannot grant visibility. Missing/mismatched request
+or tenant context redacts. `include_compensation=true` cannot override policy.
+Task metadata writes still use existing locked manager services; read permission
+never grants PATCH. Omitted compensation in PATCH retains its stored value.
+
+Deliverable/Review/Comment/Workspace responses expose references or their own
+scalars, not nested Task pay. Notifications use static event text and target IDs;
+AI contracts use separate proposal/feedback/created-ID payloads. No Task export,
+dashboard aggregation or public audit endpoint exists. Audit changed_fields only
+records names, never pay values. No URL/deadline/Task workflow change. Current
+development rollout evidence and pending Owner UI acceptance are in HANDOVER.
+Inspection-only Django Admin excludes the compensation field entirely; global
+Django model view permission cannot bypass the canonical tenant API projection.
+
+## HT-FE-TASK-BRIEF-24H-VI-01 — Optional Task editing brief
+
+**APPLIED DEVELOPMENT — OWNER UI ACCEPTANCE PENDING.** The schema is provided by
+`tasks.0005_task_brief`, following tasks.0004, now applied by the controlled rollout
+above. The earlier missing-column startup restriction is resolved. ai.0002 remains
+outside this rollout; no authenticated development mutation test or manual UI
+acceptance is implied by the read-only postchecks.
+
+Existing nested Task list/detail/create/PATCH/action responses retain old fields
+and gain five nullable read fields. Create/PATCH may optionally supply them:
+
+| Field | Exact contract |
+|---|---|
+| raw_video_url | HTTP(S) raw video link, max2048 characters |
+| reference_video_url | HTTP(S) reference video link, max2048 characters |
+| template_project_url | HTTP(S) template project/resource link, max2048 characters |
+| script_url | HTTP(S) script-document URL, not free text, max2048 characters |
+| estimated_compensation_vnd | Whole nonnegative VND for the entire Task; canonical decimal digit STRING/null in responses; maximum999999999999999999 (numeric18,0 storage bound) |
+
+URL null/empty/whitespace-only inputs normalize to null; control characters,
+invalid URLs and non-HTTP(S) schemes are rejected. No public-access check, fetch,
+embedding or preview call is made. New optional values omitted on legacy create
+default null; omitted PATCH fields remain unchanged. Explicit null/empty clears.
+No client-controlled role/assignment/tenant fields are added.
+
+Money accepts a strict JSON integer or ASCII digit string/null (empty string
+clears). Floats including1.0, booleans, exponent/sign/fraction/negative text,
+nonfinite values and overflow are rejected before coercion in serializer AND
+service. Clients should send digit strings, never floating numbers or localized
+punctuation. Django stores exact Decimal/numeric(18,0); responses use strings to
+avoid JavaScript Number precision loss. Frontend groups dots for display only.
+This technical bound is not a business budget, payroll, payment or billing rule;
+the amount is never multiplied by assignments.
+
+```json
+{
+  "title": "Dựng video ví dụ giả lập",
+  "raw_video_url": "https://example.test/private-source",
+  "reference_video_url": null,
+  "template_project_url": null,
+  "script_url": "https://example.test/script",
+  "estimated_compensation_vnd": "500000"
+}
+```
+
+SessionAuthentication/CSRF/tenant access remain unchanged. Authorized Task readers
+may read document links; compensation uses the narrower current field policy
+defined above (the earlier broad-reader policy is superseded). Metadata create/
+edit remains manager-only. Assigned Editor executes/submits under current rules,
+not metadata editing. Existing conditional uniqueness permits ONE active assignee
+plus historical rows; this task does not alter assignment semantics. Audits record
+only changed field names, not new link/pay values. URLs are opened on explicit
+browser action with target_blank and rel=noopener noreferrer.
+
+Backend deadline contract remains an optional timezone-aware instant; legacy API
+seconds remain supported. Ordinary React inputs are dd/mm/yyyy plus explicit
+00–23/00–59 selects, converted from device local time to UTC at minute precision.
+Untouched deadline PATCH is omitted to preserve the actual legacy timestamp.
+UTC date-filter boundaries retain existing semantics. No global timezone change.
+Ordinary UI removes hierarchy controls but API parent_id/subtasks/history remain
+supported. Existing child Tasks stay in all-Task lists and direct detail routes.
+Separate AI proposal hierarchy/legacy date helpers retain their existing contract.
+
+Historical verification on candidate schema: targeted132/full937 isolated PostgreSQL,
+frontend1047, quality and47 real isolated browser cases PASS with actual child
+exits0/owned cleanup. Includes HTTP(S)/strict whole-VND validation, RBAC/IDOR/CSRF,
+legacy compatibility, clear/null, HCM18:30↔11:30Z, Editor/Viewer visibility,
+hierarchy/data preservation and workflow regressions. At that historical stage
+development retained36 migration records and lacked the new columns. Current
+development has37 records and Task brief columns, with old business data preserved;
+ai.0002 stays unapplied. Historical isolated results are not development API E2E.
+HANDOVER records all attempts, rollout evidence and the manual acceptance gate.
+
+## HT-FE-WORKSPACE-INHERITANCE-01 — Workspace creation membership snapshot
+
+**IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Owner-approved additive contract; no
+model/migration, authentication, role ceiling or email configuration changes.
+This section supersedes older blanket statements that Workspace creation and
+invitation acceptance never create WorkspaceMember rows.
+
+`POST /api/v1/profiles/{profile_id}/workspaces/` retains required `name`,
+canonical first-of-month `period`, optional `description`, and unchanged read DTO.
+It additionally accepts either optional `source_workspace_id` (UUID) or optional
+`initial_profile_membership_ids` (unique UUID list), never both. Omission retains
+existing manual creation. Unknown fields, client roles/User IDs and server-owned
+fields remain rejected. SessionAuthentication and CSRF are required.
+
+Only active Profile OWNER/ADMIN create. Source must be readable and same-Profile;
+archived readable sources are permitted because they are only snapshot reads.
+Backend selects supported active ADMIN/MEMBER/VIEWER assignments backed by an
+active same-Profile MEMBER and active User. Revoked/stale/inactive/legacy roles
+and redundant Profile Owner/Admin direct assignments are skipped. It recomputes
+under Profile-first locks and creates destination, grants and audits in one
+transaction through existing membership services. No source row, Task/Assignment/
+Review/Comment is copied or changed. Later source changes never cascade. Unique
+Profile+period still makes duplicate409; no new retry/idempotency protocol.
+
+Initial IDs apply only when the Profile has no Workspace. Every selected active
+ordinary Profile MEMBER is validated and receives fixed MEMBER, never a supplied
+role. Profile Owner/Admin governance remains inherited without fabricated rows.
+Empty list is allowed; later manual grants use existing membership endpoints.
+
+`GET /api/v1/profiles/{profile_id}/workspace-inheritance/` is a read-only,
+never-cache creation preview under the same Profile creation permission.
+Optional `source_workspace_id` selects a source; page/page_size use existing
+bounded pagination. Without source, mode is `initial` if no Workspace exists,
+otherwise `manual`. React obtains choices from the existing Workspace list;
+it never infers previous month from creation time.
+
+```json
+{
+  "count": 1, "next": null, "previous": null,
+  "mode": "inheritance",
+  "source_workspace": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "Workspace nguồn giả lập", "period": "2026-10-01"
+  },
+  "excluded_count": 0, "has_workspaces": true,
+  "results": [{
+    "profile_membership_id": "22222222-2222-4222-8222-222222222222",
+    "display_name": "Thành viên giả lập", "role": "MEMBER"
+  }]
+}
+```
+
+Preview exposes sanitized labels, membership references and roles, no contact or
+global account identifiers. Excluded rows expose only an aggregate count. It is
+advisory; POST rechecks current authority/eligibility. Workspace Admins cannot
+use creation/preview to exceed existing ceilings. Invalid bodies400, inaccessible
+source404, forbidden creation403 and duplicate period409 follow conventions.
+React never automatically retries an uncertain mutation.
+
+Only after successful invitation accept, the same atomic transaction may grant
+MEMBER in the ACTIVE same-Profile Workspace whose period is the current month's
+first day in configured Django timezone (currently UTC). Missing/null legacy/
+archived/past/future target means no grant and does not break acceptance.
+Compatible Profile reactivation can join only when NO current WorkspaceMember
+row exists, including inactive history. Existing stale-access revocation runs
+first; revoked rows never reactivate. Invited Profile Admins already inherit
+governance. Sending/resending mail, login, replay and failed/wrong-recipient
+acceptance never grant access. No Task assignment/status change. Audit failure
+rolls back accept and grant together; no email-delivery change.
+
+Current verification: targeted PostgreSQL132/full905, frontend955 and24 real
+isolated browser cases PASS with actual process exits0. Identity/CSRF/IDOR,
+revoked/inactive membership, snapshot/current-month, rollback/concurrency and
+legacy-client behavior are covered; development29-table fingerprint unchanged,
+36 migrations andai.0002 unapplied retained. See HANDOVER for exact receipts,
+failed-attempt distinctions and manual/genuine-mail limitations.
 
 ## HT-FE-WORKSPACE-MEMBERS-01 — Workspace access contract
 
@@ -34,8 +309,8 @@ transitional Workspace.owner and staff/superuser flags grant no authority.
 
 Both Profile and Workspace must be ACTIVE for mutations. Manager roster remains
 readable in archived scope; mutation hints are false and candidate list is empty.
-Profile invitation acceptance and Workspace creation never automatically create
-WorkspaceMember rows. Profile membership selection in React is not authority.
+Outside the explicit conditions above, Profile membership alone never grants
+ordinary Members Workspace access. Profile selection in React is not authority.
 
 ### Read endpoints and additive capabilities
 
@@ -935,8 +1210,10 @@ List query annotations/prefetch keep capability queries bounded.
 
 Existing writes, all SessionAuthentication + CSRF:
 
-- POST tasks/{t}/deliverables/: {file_url}, nonblank max500, response201. This is
-  text/URL submission, not an upload. Revision and Task REVIEW come from service.
+- POST tasks/{t}/deliverables/: {file_url}, valid HTTP(S), trimmed nonblank max500,
+  response201. The current HT-FE-TASK-UX-REFINEMENT-01 policy above supersedes the
+  original text/URL input policy; legacy reads remain intact. This is not an
+  upload. Revision and Task REVIEW come from the existing service.
 - POST tasks/{t}/deliverables/{d}/approve/: optional {comment}, response200.
 - POST tasks/{t}/deliverables/{d}/request-changes/: required nonblank {comment},
   response200. Backend returns Task to WORKING; approval sets COMPLETED.
@@ -1834,7 +2111,8 @@ Create accepts only:
 
 `title` is required. `description`, `priority`, `deadline`, and `parent_id` are
 optional; priority defaults to `MEDIUM` and parent defaults to null (root).
-`PATCH` accepts a subset of these five mutable metadata fields; empty or
+`PATCH` accepts a subset of these five core metadata fields plus the five nullable
+Task brief candidate fields documented at the top; empty or
 unchanged input is a no-op with no audit event. The example above remains valid
 unchanged. To create a Subtask, include `"parent_id": "same-workspace-task-uuid"`
 in the existing collection POST; there is no second Subtask write endpoint.
@@ -1842,7 +2120,8 @@ Unknown and server-owned fields—including
 `profile_id`, `workspace_id`, `status`, creator, assignment, revisions,
 reviewer, IDs, and timestamps—are rejected with `400 Bad Request`.
 
-Task responses contain exactly:
+Task responses retain these foundation fields; the Task brief candidate adds
+the five nullable URL/compensation fields documented at the top:
 
 - `id`
 - `workspace_id`
@@ -1859,11 +2138,14 @@ Task responses contain exactly:
 - `updated_at`
 
 `active_assignment` is null or contains `id`, current
-`profile_membership_id`, and `assigned_at`. It never contains global User ID,
-email, username, or other PII. If the assignee no longer has a current active
+`profile_membership_id`, `assigned_at` and the additive read-only
+`display_name: string | null` documented above. No separate global User ID,
+email, contact data or username field is exposed; the safe label may use an
+eligible username as its fallback. If the assignee no longer has a current active
 same-Profile membership, historical attribution is retained in the database
 but the serialized ProfileMembership identifier becomes null rather than
-exposing a stale tenant identifier.
+exposing a stale tenant identifier. Current access is independently required for
+the display label, and an unavailable name serializes as null.
 
 ### HT-TASK-P2-05 hierarchy, deadline and priority — 2026-10-25
 
@@ -1974,10 +2256,14 @@ Submit accepts exactly:
 }
 ```
 
-This foundation stores text or a URL string in `file_url`; it does not upload, fetch, scan, validate
-media contents, or authorize a storage provider. The service allocates a
-positive sequential revision while locking the Task. A Task may have multiple
-historical Deliverables, but only its latest submitted revision may be decided.
+Current new submissions/resubmissions require the validated, trimmed HTTP(S)
+`file_url` string (max500) defined by HT-FE-TASK-UX-REFINEMENT-01 above. The
+foundation originally accepted arbitrary text/URL; that historical write policy
+is superseded, while stored legacy text/path values remain readable unchanged.
+No resource is uploaded, fetched, scanned or checked for external access/media
+contents, and no storage provider is authorized. The service allocates a positive
+sequential revision while locking the Task. A Task may have multiple historical
+Deliverables, but only its latest submitted revision may be decided.
 
 Deliverable responses contain exactly:
 

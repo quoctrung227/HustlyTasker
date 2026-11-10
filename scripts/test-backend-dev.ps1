@@ -109,5 +109,25 @@ Run-Test 'child environment is isolated and security settings are preserved' {
     }
 }
 
+Run-Test 'occupied reusable loopback port refuses a second development server' {
+    $htListener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
+    $htListener.ExclusiveAddressUse = $false
+    try {
+        $htListener.Start()
+        $htPort = $htListener.LocalEndpoint.Port
+        Expect-Failure { Assert-HustlyDevelopmentPortAvailable $htPort } 'port.*unavailable.*older --noreload' 'occupied reusable port'
+    } finally { $htListener.Stop() }
+}
+Run-Test 'available loopback port is released after the startup probe' {
+    $htListener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, 0)
+    $htListener.Start()
+    $htPort = $htListener.LocalEndpoint.Port
+    $htListener.Stop()
+    Assert-HustlyDevelopmentPortAvailable $htPort
+    $htListener = New-Object Net.Sockets.TcpListener([Net.IPAddress]::Loopback, $htPort)
+    $htListener.ExclusiveAddressUse = $true
+    try { $htListener.Start() } finally { $htListener.Stop() }
+}
+
 Write-Output "BACKEND_DEV_GUARD_TESTS_PASSED=$htTestsPassed"
 exit 0

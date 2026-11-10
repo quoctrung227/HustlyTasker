@@ -1,6 +1,6 @@
 # HUSTLYTASKER REQUIREMENT STATUS
 
-Last updated: 2026-11-09
+Last updated: 2026-11-10
 
 ## Quy ước đánh giá
 
@@ -17,7 +17,84 @@ Last updated: 2026-11-09
 
 Source of truth cho trạng thái là source code, migration đã áp dụng và kết quả kiểm thử. `documentation/` mô tả định hướng hiện hành. `reference/original_document/` là audit của hệ Next.js/Prisma cũ và chỉ được dùng để kế thừa business rules, không phải yêu cầu đổi Django sang Spring Boot hoặc công nghệ khác.
 
-Current checkpoint: **HT-FE-INVITATION-DELIVERY-FIX-01 — APPLICATION FIX VERIFIED /
+Current checkpoint: **HT-FE-TASK-ASSIGNEE-NAME-FIX-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+
+| Assignee name fix requirement | Verified status |
+|---|---|
+| Root cause | Marked anonymous GET goes only to old13:49 --noreload backend, started before14:34 display_name code; second15:05 process did not replace it |
+| Correct source of name | Existing server-scoped full name→safe username→safe fallback; no assignment=NULL; frontend preserves field and invalidates current scope |
+| Correction | Only verified project servers restarted; one fresh backend handles direct/proxy GETs. Existing launcher gets exclusive occupied-port preflight; no automatic process killing |
+| Tests | Fresh isolated PostgreSQL59, frontend122 and launcher15 PASS/exit0; typecheck/lint/Django/model/graph checks PASS |
+| Development API diagnostic |4existing Task list/detail actual GET handlers checked in-process/read-only with legitimate Owner actors; names match. No authenticated browser/session claim |
+| Preservation | All29-table snapshots unchanged;37migrations/5Users/2Sessions/4Tasks, tasks.0005APPLIED/ai.0002UNAPPLIED. No schema/business writes, pay/RBAC changes or AI/SMTP calls |
+| Review | Owner Ctrl+F5 existing Task; manual verification pending. Full suites/build/browser not rerun; no React/Django business code changed |
+
+Historical checkpoint: **HT-FE-TASK-UX-REFINEMENT-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+
+| Current Task UX requirement | Verified source/evidence |
+|---|---|
+| Stabledescription | Task-only24remdesktop/fixedheading/nativekeyboardscroll; mobilemax24remnaturalshortheight; complete26ktext/unbrokentokens retained |
+| Linked product submission | Reusefile_url500/newHTTP(S)-onlyvalidation; legacyread/revisions unchanged, safeexternalanchor/no fetch; no schema/migration |
+| UTCfilterpair | Samecolumn from→to nativefieldset/actions, sameparams/UTCmeaning/validation |
+| Assigneename | Current-scoped readonlydisplay_name string/null, fullname→safeusername→generic; noUUIDlabels/perTaskroster; unavailableNULL, noaction/paygrant |
+| Verification | Fresh targeted191/full996PostgreSQL/full1123frontend/quality0;37/37realbrowsercases across8suites PASS/actualexits0. Four-sizeaxe0/keyboard/screenshots verified; HANDOVER owns run IDs |
+| Development | READONLYbefore/after29-tabledata/schema/history/sequence fingerprints identical;37records/3Tasks/2Deliverables/5Users/2Sessions retained. tasks.0005APPLIED/ai.0002UNAPPLIED. No fixtures/mutationtests |
+| Local/source | Existing Django8000/Vite5173 started;9/9anonymousGET and read-only ORM PASS.618originals/22frozen hashes/59initialdirtypaths preserved,71finaldirtypaths;0ownedtestresources |
+| Reviewgate |13documents synchronized; OwnerUIreview pending. No migration candidate, automatic nexttask or deploy |
+
+Historical checkpoint: **HT-DB-TASK-BRIEF-ROLLOUT-01 — DEVELOPMENT MIGRATION COMPLETE /
+OWNER UI ACCEPTANCE PENDING**.
+
+| Current rollout requirement | Verified status |
+|---|---|
+| Correct target/plan | PASS original development container/volume/loopback, config.settings/dev; exact forward tasks0005 only |
+| Backup/rehearsal | PASS external restricted126444bytecustomarchive/SHA256/list/fullread/restore/isolatedtargetedmigration; ownedtargetsremoved, backupretained |
+| Development execution | APPLIED tasks.0005, exit0, history36→37only; ai.0002UNAPPLIED and governance tables absent |
+| Schema/data | PASS5nullableTaskfields/exactnonnegativeCHECK; alllegacyTaskfields and otherbusinessrows preserved;2Tasks/0Subtasks/5Users/2Sessions retained |
+| Backend/connectivity | PASS system/modeldrift/targetedplanempty/TaskORM2; normal Django+Vite onloopback,9anonymousGETsmokesPASS; no businessmutations |
+| Acceptance boundary | OwnerUImanualCreate/Edit/18:30/assignment/payredaction pending; no fullsuite rerun, liveprovider/mail/production claim |
+
+Historical checkpoint: **HT-FE-TASK-COMPENSATION-RBAC-01 — IMPLEMENTATION COMPLETE /
+PENDING DEVELOPMENT MIGRATION APPROVAL**.
+
+| Current compensation requirement | Source-backed status |
+|---|---|
+| Owner-approved visibility | Current Task-readable Profile OWNER/ADMIN, Workspace ADMIN, effective ACTIVE Task assignee; others receive NULL |
+| Write authority | Existing manager-only metadata services unchanged; assigned Editor has no pay-write grant |
+| Stale authority | Live SQL membership/User/role/assignment predicates; no history/Viewer-downgrade/staff/context/query override |
+| API/HTML projection | Common Task DTO list/detail/subtasks/create/PATCH/assign/start; inspection-only Admin excludes pay; other actual response contracts have no pay |
+| React privacy | NULL hides card; response replaces old cache; existing auth/tenant cleanup and URL/deadline/draft rules retained |
+| Validation | Final targeted164/full969 PostgreSQL, frontend159/full1067, quality0; Brief4+regression39=43real browsers PASS/actual exits0/ownedcleanup. Four-sizeaxe0/keyboard/reflow/PNG inspection. Initial unchanged Workspace focus failure and subsequent passes retained |
+| Migration/development | No model/migration changes/apply; tasks.0005 and ai.0002 remain UNAPPLIED, no development fixtures/website acceptance |
+| Preservation/review | All29-table data/schema/history/sequences/cluster fingerprints identical13:17:12Z except connections;36migrations/5Users/2Sessions/Owner rows retained.617originals/12source hashes intact,12docs updated,0remaining test resources. STOP at Owner review |
+
+Historical checkpoint: **HT-FE-TASK-BRIEF-24H-VI-01 — CANDIDATE IMPLEMENTATION COMPLETE /
+PENDING DEVELOPMENT MIGRATION APPROVAL**.
+
+| Current Task work-brief requirement | Actual scope/evidence |
+|---|---|
+| Optional documents/pay | Implemented4 nullableHTTP(S) URL2048 fields + exact numeric18,0 wholeTaskVND; digit-string DTO/null; strict protocol/integer checks |
+| Permission policy | Existing Task readers includingViewer see pay; only existing managers create/edit; no assignment/payroll/tenant bypass |
+| Date/time | ControlledVIcalendar/dd/mm/yyyy and00–23/00–59 selects; local→UTC unchanged; unchanged edit omitted; old AI helpers preserved |
+| Ordinary hierarchy UI | Controls/queries/labels removed; all stored children/direct routes/API/AIproposal hierarchy remain, no data deletion |
+| Current tests | Targeted132/full937PostgreSQL/Python0; fullfrontend1047,quality0; final Brief4+regression43=47real browsers PASS/actual exits0/ownedcleanup; four-sizeaxe0/keyboard/focus/reflow; earlier failures retained |
+| Migration gate | tasks.0005candidate only, not development applied; source Task paths need columns before reload/manual use. ai.0002unapplied; no full development E2E claimed |
+| Preservation | VERIFIED all29-table fingerprints/schema/history/sequences unchanged12:34:44Z;36migrations/5Users/2Sessions andOwner rows retained;778originals/31finalsource hashes, previous30dirty paths preserved;0resources across15runs |
+
+Historical checkpoint: **HT-FE-WORKSPACE-INHERITANCE-01 — IMPLEMENTATION COMPLETE /
+OWNER REVIEW GATE**.
+
+| Approved inheritance requirement | Current evidence |
+|---|---|
+| Exact month semantics | VERIFIED existing canonical period+unique Profile/month; current configured timezone UTC; never latest(created_at) |
+| Role snapshot/first creation | COMPLETE optional source or confirmed initial MEMBER list, atomic services/audits, legacy omission manual; final real UI4/4 |
+| Safe current onboarding | COMPLETE after accept only, exact ACTIVE current period, no existing row revival/past/future grants; concurrency/rollback/rejoin/month-boundary tests |
+| RBAC/tenant security | VERIFIED existing Profile OWNER/ADMIN authority and grant ceilings; targeted132/full905 PostgreSQL, frontend955 and24 real browsers PASS/actual exits0 |
+| Source/DB preservation | VERIFIED772 originals/19 frozen source hashes, no unrelated changes; full29-table data/schema/history/sequences exact11:12:55Z,36 migrations,ai.0002 unapplied |
+| SMTP | Owner reports Gmail working; not retested/reconfigured here; no external email authorized |
+| Final acceptance | IMPLEMENTATION COMPLETE; all current checks/owned cleanup pass,11docs synchronized; manual Owner acceptance/genuine Gmail not claimed, no next task/deploy |
+
+Historical checkpoint: **HT-FE-INVITATION-DELIVERY-FIX-01 — APPLICATION FIX VERIFIED /
 REAL EMAIL CONFIGURATION PENDING OWNER**.
 
 | Current Invitation delivery requirement | Actual status / evidence |
@@ -802,9 +879,9 @@ remaining business APIs, frontend, and deployment are not complete.
 | ID | Module | Trạng thái | Đã triển khai | Còn thiếu / vấn đề |
 |---|---|---|---|---|
 | F01 | Authentication | PARTIAL OVERALL — FE04 accepted account lifecycle UI VERIFIED | Existing Session/verification/reset backend and applied accounts.0002 retained; register/forgot/reset/own-verification UI with masked memory-only credentials/no auto-login; current frontend395/395 and five real browser suites22/22 pass | Locmem proves test delivery only: REAL EMAIL DELIVERY NOT VERIFIED. Timing equalization, logout-all/deactivation, real provider/distributed throttle and production remain separate |
-| F02 | Profile & Workspace | PARTIAL OVERALL — PROFILE BOOTSTRAP AND WORKSPACE ACCESS IMPLEMENTATION COMPLETE | Existing Profile create/monthly Workspace/lifecycle retained; WORKSPACE-MEMBERS-01 adds same-Profile candidate read/current hints and real grant/update/revoke UI using existing services; backend95/863 and real browser18 PASS,36 migrations/development preserved | Manual Owner acceptance pending; Profile role/remove/general metadata administration and recipient inbox/preview remain separate; no Workspace schema or automatic membership/assignment change |
-| F03 | Membership Invitation | PARTIAL OVERALL — APPLICATION RECOVERY VERIFIED / REAL SMTP PENDING OWNER | Existing consent/token/role-ceiling/identity/audit/transaction services and applied workspace.0004 retained. Verified development console preflight causes503 before any row/audit; added page1/FAILED visibility and persistent error guidance. Invitation48, UI32/full908 and20 real fake/regression browser tests PASS | REAL EMAIL UNCONFIGURED/NOT VERIFIED: Owner must select/configure SMTP and authorize a real send; no automatic fallback or external email. Postcommit503 may retain FAILED row; create409/resend200 rotate remains. No inbox/preview or Profile role/remove API, no automatic Workspace membership |
-| F04 | Task Lifecycle | PARTIAL OVERALL — FE04 accepted UI workflow VERIFIED | Existing hierarchy/workflow/Start/assignment retained; current real UI acceptance1/1 creates/assigns/starts/submits/changes/resubmits/approves through React; full five browser suites22/22 pass. API03A backend95/485 is historical only | No arbitrary transition or auto-completion. Legacy CANCELLED has no cancel action; downstream domains remain separate |
+| F02 | Profile & Workspace | PARTIAL OVERALL — PROFILE BOOTSTRAP / ACCESS / INHERITANCE IMPLEMENTATION COMPLETE | Existing create/monthly lifecycle and member grant/update/revoke retained; bounded optional source role snapshots and confirmed first-Workspace MEMBER selection added; current backend132/full905, frontend955 and24real browsers PASS, full development/source preservation in HANDOVER | Manual Owner acceptance pending; Profile role/remove/general metadata administration and recipient inbox/preview separate; no schema or TaskAssignment mutation |
+| F03 | Membership Invitation | PARTIAL OVERALL — DELIVERY RECOVERY AND ACCEPTED CURRENT-MONTH ONBOARDING VERIFIED | Existing consent/token/role-ceiling/identity/audit and workspace.0004 retained; bounded successful-accept grant only in exact current ACTIVE month when no assignment history; postcommit503/FAILED visibility, create409/resend200 unchanged; current real inheritance/Members/failure-browser regressions pass | Gmail SMTP now Owner-reported working, not a genuine send test by this task. No live mail/config change or automatic fallback. No inbox/preview or Profile role/remove API; revoked rows/past/future months/login/send never auto-granted |
+| F04 | Task Lifecycle | PARTIAL OVERALL — TASK BRIEF DEVELOPMENT ROLLOUT COMPLETE; OWNER UI ACCEPTANCE PENDING | Four optional URLs/exact VND/VI24h inputs and compensation RBAC implemented; tasks.0005 now applied development after verifiedbackup/rehearsal. Legacy data preserved, updatedTaskORM/read-onlyHTTPPASS; historical fulltests labeled in HANDOVER | Owner manually accepts Create/Edit/18:30/assignment/payredaction. Assigned Editor cannot metadata Create/Edit; other readers getNULL. No arbitrary status/auto-complete/payroll; backend and separate AI hierarchy retained. ai.0002 remains unapplied |
 | F05 | Marketplace | NOT STARTED | Chưa có implementation | Publish/claim rules, concurrency guard, API và tests |
 | F06 | Review Upload | PARTIAL OVERALL — accepted text/file_url backend and UI COMPLETE | Existing revisioned text/file_url API/read UI retained; Task.can_submit proves current assignee/state; real React Submit and targeted/full regression PASS | Only text/file_url backend, no upload/storage/media service; other target rollout unauthorized |
 | F07 | Team Review Status | PARTIAL OVERALL — internal backend/rollout/UI COMPLETE | Existing manager review services, one decision per Deliverable and self/stale/concurrency guards retained; per-Deliverable hints and real React Approve/Request Changes/resubmission verified | Client/Guest approval and other target rollout remain separate |

@@ -5,6 +5,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type ElementHandle, type Page } from '@playwright/test'
+import { expectTaskDeadline, fillTaskDeadline } from './task-deadline'
 
 function required(name: string): string {
   const value = process.env[name]
@@ -57,8 +58,8 @@ async function openDraft(page: Page) {
   await expect(dialog).toBeVisible()
   await dialog.getByLabel('Tên công việc', { exact: true }).fill(draft.title)
   await dialog.getByLabel('Mô tả', { exact: true }).fill(draft.description)
-  await dialog.getByLabel('Ưu tiên', { exact: true }).selectOption(draft.priority)
-  await dialog.getByLabel('Thời hạn', { exact: true }).fill(draft.deadline)
+  await dialog.getByLabel('Mức ưu tiên', { exact: true }).selectOption(draft.priority)
+  await fillTaskDeadline(dialog, draft.deadline)
   return dialog
 }
 async function expectDraft(page: Page, original: ElementHandle<HTMLElement | SVGElement>) {
@@ -67,8 +68,8 @@ async function expectDraft(page: Page, original: ElementHandle<HTMLElement | SVG
   expect(await original.evaluate((element) => element.isConnected && element === document.querySelector('dialog[open]'))).toBe(true)
   await expect(dialogFor(page).getByLabel('Tên công việc', { exact: true })).toHaveValue(draft.title)
   await expect(dialogFor(page).getByLabel('Mô tả', { exact: true })).toHaveValue(draft.description)
-  await expect(dialogFor(page).getByLabel('Ưu tiên', { exact: true })).toHaveValue(draft.priority)
-  await expect(dialogFor(page).getByLabel('Thời hạn', { exact: true })).toHaveValue(draft.deadline)
+  await expect(dialogFor(page).getByLabel('Mức ưu tiên', { exact: true })).toHaveValue(draft.priority)
+  await expectTaskDeadline(dialogFor(page), draft.deadline)
 }
 async function observeDocument(page: Page) {
   const navigations: string[] = []

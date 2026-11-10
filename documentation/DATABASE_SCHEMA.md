@@ -2,10 +2,140 @@
 
 # HustlyTasker Database Design
 
-Version: **0.12 persistent development** after the Owner-approved
-HT-AI-P4-02B-R3 rollout on2026-11-02. Current source also contains the unapplied
-governance candidate below; source/development schema are not yet identical.
+Version: **0.13 persistent development** after the Owner-approved
+HT-DB-TASK-BRIEF-ROLLOUT-01 execution on2026-11-10. The earlier R3 rollout applied
+ai.0001; tasks.0005_task_brief is now APPLIED. Source still contains the unapplied
+ai.0002 governance candidate below; source/development schema are not identical.
 Production state is not verified.
+
+## HT-FE-TASK-UX-REFINEMENT-01 — No schema change (2026-11-10)
+
+The existing `Deliverable.file_url` remains **CharField(max_length=500)** /
+varchar(500), not a new upload field or a conversion to URLField. New submission
+and resubmission values must be trimmed nonempty HTTP(S) URLs of at most500
+Unicode code points. Serializer/service validation rejects raw controls, invalid
+Unicode, internal whitespace, backslashes, embedded credentials and invalid
+host/port; no network fetch or media check is performed. This application input
+policy supersedes the original arbitrary-text write policy without a new database
+constraint, migration, backfill or rewrite of historical values. Legacy text/path
+references and all revisions remain stored/readable as originally recorded.
+Task locking, sequential revisions, protected actor FKs and Review constraints
+below are unchanged.
+
+`active_assignment.display_name: string | null` is a computed read-only Task API
+projection, **not a database column**. The current authorized actor and assignee's
+active account/Profile/Workspace access are checked in batched SQL for the
+serialized page. Safe full name → safe username → generic member label is used
+only for an eligible assignee; unavailable identity is null, and absent active
+assignment remains a null object. No User email/UUID fallback, per-Task identity
+request, new role, assignment or compensation grant is introduced. Existing
+TaskAssignment rows, uniqueness, history and whole-Task pay projection remain.
+Description layout and stacked UTC filters change no persisted fields or dates.
+
+The task's actual read-only development inventory is **37 migrations, 5 Users,
+2 Sessions, 3 Tasks and 2 Deliverables**, reflecting Owner activity since the
+rollout snapshot below. tasks.0005 remains APPLIED, ai.0002 remains UNAPPLIED;
+this task creates/applies no migration and inserts no development fixtures.
+Current preservation/test evidence belongs in [HANDOVER](HANDOVER.md). The older
+two-Task/zero-Deliverable rollout counts are historical.
+
+## Historical HT-DB-TASK-BRIEF-ROLLOUT-01 — Development applied (2026-11-10)
+
+**DEVELOPMENT MIGRATION COMPLETE — OWNER UI ACCEPTANCE PENDING.** After fresh
+backup, isolated restore and targeted migration rehearsal, the Owner-authorized
+`python manage.py migrate tasks 0005_task_brief --noinput` completed at
+2026-11-10T13:47:38Z with exit0. The reviewed plan contained only that migration.
+Development history changed36→37 records; tasks.0005 is APPLIED once, while
+ai.0002_dispatch_governance remains UNAPPLIED and its three tables are absent.
+
+Actual Task schema adds only four nullable varchar(2048) URL columns and nullable
+numeric(18,0) estimated_compensation_vnd, all without permanent defaults, plus
+validated CHECK task_compensation_vnd_nonnegative (NULL or >=0). Existing columns,
+foreign keys, indexes and hierarchy/workflow constraints remain unchanged.
+Application HTTP(S)/exact-integer validation and compensation RBAC are unchanged.
+
+Final read-only comparison preserves all29 tables and every legacy business row:
+5Users/2Sessions/2Profiles/3ProfileMemberships/3Workspaces/3WorkspaceMembers/
+2Tasks/0Subtasks/2Assignments/2Invitations/2Notifications/21AuditLogs; AI rows0.
+Task legacy-field fingerprints match and all five new fields are NULL on the
+two existing Tasks. Expected deltas are Task schema, the one migration record
+and its migration sequence advance; a full-row hash containing new NULL columns
+is not expected to match the earlier Task row representation.
+
+Actual config.settings development checks, model-drift check and empty targeted
+plan PASS; read-only Task ORM successfully reads both existing Tasks. Anonymous
+HTTP GET smoke9/9 PASS after normal Django
+launcher/Vite startup; no login, business mutation, genuine email or AI call.
+Full969 backend/1067frontend/43browser results belong to the previous RBAC task,
+not tests rerun during this rollout. Backup/rehearsal/cleanup and current commands
+are recorded in HANDOVER. Earlier candidate/no-apply statements below are
+historical and superseded only for tasks.0005; no AI or production rollout is
+authorized, and no automatic reverse migration or restore is permitted.
+
+## HT-FE-TASK-COMPENSATION-RBAC-01 — No schema change (2026-11-10)
+
+Field-level Task compensation authorization uses current User/ProfileMembership/
+WorkspaceMember/TaskAssignment rows, without altering models, constraints or the
+candidate tasks.0005 migration. Whole-Task numeric(18,0) remains exact and nullable.
+Current authorized managers or effective ACTIVE assignee may read its value;
+other Task readers receive NULL in the API. Metadata writes are unchanged.
+Existing single ACTIVE assignment constraint/history is preserved. No new
+financial table, migration or backfill was introduced by that RBAC task.
+The subsequent controlled rollout above applied tasks.0005_task_brief only;
+ai.0002_dispatch_governance remains pending. Current rollout evidence and the
+earlier isolated regression evidence belong in HANDOVER.
+
+## HT-FE-TASK-BRIEF-24H-VI-01 — Optional Task metadata and candidate history (2026-11-10)
+
+**CURRENT: APPLIED DEVELOPMENT by HT-DB-TASK-BRIEF-ROLLOUT-01 above.**
+`tasks.0005_task_brief` depends on tasks.0004_task_comments, adds four nullable
+URLFields raw_video_url/reference_video_url/template_project_url/script_url
+(max2048, blank allowed, HTTP(S) validator) and nullable estimated_compensation_vnd
+DecimalField(max_digits18,decimal_places0)/numeric(18,0). A CHECK permits null or
+nonnegative compensation. Maximum18 digits is an exact storage/transport bound,
+not an approved financial budget. No float storage, backfill, destructive schema
+operation, Task rename or hierarchy/assignment/review change.
+
+Legacy rows receive null metadata. Model/serializer/service validation reject
+unsafe URLs and raw floating compensation before coercion; database numeric
+precision/nonnegative CHECK complement application validation. API money is a
+canonical digit string to avoid JavaScript precision loss. Metadata audit records
+field names only; no URL/pay copy. Document links use existing Task read permission;
+compensation follows the narrower current field policy above. Existing manager-only
+write permission remains unchanged.
+
+The source Task model selects these columns. At the historical candidate stage,
+development lacked them and updated Task routes were deliberately not exercised.
+That schema blocker is resolved by the separately approved rollout above; Owner
+manual UI acceptance remains pending. Do not fake history or apply unrelated
+ai.0002. Historical forward/reverse candidate tests ran
+only on disposable PostgreSQL; reversing later would DROP newly entered metadata
+and is not a safe automatic development rollback strategy.
+
+Historical pre-rollout READ ONLY12:34:44Z:29 tables/36 applied migrations/5 Users/2 Sessions/
+3 Workspaces/3 WorkspaceMembers/2 Tasks, all row/schema/constraint/index/sequence/
+history/cluster fingerprints unchanged except transient connections. tasks.0005
+andai.0002 both unapplied; five candidate Task columns absent. Targeted132/full937
+PostgreSQL tests PASS/actualPython0, including3 new empty/populated/reverse
+rehearsals preserving hierarchy/assignment/Review history and numeric constraints.
+Model/graph/migration consistency and owned cleanup pass. No metadata backfill or
+persistent schema/data mutation; candidate ready for Owner rollout review only.
+
+## HT-FE-WORKSPACE-INHERITANCE-01 — No schema change (2026-11-10)
+
+Workspace role snapshots and current-month Invitation onboarding reuse existing
+Workspace.period (canonical first-of-month, unique Profile+period), ProfileMembership
+and unique(Workspace,user) WorkspaceMember. Source relation is request/audit
+metadata only; destination rows are independent snapshots. No new migration,
+backfill/current flag, task copy or applied-migration edit. Current month uses
+existing Django UTC settings and ACTIVE target only, not latest(created_at).
+No existing revoked Workspace row is automatically reactivated. Initial/read-only
+development:29 tables/36 migrations; ai.0002 remains UNAPPLIED. Final11:12:55Z
+READ ONLY comparison exactly matches data/schema/constraints/indexes/sequences/
+history/cluster properties except transient connections. Targeted132/full905
+isolated PostgreSQL tests and model/graph/full-chain consistency pass, actual
+Python0. Isolated tests may apply the full candidate chain
+only to disposable targets. Owner database rows must remain unchanged.
 
 ## HT-AI-P4-04C — Candidate dispatch governance schema (2026-11-08)
 
@@ -1002,7 +1132,7 @@ Fields:
 |-|-|
 | id | UUID |
 | task_id | FK |
-| file_url | varchar |
+| file_url | varchar(500); historical text retained; new service submissions require validated HTTP(S) URL |
 | uploaded_by | FK User (`PROTECT`) |
 | revision | positive integer, nullable only for legacy/unmapped rows |
 | status | enum |
@@ -1038,6 +1168,9 @@ Current development constraints/indexes (`reviews.0002`, applied by HT-DB-P1-07)
 - `deliv_task_status_created_idx` supports revision/status history reads.
 - Supported submissions allocate revisions sequentially under a Task lock;
   migration never invents revisions for existing rows.
+- HT-FE-TASK-UX-REFINEMENT-01 validates only new submission/resubmission URLs in
+  the serializer and service. Stored legacy text/path values are preserved on
+  read; no database URL constraint, cleanup migration, fetch or upload is added.
 
 
 
@@ -2027,9 +2160,11 @@ Implemented aggregate:
 - immutable terminal records, with reinvite/resend represented by a new
   credential/record rather than reusing a consumed token.
 
-Acceptance is a transactional Profile-level operation and never creates a
-WorkspaceMember automatically. Lock order is Profile → Invitation → relevant
-ProfileMembership rows. Constraints provide duplicate/replay defense while
+Acceptance is a transactional Profile-level operation. Under the newer approved
+HT-FE-WORKSPACE-INHERITANCE-01 scope it may create an absent current ACTIVE month
+MEMBER row, never restore revoked history. Lock order starts Profile → Invitation
+→ relevant ProfileMembership rows; the current Workspace is locked before grant.
+Constraints provide duplicate/replay defense while
 the service enforces recipient binding, expiry, role ceiling, one terminal
 winner, same-Profile scope, and atomic audit.
 
@@ -2051,8 +2186,9 @@ scope.
 - Deactivating a ProfileMembership does not delete its WorkspaceMember history.
   Effective authorization requires both active Profile membership and
   applicable Workspace access. Invitation acceptance soft-revokes any stale
-  active same-Profile WorkspaceMember rows so rejoin never restores access;
-  later access requires an explicit direct-add.
+  active same-Profile WorkspaceMember rows so those assignments never revive.
+  Existing rows require explicit direct-add to restore; accepted onboarding may
+  create a genuinely missing current-month assignment under the approved scope.
 - A selected Profile or Workspace is navigation context only, never evidence
   of authorization.
 - Tenant FKs become non-null only after target-specific inventory, explicit

@@ -1,0 +1,26 @@
+.task-deadline-field { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-card); display: grid; gap: 12px; }
+.task-deadline-field > legend { padding-inline: 4px; }
+.task-deadline-field > p { margin: 0; }
+.task-date-field { min-width: 0; }
+.task-clock-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.task-date-calendar { margin-top: 8px; }
+.task-date-calendar > summary { color: var(--color-primary); cursor: pointer; padding-block: 10px; min-height: 44px; }
+.task-date-calendar-disabled { padding-block: 10px; min-height: 44px; opacity: .6; }
+.task-calendar-panel { margin-top: 8px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.task-calendar-controls { display: flex; align-items: end; gap: 6px; }
+.task-calendar-controls > button { flex: 0 0 36px; min-width: 36px; padding: 8px; }
+.task-calendar-period { min-width: 0; flex: 1; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 6px; }
+.task-calendar-period label { min-width: 0; font-size: 12px; }
+.task-calendar-period .input { padding: 8px 4px; min-height: 44px; font-size: 14px; }
+.task-calendar-heading { margin-block: 12px; font-weight: 600; }
+.task-calendar-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.task-calendar-grid th { padding-block: 6px; color: var(--color-muted); font-size: 12px; }
+.task-calendar-grid abbr { text-decoration: none; }
+.task-calendar-grid td { padding: 1px; text-align: center; }
+.task-calendar-day { width: 100%; min-height: 38px; padding: 0; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--color-text); font: inherit; font-size: 14px; cursor: pointer; }
+.task-calendar-day:hover { background: var(--color-canvas); border-color: var(--color-border); }
+.task-calendar-day[aria-pressed="true"] { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); }
+.task-calendar-day:disabled { cursor: default; opacity: .6; }
+@media (max-width: 639px) {
+  .task-calendar-period { grid-template-columns: minmax(0,1fr); }
+}

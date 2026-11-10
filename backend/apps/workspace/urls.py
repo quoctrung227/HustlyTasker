@@ -15,6 +15,7 @@ from .views import (
     WorkspaceArchiveView,
     WorkspaceDetailView,
     WorkspaceListView,
+    WorkspaceInheritancePreviewView,
     WorkspaceMemberCandidateListView,
     WorkspaceMemberDetailView,
     WorkspaceMemberListView,
@@ -85,6 +86,11 @@ urlpatterns = [
         ),
         ProfileInvitationResendView.as_view(),
         name="profile-invitation-resend",
+    ),
+    path(
+        "profiles/<str:profile_id>/workspace-inheritance/",
+        WorkspaceInheritancePreviewView.as_view(),
+        name="workspace-inheritance-preview",
     ),
     path(
         "profiles/<str:profile_id>/workspaces/",
