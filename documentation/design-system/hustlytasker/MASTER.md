@@ -1,5 +1,36 @@
 # HustlyTasker web design system
 
+## HT-AI-MVP — Smart Task Generator and Feedback Analyzer
+
+Live AI forms keep the existing teal and neutral tokens, native dialogs, cards,
+inputs and buttons. Ready, disabled, missing configuration and pending migration
+states show distinct text. The live form explains that submitted content goes to
+OpenAI. Fixture previews retain their separate simulation labels.
+
+Smart Task Generator keeps the brief, count and deadline in a labeled form.
+Flat drafts use native checkboxes with readable labels and a selected count.
+The confirmation dialog shows only the selected drafts and their edited values.
+An optional labeled decimal input accepts comma or dot, carries a visible hint
+and connects inline errors to the focusable summary. The dialog previews the
+approved hours. The receipt and Task Detail show the value read from the
+scoped Task API. Rejection uses its own explicit confirmation. Scope changes
+abort pending requests and clear local draft state.
+
+Feedback Analyzer groups selectable sources and offers a labeled manual field.
+The result moves focus to its heading and displays source quotes separately from
+model suggestions. The editable actions can be copied for use in the existing
+workflow. Discarding a result returns focus to the analysis button.
+
+The local UI UX Pro Max skill and this master guided the update. The focused
+`error summary validation --domain ux` and `async request pending cleanup --stack react`
+searches supported linked errors, keyboard focus, pending feedback and cleanup.
+The estimate follow-up used `inline validation decimal form --domain ux` and
+`async fetch cleanup --stack react` for field errors, cancellation and the saved
+state. The browser suite verified the error link focus and both mobile and
+desktop layouts.
+The isolated browser suite exercises existing React screens with fake provider
+transport. See [HANDOVER](../../HANDOVER.md) for the executed test results.
+
 ## Trash V1 — existing system extension
 
 2026-11-20. Keep teal/neutral tokens, typography, shared Card/Button/Alert/

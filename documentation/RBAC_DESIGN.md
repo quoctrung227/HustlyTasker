@@ -1,5 +1,26 @@
 # HT-RBAC-DESIGN-P0-01
 
+## HT-AI-MVP live authority — verified with isolated fake transport
+
+Both AI endpoints use the existing `CanManageWorkspaceTasks` capability. Active
+Profile Owner/Admin users inherit it, and other eligible Profile members need
+an effective Workspace ADMIN role. Staff status and a Task or proposal UUID grant
+no tenant authority. Django SessionAuthentication and CSRF continue to apply.
+Archived or trashed Profile/Workspace contexts cannot dispatch live AI or mutate
+drafts. Analyzer also requires a visible Task and selects only current Review or
+nondeleted Comment text scoped to that Task. It rechecks context and selected text
+around dispatch, and sends locally redacted source text with local refs instead
+of identities. Pattern redaction is limited to recognizable values.
+
+Live proposal retrieval, confirmation and rejection require the original actor,
+the exact Profile/Workspace and current authority. Confirmation locks the same
+tenant scope and proposal, checks the revision/status, then uses the normal Task
+creation service in one transaction. It creates only root Tasks. Both confirmation
+and rejection clear the draft payload, and only a settled, scoped live dispatch
+can establish live proposal provenance. Feedback results are advisory and cannot
+perform Review decisions or other mutations. Live quotas reserve under database
+locks before each chargeable dispatch. See [AI MVP](AI_MVP.md).
+
 ## Trash V1 verified authority — 2026-11-20
 
 **HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**

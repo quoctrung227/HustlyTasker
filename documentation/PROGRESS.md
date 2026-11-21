@@ -1,5 +1,57 @@
 # PROJECT PROGRESS
 
+## HT-AI-MVP Task schema rollout — 2026-11-21
+
+**TASK SCHEMA ROLLOUT COMPLETE — PENDING CONTROLLED LIVE TEST APPROVAL.**
+Applied only `tasks.0007_task_estimated_hours` after protected backup and
+isolated restore/migration rehearsal. History 45 → 46. Five legacy Tasks
+retain NULL estimates and legacy fingerprints match. Read-only smoke passed.
+Fresh isolated regression exited 0 with 823 cases discovered and focused
+47/47 passed. See [HANDOVER](HANDOVER.md) for evidence and limitations.
+
+## Historical HT-AI-MVP estimated hours implementation — 2026-11-21
+
+**ESTIMATED HOURS IMPLEMENTED — PENDING DEVELOPMENT MIGRATION APPROVAL.**
+Full isolated backend 1,202/1,202, frontend 1,305/1,305 and Chromium 3/3 passed.
+The forward development
+plan contains only `tasks.0007_task_estimated_hours` and remains pending
+separate rollout approval. See [HANDOVER](HANDOVER.md) for verification.
+
+## Historical HT-AI-MVP estimate persistence and final readiness — 2026-11-21
+
+**ESTIMATE PERSISTENCE BLOCKED — TASK SCHEMA GAP.** Verified `tasks_task`
+has no hours field on development. Both AI migrations remain applied and
+history is 45. The scoped schema and confirmation design needs Owner approval.
+Fake-provider backend and browser regression passed, including the new
+invalid/null confirmation test and terminal reject/reload. Live is off, the
+local key is absent, and a bounded synthetic smoke is documented. The SMTP
+exposure remains open. See [handover](HANDOVER.md) and [AI MVP](AI_MVP.md).
+
+## HT-AI-MVP safe development rollout — 2026-11-21
+
+**DEVELOPMENT MIGRATION COMPLETE — PENDING LIVE PROVIDER ACCEPTANCE.**
+Applied exactly `ai.0002_dispatch_governance` and `ai.0003_proposal_rejection`
+after protected backup and isolated restore/migration rehearsal. History
+43 → 45. Legacy data fingerprints match. Isolated regression passed 817/817.
+See [HANDOVER](HANDOVER.md) for receipts. SMTP exposure remains an outstanding
+risk with remediation deferred by the Owner. AI live and paid evaluation are
+pending separate approval. `estimated_hours` remains draft-only.
+
+## Historical HT-AI-MVP implementation — 2026-11-21
+
+**IMPLEMENTATION COMPLETE — PENDING OWNER LIVE PROVIDER / MIGRATION APPROVAL.**
+
+The live OpenAI code path is implemented for Smart Task Generator and Feedback
+Analyzer. It uses server-selected mode, strict Responses API schemas, existing
+session/CSRF and tenant services, durable proposal confirmation and shared
+dispatch accounting. See [AI_MVP](AI_MVP.md) for configuration, pricing, limits
+and the evaluation format. See [HANDOVER](HANDOVER.md) for the current tests.
+
+Development activation requires Owner approval for `ai.0002_dispatch_governance`
+and `ai.0003_proposal_rejection`, plus separate live provider, cost and data
+approval. Real-model evaluation remains pending. Trash acceptance is Owner
+reported. Permanent deletion remains disabled.
+
 ## Current development rollout — 2026-11-20 — HT-TRASH-V1
 
 **HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**

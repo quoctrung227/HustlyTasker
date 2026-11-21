@@ -14,6 +14,7 @@ from .brief import (
     normalize_task_compensation,
     normalize_task_reference,
 )
+from .estimates import MAX_ESTIMATED_HOURS, MIN_ESTIMATED_HOURS, normalize_task_estimated_hours
 
 
 class Task(BaseModel):
@@ -85,6 +86,8 @@ class Task(BaseModel):
         blank=True,
         null=True
     )
+
+    estimated_hours = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, editable=False)
 
     raw_video_url = models.URLField(
         max_length=2048, null=True, blank=True,
@@ -158,6 +161,11 @@ class Task(BaseModel):
                 ),
                 name="task_compensation_vnd_nonnegative",
             ),
+            models.CheckConstraint(
+                condition=(models.Q(estimated_hours__isnull=True)
+                           | models.Q(estimated_hours__gte=MIN_ESTIMATED_HOURS, estimated_hours__lte=MAX_ESTIMATED_HOURS)),
+                name="task_estimated_hours_range",
+            ),
         ]
         indexes = [
             models.Index(fields=("purge_after", "id"), condition=models.Q(deleted_at__isnull=False), name="task_trash_due_idx"),
@@ -182,6 +190,8 @@ class Task(BaseModel):
             self.estimated_compensation_vnd = normalize_task_compensation(
                 self.estimated_compensation_vnd, allow_decimal=True,
             )
+        if "estimated_hours" not in excluded and "estimated_hours" in self.__dict__:
+            self.estimated_hours = normalize_task_estimated_hours(self.estimated_hours)
         super().clean_fields(exclude=exclude)
 
     def clean(self):

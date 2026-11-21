@@ -1,5 +1,34 @@
 # CHANGELOG
 
+## Unreleased — 2026-11-21 — HT-AI-MVP Task schema rollout
+
+Applied only `tasks.0007_task_estimated_hours` to development after protected
+backup and isolated restore/migration rehearsal. Legacy data is preserved and
+all five original Tasks have NULL hours. Controlled live test approval remains
+pending. See [HANDOVER](HANDOVER.md).
+
+## Unreleased — 2026-11-21 — HT-AI-MVP estimated hours
+
+Added editable estimated hours to live Generator drafts and persisted the approved
+decimal or null at Task confirmation. Task list/detail expose the stored value.
+Manual Task requests keep their existing allowlist. The development rollout
+of `tasks.0007_task_estimated_hours` is recorded above.
+
+## Unreleased — 2026-11-21 — HT-AI-MVP development rollout
+
+Applied only `ai.0002_dispatch_governance` and `ai.0003_proposal_rejection`
+on development after protected backup and isolated restore rehearsal. Verified
+catalog and legacy data preservation. Real provider acceptance remains pending.
+
+## Unreleased — 2026-11-21 — HT-AI-MVP implementation
+
+Added an explicitly enabled backend OpenAI Responses path for Task Generator
+and Feedback Analyzer. Added model output validation, shared durable quota and
+usage, flat editable drafts, terminal rejection and grounded feedback citations.
+Added the offline evaluation harness and the isolated fake transport browser
+suite. Real provider use remains separately gated.
+See [AI_MVP](AI_MVP.md) and [HANDOVER](HANDOVER.md).
+
 Lịch sử thay đổi của dự án HustlyTasker.
 
 ## Unreleased - 2026-11-20

@@ -22,6 +22,7 @@ from apps.workspace.services import lock_workspace_mutation_context
 
 from .models import Task, TaskAssignment
 from .brief import TASK_BRIEF_URL_FIELDS, normalize_task_compensation, normalize_task_reference
+from .estimates import normalize_task_estimated_hours
 
 
 _UNSET = object()
@@ -181,6 +182,7 @@ def create_task(
     template_project_url=None,
     script_url=None,
     estimated_compensation_vnd=None,
+    estimated_hours=None,
 ):
     context, workspace, _ = lock_workspace_mutation_context(
         actor=actor,
@@ -201,6 +203,7 @@ def create_task(
         status=Task.Status.PENDING,
         priority=priority,
         deadline=deadline,
+        estimated_hours=normalize_task_estimated_hours(estimated_hours),
         raw_video_url=normalize_task_reference(raw_video_url, field="raw_video_url"),
         reference_video_url=normalize_task_reference(reference_video_url, field="reference_video_url"),
         template_project_url=normalize_task_reference(template_project_url, field="template_project_url"),

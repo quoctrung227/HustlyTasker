@@ -48,6 +48,15 @@ describe('safe OPTIONS and localized field errors', () => {
 })
 
 describe('Task filters, scope and read contracts', () => {
+  it('reads exact decimal estimates and null in both detail and list contracts', async () => {
+    const estimated = { ...task, estimated_hours: '3.25' }
+    const unestimated = { ...task, id: otherId, estimated_hours: null }
+    vi.mocked(apiClient.request).mockResolvedValueOnce(estimated).mockResolvedValueOnce(page([estimated, unestimated]))
+    expect(await workApi.task(profileId, workspaceId, taskId)).toMatchObject({ estimated_hours: '3.25' })
+    expect((await workApi.tasks(profileId, workspaceId)).results).toEqual([estimated, unestimated])
+    vi.mocked(apiClient.request).mockResolvedValueOnce({ ...task, estimated_hours: '3.251' })
+    await expect(workApi.task(profileId, workspaceId, taskId)).rejects.toMatchObject({ kind: 'invalid-response' })
+  })
   it('normalizes missing legacy brief fields to null without rejecting older Task responses', async () => {
     const legacy = { ...task }
     delete legacy.raw_video_url; delete legacy.reference_video_url; delete legacy.template_project_url; delete legacy.script_url; delete legacy.estimated_compensation_vnd

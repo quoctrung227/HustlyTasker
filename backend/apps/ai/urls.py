@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .api import ProposalConfirmView, ProposalDetailView, ProposalGenerateView
+from .api import ProposalConfirmView, ProposalDetailView, ProposalGenerateView, ProposalRejectView
 from .feedback_api import FeedbackAnalyzeView
 
 
@@ -14,4 +14,5 @@ urlpatterns = [
     path(_prefix, ProposalGenerateView.as_view(), name="proposal-generate"),
     path(f"{_prefix}<str:proposal_id>/", ProposalDetailView.as_view(), name="proposal-detail"),
     path(f"{_prefix}<str:proposal_id>/confirm/", ProposalConfirmView.as_view(), name="proposal-confirm"),
+    path(f"{_prefix}<str:proposal_id>/reject/", ProposalRejectView.as_view(), name="proposal-reject"),
 ]

@@ -66,10 +66,12 @@ class HarnessSafetyTests(unittest.TestCase):
         self.assertTrue(options.exclude_ai_governance)
 
     def test_scoped_migration_targets_keep_ai_initial_and_other_leaves(self):
-        targets = [("workspace", "0006_soft_delete"), ("ai", "0002_dispatch_governance")]
-        self.assertEqual(harness.scoped_migration_targets(targets),
-            [("workspace", "0006_soft_delete"), ("ai", "0001_initial")])
-        self.assertEqual(targets[-1], ("ai", "0002_dispatch_governance"))
+        for leaf in ("0002_dispatch_governance", "0003_proposal_rejection"):
+            with self.subTest(leaf=leaf):
+                targets = [("workspace", "0006_soft_delete"), ("ai", leaf)]
+                self.assertEqual(harness.scoped_migration_targets(targets),
+                    [("workspace", "0006_soft_delete"), ("ai", "0001_initial")])
+                self.assertEqual(targets[-1], ("ai", leaf))
 
     def test_scoped_policy_refuses_explicit_ai_governance_execution(self):
         with self.assertRaises(RuntimeError):

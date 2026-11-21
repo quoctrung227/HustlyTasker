@@ -34,6 +34,7 @@ class TaskApiTests(APITestCase):
         "reference_video_url",
         "template_project_url",
         "script_url",
+        "estimated_hours",
         "estimated_compensation_vnd",
         "active_assignment",
         "can_start",
@@ -333,6 +334,7 @@ class TaskApiTests(APITestCase):
         self.assert_task_response(create_response, status.HTTP_201_CREATED)
         self.assertEqual(create_response.data["title"], "API-created Task")
         self.assertEqual(create_response.data["status"], Task.Status.PENDING)
+        self.assertIsNone(create_response.data["estimated_hours"])
         self.assertIsNone(create_response.data["active_assignment"])
         self.assertIs(create_response.data["can_delete"], True)
 
@@ -356,8 +358,23 @@ class TaskApiTests(APITestCase):
                 )
                 expected_delete = actor == self.owner
                 self.assertIs(detail_response.data["can_delete"], expected_delete)
+                self.assertIsNone(detail_response.data["estimated_hours"])
                 created_row = next(row for row in list_response.data["results"] if row["id"] == str(created_id))
                 self.assertIs(created_row["can_delete"], expected_delete)
+                self.assertIsNone(created_row["estimated_hours"])
+
+    def test_manual_task_create_and_patch_keep_estimated_hours_read_only(self):
+        self.client.force_login(self.owner)
+        before_count = Task.objects.count()
+        denied_create = self.client.post(self.task_list_url(), {"title": "Manual task", "estimated_hours": "2.50"},
+                                         format="json")
+        denied_patch = self.client.patch(self.task_detail_url(), {"estimated_hours": "2.50"}, format="json")
+        for response in (denied_create, denied_patch):
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertIn("estimated_hours", response.data)
+        self.assertEqual(Task.objects.count(), before_count)
+        self.task.refresh_from_db()
+        self.assertIsNone(self.task.estimated_hours)
 
     def test_profile_and_workspace_managers_can_create_and_patch(self):
         actors = (self.owner, self.profile_admin, self.workspace_admin)

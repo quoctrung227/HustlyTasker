@@ -3,6 +3,7 @@
 import json
 import re
 from datetime import datetime, timezone
+from decimal import InvalidOperation
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -88,7 +89,7 @@ def _request_size(value, limits):
         _fail(ErrorCode.VALIDATION_ERROR, "request")
 
 
-def _strict_json(raw, limits):
+def _strict_json(raw, limits, *, parse_float=float):
     code = ErrorCode.INVALID_PROVIDER_RESPONSE
     if type(raw) is not str:
         _fail(code, "response")
@@ -111,8 +112,8 @@ def _strict_json(raw, limits):
         def reject_constant(value):
             raise ValueError()
 
-        value = json.loads(raw, object_pairs_hook=unique_object, parse_constant=reject_constant)
-    except (ValueError, UnicodeEncodeError, RecursionError):
+        value = json.loads(raw, object_pairs_hook=unique_object, parse_constant=reject_constant, parse_float=parse_float)
+    except (ValueError, UnicodeEncodeError, InvalidOperation, RecursionError):
         _fail(code, "response")
     return value
 

@@ -7,7 +7,7 @@ _test = test_environment(os.environ)
 # Never consume local/production configuration, including SMTP or proxy flags.
 # This affects this test process only; no .env or Owner environment is edited.
 for _name in list(os.environ):
-    if _name.startswith(("POSTGRES_", "DJANGO_", "PG")) and _name != "DJANGO_SETTINGS_MODULE":
+    if _name.startswith(("POSTGRES_", "DJANGO_", "PG", "OPENAI_")) and _name != "DJANGO_SETTINGS_MODULE":
         del os.environ[_name]
 os.environ.update({
     "DJANGO_ENVIRONMENT": "development",

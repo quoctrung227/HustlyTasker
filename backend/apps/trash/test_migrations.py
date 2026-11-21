@@ -26,9 +26,10 @@ class TrashMetadataMigrationTests(TransactionTestCase):
         self.addCleanup(self.restore_original)
         # Preserve every unrelated applied leaf, including the test run's
         # explicitly selected AI policy; never request a new AI migration.
-        self.before = [target for target in self.original_targets
-                       if target[0] not in ("workspace", "tasks")]
-        self.before += [("workspace", "0005_account_invitations"), ("tasks", "0005_task_brief")]
+        unrelated = [target for target in self.original_targets if target[0] not in ("workspace", "tasks")]
+        self.before = unrelated + [("workspace", "0005_account_invitations"), ("tasks", "0005_task_brief")]
+        # Exercise the historical Trash rollout, then restore newer leaves in cleanup.
+        self.after = unrelated + sorted(self.candidates)
         executor.migrate(self.before)
         self.old_apps = executor.loader.project_state(self.before).apps
 
@@ -37,13 +38,13 @@ class TrashMetadataMigrationTests(TransactionTestCase):
 
     def forward(self):
         executor = MigrationExecutor(connection)
-        plan = executor.migration_plan(self.original_targets)
+        plan = executor.migration_plan(self.after)
         self.assertEqual({(item.app_label, item.name) for item, _ in plan}, self.candidates)
         self.assertTrue(all(not backwards for _, backwards in plan))
-        executor.migrate(self.original_targets)
+        executor.migrate(self.after)
         self.assertEqual(("ai", "0002_dispatch_governance") in MigrationExecutor(connection).loader.applied_migrations,
                          self.initial_ai_applied)
-        return executor.loader.project_state(self.original_targets).apps
+        return executor.loader.project_state(self.after).apps
 
     def fixture(self):
         apps = self.old_apps

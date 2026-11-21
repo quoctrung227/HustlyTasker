@@ -1,10 +1,21 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-11-20
+## HT-AI-MVP — 2026-11-21
+
+**TASK SCHEMA ROLLOUT COMPLETE — PENDING CONTROLLED LIVE TEST APPROVAL.**
+
+Smart Task Generator and Feedback Analyzer reuse the existing Task and Review
+workflows. The code path for OpenAI and its isolated validation are tracked in
+[HANDOVER](HANDOVER.md) and [AI_MVP](AI_MVP.md). Owner gates remain for real
+provider use and formal evaluation. `estimated_hours` is implemented and its
+development rollout is verified. Project and Subtask are
+outside the live AI MVP scope.
+
+Last updated: 2026-11-21
 
 ## Giai đoạn hiện tại
 
-`PHASE 4 - HT-TRASH-V1 development migration complete; Owner manual acceptance gate`
+`PHASE 4 - HT-AI-MVP development schema verified; controlled live test approval pending`
 
 ## Current development rollout — 2026-11-20 — HT-TRASH-V1
 

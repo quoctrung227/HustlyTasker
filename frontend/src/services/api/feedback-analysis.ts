@@ -1,15 +1,17 @@
-/** Stateless fixture analysis. Suggestions never confer authority or trigger domain writes. */
+/** Advisory analysis. Suggestions cannot confer authority or trigger domain writes. */
 import { ApiError, apiClient, invalidResponse } from './client'
-import { aiPriorities } from './ai'
+import { aiPriorities, validAiUsage } from './ai'
+import type { AiMode, AiUsage } from './ai'
 
 export const feedbackSourceKinds = ['review', 'comment'] as const
 export const feedbackIssueCategories = ['CLARITY', 'TECHNICAL', 'CONTENT', 'PROCESS', 'OTHER'] as const
 export interface FeedbackSelection { kind: typeof feedbackSourceKinds[number]; id: string }
-export interface FeedbackAnalysisInput { sources: FeedbackSelection[]; focus?: string }
+export interface FeedbackAnalysisInput { sources: FeedbackSelection[]; focus?: string; feedback_text?: string }
+export type FeedbackEvidence = { source_ref: string; quote: string }
 export interface FeedbackAnalysisPayload {
-  contract_version: 'ai.feedback.v1'
+  contract_version: 'ai.feedback.v1' | 'ai.feedback.v2'
   summary: string
-  issues: { category: typeof feedbackIssueCategories[number]; description: string; source_refs: string[] }[]
+  issues: { category: typeof feedbackIssueCategories[number]; description: string; source_refs: string[]; severity?: typeof aiPriorities[number]; evidence?: FeedbackEvidence[] }[]
   suggested_actions: { action: string; priority: typeof aiPriorities[number]; rationale: string; source_refs: string[] }[]
   uncertainty: string
   warnings: string[]
@@ -17,13 +19,15 @@ export interface FeedbackAnalysisPayload {
 export interface FeedbackAnalysisResult {
   contract_version: 'ai.v1'
   status: 'READY'
-  mode: 'fixture_demo'
-  generated_by_ai: false
+  mode: AiMode
+  generated_by_ai: boolean
   persisted: false
-  fixture_version: 'fixture.v1'
-  sources: (FeedbackSelection & { ref: string })[]
+  fixture_version: 'fixture.v1' | null
+  provider?: 'openai'
+  model?: string
+  sources: ((FeedbackSelection & { ref: string }) | { ref: string; kind: 'manual'; id: null })[]
   payload: FeedbackAnalysisPayload
-  usage: { input_tokens: 0; billable_output_tokens: 0; cost_usd: '0.000000'; status: 'fixture_zero' }
+  usage: AiUsage
 }
 
 const record = (value: unknown): value is Record<string, unknown> =>
@@ -42,8 +46,8 @@ function sizeWithin(value: unknown, maximum: number): boolean {
     return typeof raw === 'string' && raw.length <= maximum && new TextEncoder().encode(raw).byteLength <= maximum
   } catch { return false }
 }
-function validSelections(value: unknown): value is FeedbackSelection[] {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 20) return false
+function validSelections(value: unknown, manual = false): value is FeedbackSelection[] {
+  if (!Array.isArray(value) || value.length < (manual ? 0 : 1) || value.length > (manual ? 19 : 20)) return false
   const seen = new Set<string>()
   for (const item of value) {
     if (!record(item) || !exact(item, ['kind', 'id']) || !kind(item.kind) || !uuid(item.id)) return false
@@ -55,11 +59,18 @@ function validSelections(value: unknown): value is FeedbackSelection[] {
 }
 
 export function validateFeedbackFocus(value: unknown): value is string { return text(value, 1000) }
+export function validateManualFeedback(value: unknown): value is string { return text(value, 4000, true) }
 
 /** Reject unknown/mutation fields and return a plain immutable-in-flight wire snapshot. */
-export function validateFeedbackInput(value: unknown): FeedbackAnalysisInput {
-  if (!record(value) || Object.keys(value).some((field) => field !== 'sources' && field !== 'focus') ||
-      !validSelections(value.sources)) {
+export function validateFeedbackInput(value: unknown, mode: AiMode = 'fixture_demo'): FeedbackAnalysisInput {
+  if (!record(value) || Object.keys(value).some((field) => field !== 'sources' && field !== 'focus' && (mode !== 'openai_live' || field !== 'feedback_text'))) {
+    throw new ApiError(400, 'validation', 'Yêu cầu phân tích không hợp lệ.')
+  }
+  const manual = value.feedback_text !== undefined
+  if (manual && !validateManualFeedback(value.feedback_text)) {
+    throw new ApiError(400, 'validation', 'Nội dung phản hồi chưa hợp lệ.', { feedback_text: 'Nhập phản hồi từ 1 đến 4.000 ký tự hợp lệ.' })
+  }
+  if (!validSelections(value.sources, manual)) {
     throw new ApiError(400, 'validation', 'Vui lòng chọn từ 1 đến 20 nguồn phản hồi hợp lệ, không trùng lặp.',
       { sources: 'Chọn từ 1 đến 20 nhận xét thuộc công việc hiện tại.' })
   }
@@ -70,6 +81,7 @@ export function validateFeedbackInput(value: unknown): FeedbackAnalysisInput {
   const input: FeedbackAnalysisInput = {
     sources: value.sources.map((item) => ({ kind: item.kind, id: item.id.toLowerCase() })),
     ...(value.focus === undefined ? {} : { focus: value.focus }),
+    ...(typeof value.feedback_text === 'string' ? { feedback_text: value.feedback_text } : {}),
   }
   if (!sizeWithin(input, 32768)) throw new ApiError(400, 'validation', 'Yêu cầu vượt giới hạn 32 KiB.')
   return input
@@ -79,38 +91,46 @@ function citations(value: unknown, allowed: ReadonlySet<string>): value is strin
   return Array.isArray(value) && value.length >= 1 && value.length <= 5 &&
     value.every((ref) => typeof ref === 'string' && allowed.has(ref)) && new Set(value).size === value.length
 }
-function payload(value: unknown, allowed: ReadonlySet<string>): value is FeedbackAnalysisPayload {
+function validEvidence(value: unknown, allowed: ReadonlySet<string>): boolean {
+  return Array.isArray(value) && value.length === allowed.size && value.length >= 1 && value.length <= 3 &&
+    value.every((item) => record(item) && exact(item, ['source_ref', 'quote']) &&
+      typeof item.source_ref === 'string' && allowed.has(item.source_ref) && text(item.quote, 300, true)) &&
+    new Set(value.map((item) => item.source_ref)).size === allowed.size
+}
+
+function payload(value: unknown, allowed: ReadonlySet<string>, live: boolean): value is FeedbackAnalysisPayload {
   if (!record(value) || !exact(value, ['contract_version', 'summary', 'issues', 'suggested_actions', 'uncertainty', 'warnings']) ||
-      value.contract_version !== 'ai.feedback.v1' || !text(value.summary, 1600, true) ||
+      value.contract_version !== (live ? 'ai.feedback.v2' : 'ai.feedback.v1') || !text(value.summary, 1600, true) ||
       !text(value.uncertainty, 600) || !Array.isArray(value.warnings) || value.warnings.length > 10 ||
       !value.warnings.every((warning) => text(warning, 300)) ||
       !Array.isArray(value.issues) || value.issues.length > 10 ||
       !Array.isArray(value.suggested_actions) || value.suggested_actions.length > 10) return false
-  return value.issues.every((item) => record(item) && exact(item, ['category', 'description', 'source_refs']) &&
-    feedbackIssueCategories.some((category) => category === item.category) && text(item.description, 500, true) && citations(item.source_refs, allowed)) &&
+  return value.issues.every((item) => record(item) && exact(item, ['category', 'description', 'source_refs', ...(live ? ['severity', 'evidence'] : [])]) &&
+    feedbackIssueCategories.some((category) => category === item.category) && text(item.description, 500, true) && citations(item.source_refs, allowed) &&
+    (!live || (aiPriorities.some((priority) => priority === item.severity) && validEvidence(item.evidence, new Set(item.source_refs))))) &&
     value.suggested_actions.every((item) => record(item) && exact(item, ['action', 'priority', 'rationale', 'source_refs']) &&
       text(item.action, 500, true) && aiPriorities.some((priority) => priority === item.priority) &&
       text(item.rationale, 300) && citations(item.source_refs, allowed))
 }
 
 /** Match the response to the frozen request, rather than trusting model-provided IDs. */
-export function validateFeedbackAnalysis(value: unknown, expectedSources: readonly FeedbackSelection[]): FeedbackAnalysisResult {
-  if (!validSelections(expectedSources) || !record(value) ||
-      !exact(value, ['contract_version', 'status', 'mode', 'generated_by_ai', 'persisted', 'fixture_version', 'sources', 'payload', 'usage']) ||
+export function validateFeedbackAnalysis(value: unknown, expectedSources: readonly FeedbackSelection[], mode: AiMode = 'fixture_demo', manual = false): FeedbackAnalysisResult {
+  const live = mode === 'openai_live'
+  if (!validSelections(expectedSources, manual) || !record(value) || (manual && !live) ||
+      !exact(value, ['contract_version', 'status', 'mode', 'generated_by_ai', 'persisted', 'fixture_version', 'sources', 'payload', 'usage', ...(live ? ['provider', 'model'] : [])]) ||
       !sizeWithin(value, 65536) || value.contract_version !== 'ai.v1' || value.status !== 'READY' ||
-      value.mode !== 'fixture_demo' || value.generated_by_ai !== false || value.persisted !== false ||
-      value.fixture_version !== 'fixture.v1' || !Array.isArray(value.sources) || value.sources.length !== expectedSources.length ||
-      !record(value.usage) || !exact(value.usage, ['input_tokens', 'billable_output_tokens', 'cost_usd', 'status']) ||
-      value.usage.input_tokens !== 0 || value.usage.billable_output_tokens !== 0 ||
-      value.usage.cost_usd !== '0.000000' || value.usage.status !== 'fixture_zero') throw invalidResponse()
+      value.mode !== mode || value.generated_by_ai !== live || value.persisted !== false ||
+      (live ? value.fixture_version !== null || value.provider !== 'openai' || !text(value.model, 120, true) : value.fixture_version !== 'fixture.v1') ||
+      !Array.isArray(value.sources) || value.sources.length !== expectedSources.length + Number(manual) || !validAiUsage(value.usage, mode)) throw invalidResponse()
   const allowed = new Set<string>()
   for (const [index, item] of value.sources.entries()) {
+    if (!record(item) || !exact(item, ['ref', 'kind', 'id']) || item.ref !== `S${index + 1}`) throw invalidResponse()
     const expected = expectedSources[index]
-    if (!expected || !record(item) || !exact(item, ['ref', 'kind', 'id']) || item.ref !== `S${index + 1}` ||
-        !kind(item.kind) || !uuid(item.id) || item.kind !== expected.kind || item.id.toLowerCase() !== expected.id.toLowerCase()) throw invalidResponse()
+    if (expected ? (!kind(item.kind) || !uuid(item.id) || item.kind !== expected.kind || item.id.toLowerCase() !== expected.id.toLowerCase())
+      : (!manual || item.kind !== 'manual' || item.id !== null)) throw invalidResponse()
     allowed.add(item.ref)
   }
-  if (!payload(value.payload, allowed)) throw invalidResponse()
+  if (!payload(value.payload, allowed, live)) throw invalidResponse()
   return value as unknown as FeedbackAnalysisResult
 }
 
@@ -123,11 +143,12 @@ export const feedbackAnalysisKeys = {
     ['feedback-analysis', userId, profileId, workspaceId, taskId] as const,
 }
 export const feedbackAnalysisApi = {
-  async analyze(profileId: string, workspaceId: string, taskId: string, input: FeedbackAnalysisInput, signal?: AbortSignal): Promise<FeedbackAnalysisResult> {
-    const body = validateFeedbackInput(input)
+  async analyze(profileId: string, workspaceId: string, taskId: string, input: FeedbackAnalysisInput, signal?: AbortSignal, liveKey?: string): Promise<FeedbackAnalysisResult> {
+    const mode = liveKey ? 'openai_live' : 'fixture_demo'
+    const body = validateFeedbackInput(input, mode)
     const path = `v1/profiles/${entityId(profileId)}/workspaces/${entityId(workspaceId)}/tasks/${entityId(taskId)}/ai/feedback-analysis/`
     return validateFeedbackAnalysis(await apiClient.request<unknown>(path, {
-      method: 'POST', body, signal, protected: true,
-    }), body.sources)
+      method: 'POST', body, signal, protected: true, ...(liveKey ? { idempotencyKey: liveKey } : {}),
+    }), body.sources, mode, body.feedback_text !== undefined)
   },
 }

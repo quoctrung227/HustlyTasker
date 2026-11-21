@@ -824,7 +824,7 @@ def seed_trash_fixtures(run_id):
 
 
 def run(mode, arguments=()):
-    if mode not in ("serve", "serve-ai", "serve-invitation-delivery-failure", "serve-invitation-v2", "serve-invitation-regression", "serve-workspace-members", "serve-trash", "expire-sessions", "consume-test-mail", "feedback-state"):
+    if mode not in ("serve", "serve-ai", "serve-ai-mvp", "serve-invitation-delivery-failure", "serve-invitation-v2", "serve-invitation-regression", "serve-workspace-members", "serve-trash", "expire-sessions", "consume-test-mail", "feedback-state"):
         raise ValueError("Unknown integration operation.")
     if mode != "consume-test-mail" and arguments:
         raise ValueError("Unexpected integration arguments.")
@@ -840,7 +840,7 @@ def run(mode, arguments=()):
     django.setup()
     from django.core.management import call_command
     from django.db import connections
-    from test_backend import check_cluster, drop_owned_database
+    from test_backend import check_cluster, drop_owned_database, is_governance_migration
 
     maintenance = psycopg.connect(
         host=config["host"], port=config["port"], user=config["user"],
@@ -905,11 +905,11 @@ def run(mode, arguments=()):
             targets = [target if target[0] != "ai" else ("ai", "0001_initial") for target in executor.loader.graph.leaf_nodes()]
             for app, name in targets:
                 plan = MigrationExecutor(connections["default"]).migration_plan([(app, name)])
-                if any(item.app_label == "ai" and item.name == "0002_dispatch_governance" for item, _ in plan):
+                if any(is_governance_migration(item.app_label, item.name) for item, _ in plan):
                     raise RuntimeError("AI governance is outside this browser suite.")
                 call_command("migrate", app, name, interactive=False, verbosity=0)
             executor = MigrationExecutor(connections["default"])
-            if ("ai", "0002_dispatch_governance") in executor.loader.applied_migrations or executor.migration_plan(targets):
+            if any(is_governance_migration(*item) for item in executor.loader.applied_migrations) or executor.migration_plan(targets):
                 raise RuntimeError("Scoped invitation browser migration history mismatch.")
             print("INVITATION_V2_SCOPED_MIGRATIONS_READY; AI0002_UNAPPLIED", flush=True)
         else:
@@ -922,6 +922,15 @@ def run(mode, arguments=()):
             if settings.SETTINGS_MODULE != "config.test_settings":
                 raise RuntimeError("AI fixtures require owned test settings.")
             settings.AI_FIXTURE_ENABLED = True
+        elif mode == "serve-ai-mvp":
+            from django.conf import settings
+            from apps.ai import live_runtime
+            from ai_mvp_test_transport import BrowserFakeTransport
+            if settings.SETTINGS_MODULE != "config.test_settings":
+                raise RuntimeError("AI browser test requires owned test settings.")
+            live_runtime.OpenAIHttpsTransport = BrowserFakeTransport
+            os.environ["OPENAI_API_KEY"] = "synthetic-browser-test-key-not-a-credential"
+            settings.AI_LIVE_ENABLED = True
         seed_fixtures(os.environ["HT_TEST_RUN_ID"])
         mailbox_cleanup = install_test_mailbox(
             os.environ["HT_TEST_RUN_ID"],

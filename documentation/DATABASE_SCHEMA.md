@@ -2,6 +2,47 @@
 
 # HustlyTasker Database Design
 
+## HT-AI-MVP Task estimated hours — development migration applied
+
+Owner approved `tasks.0007_task_estimated_hours` for implementation. It depends
+on `tasks.0006_soft_delete` and adds `tasks_task.estimated_hours` as nullable
+`numeric(6,2)`, with `task_estimated_hours_range` allowing NULL or 0.01–1000.00.
+There is no default or backfill. Existing Tasks and Tasks created manually
+have NULL. Confirmation saves the selected decimal value in the Task creation
+transaction. No changes to `actual_hours`, compensation, Review or assignments.
+Reversing the column after rollout would discard recorded estimates and needs
+a separate recovery decision. Development has 46 migration records and five
+legacy NULL estimates. The new catalog matches the isolated rehearsal. See
+[HANDOVER](HANDOVER.md) for the protected backup and verification receipts.
+
+## HT-AI-MVP development schema — APPLIED 2026-11-21
+
+The live integration reuses the `AiProposal` and `AiOperation` tables from
+`ai.0001_initial`. The two exact applied targets are
+`ai.0002_dispatch_governance` followed by `ai.0003_proposal_rejection`.
+The scoped rollout went from 43 to 45 migration records and 31 to 34 tables
+after a successful backup and restore rehearsal. Development preserves all
+prior rows. The new governance tables are empty. See [HANDOVER](HANDOVER.md).
+
+`0002` provides `AiDispatch`, `AiBudgetBucket` and `AiDispatchReservation`.
+Dispatch links the server-resolved actor, Profile, Workspace and optional Task
+proposal with protected foreign keys. Its unique key covers scope, feature,
+execution mode and a key digest. It stores provider/model configuration, timestamps,
+usage status, reported tokens, pricing version and estimated exposure. Budget
+reservations and the live proposal link settle in the same transaction. Raw
+prompts, source text, provider secrets and Analyzer results stay out of the
+governance tables. The Generator stores validated draft JSON separately in
+`AiProposal`. The Task estimate column is part of the separately applied
+`tasks.0007_task_estimated_hours` migration described above.
+
+`0003` adds `REJECTED` to the status choices and replaces two proposal CHECK
+constraints. It adds no columns or backfill. Rejected rows require null payload,
+created Tasks and confirmation/recovery timestamps. Rehearsal on populated
+isolated PostgreSQL preserved both AVAILABLE drafts and CONFIRMED recovery rows,
+and rejected an invalid REJECTED row with a payload. Reversing 0003 after creating
+REJECTED rows requires an approved data policy before the older CHECK can be
+restored. Live provider activation remains gated. See [AI MVP](AI_MVP.md).
+
 ## Trash V1 development schema — APPLIED 2026-11-20
 
 **HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**

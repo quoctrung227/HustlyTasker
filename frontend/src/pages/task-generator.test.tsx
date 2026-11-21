@@ -37,6 +37,12 @@ const confirmed: AiProposal = { ...available, status: 'CONFIRMED', payload: null
 const availability: AiAvailability = { contract_version: 'ai.v1', enabled: true, mode: 'fixture_demo', generated_by_ai: false,
   scenarios: [{ id: 'task-tree-v1', label: 'Mẫu cây công việc', brief: 'Mẫu giả lập cây công việc.' }, { id: 'subtitle-check-v1', label: 'Mẫu phụ đề', brief: 'Mẫu phụ đề.' }],
   limits: { max_brief_chars: 6000, max_tasks: 20, max_depth: 3, max_request_bytes: 32768 } }
+const liveAvailability: AiAvailability = { ...availability, mode: 'openai_live', generated_by_ai: true, reason: null,
+  scenarios: [], limits: { ...availability.limits, max_depth: 0 } }
+const liveProposal: AiProposal = { ...available, mode: 'openai_live', scenario_id: 'openai-live-v1', generated_by_ai: true,
+  provider: 'openai', model: 'gpt-5.4-mini',
+  payload: { ...plan, tasks: plan.tasks.map((task) => ({ ...task, parent_ref: null, estimated_hours: 2.5 })) },
+  usage: { status: 'provider_reported', cost_usd: '0.00009750', input_tokens: 150, billable_output_tokens: 75 } }
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((done) => { resolve = done }); return { promise, resolve } }
 const network = () => new ApiError(0, 'network', 'Kết nối gián đoạn.')
@@ -86,6 +92,100 @@ beforeEach(() => {
   vi.spyOn(aiApi, 'generate').mockResolvedValue(clone(available))
   vi.spyOn(aiApi, 'proposal').mockResolvedValue(clone(available))
   vi.spyOn(aiApi, 'confirm').mockResolvedValue(clone(confirmed))
+})
+
+describe('live Smart Task Generator UI', () => {
+  it('shows the migration approval gate distinctly from demo mode', async () => {
+    vi.mocked(aiApi.availability).mockResolvedValue({ ...liveAvailability, enabled: false, reason: 'AI_MIGRATION_REQUIRED' })
+    renderRoute()
+    expect(await screen.findByText(/AI đang chờ cập nhật cơ sở dữ liệu/)).toBeVisible()
+    expect(screen.queryByText(/Bản mô phỏng/)).not.toBeInTheDocument()
+    expect(aiApi.generate).not.toHaveBeenCalled()
+  })
+
+  it('confirms selected edited hours and reads the persisted estimate from the Task', async () => {
+    vi.mocked(aiApi.availability).mockResolvedValue(liveAvailability)
+    vi.mocked(aiApi.generate).mockResolvedValue(liveProposal)
+    vi.mocked(aiApi.proposal).mockResolvedValue(liveProposal)
+    vi.mocked(aiApi.confirm).mockResolvedValue({ ...liveProposal, status: 'CONFIRMED', payload: null,
+      confirmed_at: confirmed.confirmed_at, recovery_expires_at: confirmed.recovery_expires_at, created_tasks: { item_1: taskId } })
+    const loadTask = vi.spyOn(workApi, 'task').mockResolvedValue({ id: taskId, workspace_id: workspaceId, parent_id: null,
+      title: 'Công việc đã sửa', description: null, status: 'PENDING', priority: 'MEDIUM', deadline: null, estimated_hours: '3.50',
+      active_assignment: null, can_start: false, can_submit: false, created_at: timestamp, updated_at: timestamp })
+    renderRoute()
+    const actions = userEvent.setup()
+    const trigger = await screen.findByRole('button', { name: 'AI tạo đề xuất' })
+    await actions.click(trigger)
+    expect(screen.getByLabelText('Mô tả yêu cầu (bắt buộc)')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('alert').parentElement).toHaveFocus()
+    expect(aiApi.generate).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Mô tả yêu cầu (bắt buộc)'), { target: { value: 'Kiểm tra phụ đề.' } })
+    fireEvent.change(screen.getByLabelText('Số công việc mong muốn'), { target: { value: '2' } })
+    await actions.click(trigger)
+    expect(aiApi.generate).toHaveBeenCalledWith(profileId, workspaceId, { brief: 'Kiểm tra phụ đề.', task_count: 2 }, expect.any(String), expect.any(AbortSignal))
+    const title = await screen.findByLabelText('Tên công việc 1')
+    const estimate = screen.getByLabelText('Số giờ ước tính 1')
+    expect(estimate).toHaveValue('2,5')
+    fireEvent.change(estimate, { target: { value: '3,251' } })
+    await actions.click(screen.getByRole('button', { name: 'Kiểm tra và xác nhận' }))
+    expect(estimate).toHaveAttribute('aria-invalid', 'true')
+    expect(estimate).toHaveValue('3,251')
+    expect(screen.getByRole('alert').parentElement).toHaveFocus()
+    await actions.click(screen.getByRole('link', { name: 'Nhập từ 0,01 đến 1.000 giờ, tối đa 2 chữ số thập phân.' }))
+    expect(estimate).toHaveFocus()
+    fireEvent.change(estimate, { target: { value: '3,25' } })
+    fireEvent.change(title, { target: { value: 'Công việc đã sửa' } })
+    await actions.click(screen.getByRole('checkbox', { name: 'Lưu công việc 2 khi xác nhận' }))
+    const dialog = await openConfirmation(actions)
+    expect(dialog.getByText('Công việc đã sửa')).toBeVisible()
+    expect(dialog.getByText('Ước tính: 3,25 giờ')).toBeVisible()
+    expect(dialog.queryByText('Công việc con mẫu')).not.toBeInTheDocument()
+    expect(aiApi.confirm).not.toHaveBeenCalled()
+    await actions.click(dialog.getByRole('button', { name: 'Xác nhận tạo công việc' }))
+    expect(await screen.findByRole('heading', { name: 'Đã tạo công việc' })).toBeVisible()
+    expect(vi.mocked(aiApi.confirm).mock.calls[0]?.[3].payload.tasks).toEqual([
+      expect.objectContaining({ local_ref: 'item_1', title: 'Công việc đã sửa', proposed_deadline: null, parent_ref: null, estimated_hours: '3.25' }),
+    ])
+    expect(await screen.findByText('Đã lưu: 3,5 giờ')).toBeVisible()
+    expect(loadTask).toHaveBeenCalledWith(profileId, workspaceId, taskId, expect.any(AbortSignal))
+    expect(workApi.createTask).not.toHaveBeenCalled()
+  })
+
+  it('sends null when an estimate is cleared', async () => {
+    vi.mocked(aiApi.availability).mockResolvedValue(liveAvailability)
+    vi.mocked(aiApi.proposal).mockResolvedValue(liveProposal)
+    vi.mocked(aiApi.confirm).mockResolvedValue({ ...liveProposal, status: 'CONFIRMED', payload: null,
+      confirmed_at: confirmed.confirmed_at, recovery_expires_at: confirmed.recovery_expires_at, created_tasks: { item_1: taskId } })
+    vi.spyOn(workApi, 'task').mockResolvedValue({ id: taskId, workspace_id: workspaceId, parent_id: null,
+      title: 'Công việc mẫu', description: null, status: 'PENDING', priority: 'MEDIUM', deadline: null, estimated_hours: null,
+      active_assignment: null, can_start: false, can_submit: false, created_at: timestamp, updated_at: timestamp })
+    renderRoute(`${route}?proposal=${proposalId}`)
+    const actions = userEvent.setup()
+    await actions.clear(await screen.findByLabelText('Số giờ ước tính 1'))
+    await actions.click(screen.getByRole('checkbox', { name: 'Lưu công việc 2 khi xác nhận' }))
+    const dialog = await openConfirmation(actions)
+    expect(dialog.getByText('Chưa có số giờ ước tính')).toBeVisible()
+    await actions.click(dialog.getByRole('button', { name: 'Xác nhận tạo công việc' }))
+    await screen.findByRole('heading', { name: 'Đã tạo công việc' })
+    expect(vi.mocked(aiApi.confirm).mock.calls[0]?.[3].payload.tasks).toEqual([
+      expect.objectContaining({ local_ref: 'item_1', estimated_hours: null }),
+    ])
+  })
+
+  it('closes a live proposal only after explicit rejection without creating a Task', async () => {
+    vi.mocked(aiApi.availability).mockResolvedValue(liveAvailability)
+    vi.mocked(aiApi.proposal).mockResolvedValue(liveProposal)
+    const reject = vi.spyOn(aiApi, 'reject').mockResolvedValue({ ...liveProposal, status: 'REJECTED', payload: null })
+    renderRoute(`${route}?proposal=${proposalId}`)
+    await screen.findByLabelText('Tên công việc 1')
+    const actions = userEvent.setup()
+    await actions.click(screen.getByRole('button', { name: 'Loại bỏ đề xuất' }))
+    expect(reject).not.toHaveBeenCalled()
+    await actions.click(within(screen.getByRole('dialog', { name: 'Loại bỏ đề xuất' })).getByRole('button', { name: 'Xác nhận loại bỏ' }))
+    expect(await screen.findByRole('heading', { name: 'Đề xuất đã bị loại bỏ' })).toBeVisible()
+    expect(reject).toHaveBeenCalledWith(profileId, workspaceId, proposalId, 1, expect.any(AbortSignal))
+    expect(aiApi.confirm).not.toHaveBeenCalled()
+  })
 })
 
 describe('fixture Smart Task Generator UI', () => {

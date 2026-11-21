@@ -5,6 +5,9 @@ from enum import Enum
 
 class ErrorCode(str, Enum):
     AI_DISABLED = "AI_DISABLED"
+    AI_NOT_CONFIGURED = "AI_NOT_CONFIGURED"
+    AI_MIGRATION_REQUIRED = "AI_MIGRATION_REQUIRED"
+    ALREADY_DISPATCHED = "ALREADY_DISPATCHED"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
     PROVIDER_TIMEOUT = "PROVIDER_TIMEOUT"
@@ -25,6 +28,9 @@ class ErrorCode(str, Enum):
 
 _MESSAGES = {
     ErrorCode.AI_DISABLED: "AI processing is disabled for this operation.",
+    ErrorCode.AI_NOT_CONFIGURED: "The live AI provider has not been configured.",
+    ErrorCode.AI_MIGRATION_REQUIRED: "The live AI database schema is not ready.",
+    ErrorCode.ALREADY_DISPATCHED: "This request has already been dispatched.",
     ErrorCode.VALIDATION_ERROR: "The supplied input is not valid.",
     ErrorCode.PROVIDER_UNAVAILABLE: "The provider is unavailable.",
     ErrorCode.PROVIDER_TIMEOUT: "The provider deadline was exceeded.",
@@ -51,6 +57,7 @@ _FIELD_NAMES = frozenset({
     "issues", "suggested_actions", "uncertainty", "category", "action",
     "rationale", "limits", "control", "scenario_id", "payload",
     "proposal_revision", "confirmed", "idempotency_key",
+    "feedback_text", "task_count", "estimated_hours",
 })
 
 

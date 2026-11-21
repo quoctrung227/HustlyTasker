@@ -110,14 +110,14 @@ Run-Test 'Trash purge is not inherited from the terminal' {
     }
 }
 Run-Test 'child environment is isolated and security settings are preserved' {
-    $htNames = @('DJANGO_SETTINGS_MODULE', 'DJANGO_SECRET_KEY', 'PGSERVICE', 'PYTHONPATH')
+    $htNames = @('DJANGO_SETTINGS_MODULE', 'DJANGO_SECRET_KEY', 'PGSERVICE', 'PYTHONPATH', 'OPENAI_API_KEY')
     $htOriginal = @{}
     foreach ($htName in $htNames) { $htOriginal[$htName] = [Environment]::GetEnvironmentVariable($htName, 'Process') }
     try {
         foreach ($htName in $htNames) { [Environment]::SetEnvironmentVariable($htName, 'synthetic-stale-inherited-value', 'Process') }
         $htValues = New-TestValues; $htValues.DJANGO_SESSION_COOKIE_SECURE='true'
         $htInfo = New-HustlyDevelopmentProcessInfo (Get-Location).Path $htValues 'check'
-        foreach ($htName in @('DJANGO_SETTINGS_MODULE', 'PGSERVICE', 'PYTHONPATH')) { Assert-True (-not $htInfo.EnvironmentVariables.ContainsKey($htName)) 'stale override removed' }
+        foreach ($htName in @('DJANGO_SETTINGS_MODULE', 'PGSERVICE', 'PYTHONPATH', 'OPENAI_API_KEY')) { Assert-True (-not $htInfo.EnvironmentVariables.ContainsKey($htName)) 'stale override removed' }
         Assert-True ($htInfo.EnvironmentVariables['DJANGO_SECRET_KEY'] -ceq $htValues.DJANGO_SECRET_KEY) 'selected stable key'
         Assert-True ($htInfo.EnvironmentVariables['DJANGO_SESSION_COOKIE_SECURE'] -ceq 'true') 'security policy retained'
         foreach ($htName in $htNames) { Assert-True ([Environment]::GetEnvironmentVariable($htName, 'Process') -ceq 'synthetic-stale-inherited-value') 'parent unchanged' }

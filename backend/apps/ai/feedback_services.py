@@ -40,8 +40,9 @@ def _scope_id(value):
 
 
 @sensitive_variables()
-def _selected_sources(value):
-    if type(value) is not list or not 1 <= len(value) <= _LIMITS.max_sources:
+def _selected_sources(value, *, allow_empty=False):
+    minimum = 0 if allow_empty else 1
+    if type(value) is not list or not minimum <= len(value) <= _LIMITS.max_sources:
         raise AIError(ErrorCode.VALIDATION_ERROR, fields=("sources",))
     selected = []
     seen = set()
@@ -77,15 +78,17 @@ def _focus_text(value):
 class _SelectedFeedbackAccess:
     """Request-bound selector, not a replacement for current tenant predicates."""
 
-    def __init__(self, *, actor, scope, task_id, selected):
+    def __init__(self, *, actor, scope, task_id, selected, fixture_only=True):
         self.actor = actor
         self.scope = scope
         self.task_id = task_id
         self.selected = selected
+        self.fixture_only = fixture_only
         self._resolved_sources = False
 
     def _resolve(self, scope, feature):
-        _enabled()
+        if self.fixture_only:
+            _enabled()
         if (scope != self.scope or feature is not Feature.FEEDBACK_ANALYSIS
                 or not getattr(self.actor, "is_authenticated", False)
                 or getattr(self.actor, "pk", None) != scope.actor_id

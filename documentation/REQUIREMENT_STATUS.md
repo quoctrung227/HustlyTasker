@@ -1,6 +1,19 @@
 # HUSTLYTASKER REQUIREMENT STATUS
 
-Last updated: 2026-11-20
+## HT-AI-MVP — 2026-11-21
+
+| Requirement | Current evidence |
+|---|---|
+| Smart Task Generator | Live integration in source. Flat editable drafts, selected confirmation, expiry/rejection, existing Task service. |
+| Feedback Analyzer | Live integration in source. Selected/manual feedback, validated verbatim evidence, editable advisory suggestions. |
+| Provider, policy and migration | AI migrations 0002 and 0003 and Task 0007 are applied on development. Live remains off, pending API key setup and separate data/cost approval. |
+| Estimated duration | Editable in AI preview. Confirm persists the validated decimal or null in Task. Isolated read/write checks passed. Development schema and read-only regression verified, with all legacy estimates NULL. |
+| Evaluation | Offline schema, evidence, rubric and metrics harness. Owner datasets unavailable at checked paths and real evaluation pending. |
+
+Current automated QA and known limits are recorded in [HANDOVER](HANDOVER.md).
+See [AI_MVP](AI_MVP.md) for the contract and activation gates.
+
+Last updated: 2026-11-21
 
 ## HT-TRASH-V1 — current development activation
 

@@ -4,6 +4,7 @@ import type { LifecycleStatus, Page, Workspace } from './types'
 import type { WorkspaceMembershipInput } from './workspace-inheritance'
 import { isTaskBrief, normalizeTaskBrief } from '../../features/tasks/task-brief'
 import type { TaskBrief } from '../../features/tasks/task-brief'
+import { isEstimatedHours } from '../../features/tasks/estimated-hours'
 
 export const taskStatuses = ['PENDING', 'ASSIGNED', 'WORKING', 'REVIEW', 'COMPLETED', 'CANCELLED'] as const
 export const taskPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const
@@ -29,6 +30,7 @@ export interface Task extends TaskBrief {
   status: TaskStatus
   priority: TaskPriority
   deadline: string | null
+  estimated_hours?: string | null
   active_assignment: TaskAssignment | null
   /** Current-user hint only; the existing start service revalidates every POST. */
   can_start: boolean
@@ -114,6 +116,7 @@ function pageNumber(page: number): number {
 function isTask(value: unknown): value is Task {
   return record(value) && isTaskBrief(value) && uuid(value.id) && uuid(value.workspace_id) && nullableUuid(value.parent_id) &&
     text(value.title) && nullableText(value.description) && contains(taskStatuses, value.status) &&
+    (value.estimated_hours == null || isEstimatedHours(value.estimated_hours)) &&
     (value.can_assign === undefined || typeof value.can_assign === 'boolean') && (value.can_unassign === undefined || typeof value.can_unassign === 'boolean') &&
     (value.can_delete === undefined || typeof value.can_delete === 'boolean') &&
     contains(taskPriorities, value.priority) && typeof value.can_start === 'boolean' && typeof value.can_submit === 'boolean' && (value.deadline === null || dateTime(value.deadline)) &&

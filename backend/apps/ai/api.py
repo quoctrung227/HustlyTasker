@@ -1,9 +1,11 @@
-"""Authenticated, tenant-scoped fixture proposal transport; no live provider."""
+"""Authenticated, tenant-scoped task proposal transport."""
 
 import json
 from collections.abc import Mapping
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
+from django.core.serializers.json import DjangoJSONEncoder
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters, sensitive_variables
@@ -21,6 +23,7 @@ from apps.workspace.views import TenantApiViewMixin
 from . import durable_services
 from .contracts import ValidationLimits
 from .errors import AIError
+from .live_runtime import live_selected
 from .validation import validate_generator_input
 
 
@@ -29,6 +32,8 @@ MAX_REQUEST_BYTES = 32 * 1024
 
 class BoundedStrictJSONParser(JSONParser):
     """Bound before parsing; never include input or unknown keys in failures."""
+
+    parse_float = float
 
     @sensitive_variables("raw", "data")
     def parse(self, stream, media_type=None, parser_context=None):
@@ -52,10 +57,16 @@ class BoundedStrictJSONParser(JSONParser):
                 raw.decode("utf-8"),
                 object_pairs_hook=unique_object,
                 parse_constant=reject_constant,
+                parse_float=self.parse_float,
             )
-        except (UnicodeError, ValueError, RecursionError):
+        except (UnicodeError, ValueError, InvalidOperation, RecursionError):
             raise ParseError("Invalid JSON request.") from None
         return data
+
+
+class ConfirmJSONParser(BoundedStrictJSONParser):
+    # Accept older clients that send a JSON number without losing its precision.
+    parse_float = Decimal
 
 
 class SafeAIInputSerializer(StrictInputSerializer):
@@ -94,7 +105,7 @@ class GenerateProposalSerializer(SafeAIInputSerializer):
 class ConfirmProposalSerializer(SafeAIInputSerializer):
     proposal_revision = serializers.IntegerField(min_value=1)
     confirmed = serializers.BooleanField()
-    payload = serializers.JSONField()
+    payload = serializers.JSONField(encoder=DjangoJSONEncoder)
 
     def to_internal_value(self, data):
         if isinstance(data, Mapping):
@@ -104,6 +115,32 @@ class ConfirmProposalSerializer(SafeAIInputSerializer):
                 raise serializers.ValidationError({"confirmed": ["Explicit confirmation is required."]})
             if "payload" in data and type(data["payload"]) is not dict:
                 raise serializers.ValidationError({"payload": ["A task-plan object is required."]})
+        return super().to_internal_value(data)
+
+
+class LiveGenerateProposalSerializer(SafeAIInputSerializer):
+    brief = serializers.CharField(max_length=6000, trim_whitespace=False)
+    task_count = serializers.IntegerField(required=False, min_value=1, max_value=20)
+    target_deadline = serializers.CharField(required=False, allow_null=True, max_length=40, trim_whitespace=False)
+
+    @sensitive_variables("data")
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping):
+            if "brief" in data and type(data["brief"]) is not str:
+                raise serializers.ValidationError({"brief": ["A text brief is required."]})
+            if "task_count" in data and type(data["task_count"]) is not int:
+                raise serializers.ValidationError({"task_count": ["Enter a whole number from 1 to 20."]})
+            if "target_deadline" in data and data["target_deadline"] is not None and type(data["target_deadline"]) is not str:
+                raise serializers.ValidationError({"target_deadline": ["Enter a date and time with a time zone."]})
+        return super().to_internal_value(data)
+
+
+class RejectProposalSerializer(SafeAIInputSerializer):
+    proposal_revision = serializers.IntegerField(min_value=1)
+
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping) and "proposal_revision" in data and type(data["proposal_revision"]) is not int:
+            raise serializers.ValidationError({"proposal_revision": ["A positive integer is required."]})
         return super().to_internal_value(data)
 
 
@@ -128,10 +165,13 @@ class ProposalApiMixin(TenantApiViewMixin):
             code = exc.code.value
             code_status = {
                 "AI_DISABLED": status.HTTP_503_SERVICE_UNAVAILABLE,
+                "AI_NOT_CONFIGURED": status.HTTP_503_SERVICE_UNAVAILABLE,
+                "AI_MIGRATION_REQUIRED": status.HTTP_503_SERVICE_UNAVAILABLE,
                 "PERMISSION_DENIED": status.HTTP_403_FORBIDDEN,
                 "NOT_FOUND": status.HTTP_404_NOT_FOUND,
                 "IDEMPOTENCY_CONFLICT": status.HTTP_409_CONFLICT,
                 "ALREADY_CONFIRMED": status.HTTP_409_CONFLICT,
+                "ALREADY_DISPATCHED": status.HTTP_409_CONFLICT,
                 "STALE_PROPOSAL": status.HTTP_409_CONFLICT,
                 "STALE_CONTEXT": status.HTTP_409_CONFLICT,
                 "EXPIRED": status.HTTP_410_GONE,
@@ -141,6 +181,7 @@ class ProposalApiMixin(TenantApiViewMixin):
                 "PROVIDER_UNAVAILABLE": status.HTTP_503_SERVICE_UNAVAILABLE,
                 "PROVIDER_TIMEOUT": status.HTTP_504_GATEWAY_TIMEOUT,
                 "INVALID_PROVIDER_RESPONSE": status.HTTP_502_BAD_GATEWAY,
+                "AI_REFUSED": status.HTTP_422_UNPROCESSABLE_ENTITY,
             }
             public = exc.as_public_error()
             response = Response({
@@ -185,13 +226,19 @@ class ProposalGenerateView(ProposalApiMixin, APIView):
     def options(self, request, *args, **kwargs):
         # Existing permission checks run before this standard metadata response.
         response = super().options(request, *args, **kwargs)
-        response.data["ai"] = durable_services.fixture_metadata()
+        response.data["ai"] = durable_services.generator_metadata()
         return response
 
+    @sensitive_variables("serializer", "proposal")
     def post(self, request, **kwargs):
-        serializer = GenerateProposalSerializer(data=request.data)
+        if live_selected():
+            serializer = LiveGenerateProposalSerializer(data=request.data)
+            generate = durable_services.generate_live_proposal
+        else:
+            serializer = GenerateProposalSerializer(data=request.data)
+            generate = durable_services.generate_proposal
         serializer.is_valid(raise_exception=True)
-        proposal, replayed = durable_services.generate_proposal(
+        proposal, replayed = generate(
             **self.scope_kwargs(), idempotency_key=self.idempotency_key(),
             **serializer.validated_data,
         )
@@ -215,6 +262,7 @@ class ProposalDetailView(ProposalApiMixin, APIView):
 @method_decorator(sensitive_post_parameters("payload"), name="dispatch")
 class ProposalConfirmView(ProposalApiMixin, APIView):
     http_method_names = ("post", "options")
+    parser_classes = (ConfirmJSONParser,)
 
     def post(self, request, **kwargs):
         serializer = ConfirmProposalSerializer(data=request.data)
@@ -226,3 +274,16 @@ class ProposalConfirmView(ProposalApiMixin, APIView):
         return Response(durable_services.serialize_proposal(proposal), status=(
             status.HTTP_200_OK if replayed else status.HTTP_201_CREATED
         ))
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProposalRejectView(ProposalApiMixin, APIView):
+    http_method_names = ("post", "options")
+
+    def post(self, request, **kwargs):
+        serializer = RejectProposalSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        proposal = durable_services.reject_proposal(
+            **self.scope_kwargs(), proposal_id=kwargs["proposal_id"], **serializer.validated_data,
+        )
+        return Response(durable_services.serialize_proposal(proposal))

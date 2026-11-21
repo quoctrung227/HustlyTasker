@@ -1,8 +1,8 @@
-"""Durable offline dispatch governance; never a live provider activation path.
+"""Durable dispatch governance shared across AI features.
 
 Every callable gates before touching candidate tables. Budget buckets are stable,
 cumulative lifetime lanes: no midnight rollover can discard an unresolved hold.
-All monetary accounting here is simulated exposure, never an actual invoice.
+Live accounting estimates exposure with reported token counts.
 """
 
 import hashlib
@@ -27,7 +27,7 @@ from .durable_services import _enabled as _fixture_enabled, _key_digest, _manage
 from .errors import AIError, ErrorCode
 from .feedback_services import _SelectedFeedbackAccess, _focus_text, _scope_id, _selected_sources
 from .models import AiBudgetBucket, AiDispatch, AiDispatchReservation
-from .openai_adapter import OpenAIResponsesAdapter
+from .openai_adapter import LiveOpenAIResponsesAdapter, OpenAIResponsesAdapter, ReportedProviderError
 from .providers import Feature, ProviderRequest, ProviderResult, RequestControl, UsageMetadata
 from .validation import validate_feedback_input, validate_generator_input
 
@@ -133,6 +133,7 @@ class DispatchReceipt:
     accounted_amount: Decimal | None
     input_tokens: int | None
     output_tokens: int | None
+    proposal_id: UUID | None = None
     created: bool = False
     claimed: bool = False
     generated_by_ai: bool = False
@@ -145,8 +146,14 @@ class DispatchExecution:
 
 
 def _gate(policy):
-    if (type(policy) is not GovernancePolicy or policy.enabled is not True
-            or getattr(settings, "AI_GOVERNANCE_ENABLED", False) is not True
+    if type(policy) is not GovernancePolicy or policy.enabled is not True:
+        _fail(ErrorCode.AI_DISABLED)
+    if policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE:
+        from .live_runtime import availability_reason
+        if reason := availability_reason():
+            _fail(ErrorCode(reason))
+        return
+    if (getattr(settings, "AI_GOVERNANCE_ENABLED", False) is not True
             or policy.execution_mode != AiDispatch.ExecutionMode.OPENAI_OFFLINE):
         _fail(ErrorCode.AI_DISABLED)
     _fixture_enabled()
@@ -267,7 +274,10 @@ def _receipt(row, *, created=False, claimed=False):
         reserved_amount=row.reserved_amount, estimated_cost=row.estimated_cost,
         billed_cost=row.billed_cost, accounted_amount=row.accounted_amount,
         input_tokens=row.input_tokens, output_tokens=row.output_tokens,
+        proposal_id=row.proposal_id,
         created=created, claimed=claimed,
+        generated_by_ai=(row.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE
+                         and row.status == AiDispatch.Status.SUCCEEDED),
     )
 
 
@@ -422,10 +432,12 @@ def _usage(policy, result):
     accepted_models = {policy.model}
     if policy.model == "gpt-5.4-mini":
         accepted_models.add("gpt-5.4-mini-2026-03-17")
-    if (type(result) is not ProviderResult or result.provider != "openai_offline"
+    live = policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE
+    if (type(result) is not ProviderResult or result.provider != ("openai" if live else "openai_offline")
             or result.model not in accepted_models
             or type(result.usage) is not UsageMetadata
-            or result.usage.status != "offline_simulated" or result.usage.cost_usd is not None):
+            or result.usage.status != ("provider_reported" if live else "offline_simulated")
+            or result.usage.cost_usd is not None):
         _fail(ErrorCode.INVALID_PROVIDER_RESPONSE)
     inputs, outputs = result.usage.input_tokens, result.usage.billable_output_tokens
     if (inputs is None or outputs is None or type(inputs) is not int or type(outputs) is not int
@@ -436,7 +448,8 @@ def _usage(policy, result):
 
 
 @sensitive_variables("result")
-def _settle_success(*, actor, profile_id, workspace_id, dispatch_id, policy, result):
+def _settle_success(*, actor, profile_id, workspace_id, dispatch_id, policy, result,
+                    persist=None, error_code=None):
     _gate(policy)
     _outside_business_transaction()
     inputs, outputs, cost = _usage(policy, result)
@@ -445,13 +458,24 @@ def _settle_success(*, actor, profile_id, workspace_id, dispatch_id, policy, res
         if row.status != AiDispatch.Status.DISPATCHING or cost > row.reserved_amount:
             _fail(ErrorCode.STALE_CONTEXT)
         _finish_reservations(row, buckets, cost)
+        if persist is not None:
+            persist(row, result)
         row.status = AiDispatch.Status.SUCCEEDED
+        fields = ["status", "completed_at", "usage_status", "input_tokens",
+                  "output_tokens", "estimated_cost", "accounted_amount", "proposal"]
         row.completed_at = timezone.now()
-        row.usage_status = AiDispatch.UsageStatus.SIMULATED
+        if error_code is not None:
+            row.status = AiDispatch.Status.RECONCILED
+            row.reconciled_at = row.completed_at
+            row.error_code = _safe_error(error_code)
+            row.settlement_digest = _hmac(f"{row.pk}:{row.error_code}", purpose=_EVIDENCE_PURPOSE)
+            fields.extend(("reconciled_at", "error_code", "settlement_digest"))
+        row.usage_status = (AiDispatch.UsageStatus.REPORTED
+                            if policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE
+                            else AiDispatch.UsageStatus.SIMULATED)
         row.input_tokens, row.output_tokens = inputs, outputs
         row.estimated_cost = row.accounted_amount = cost
-        row.save(update_fields=("status", "completed_at", "usage_status", "input_tokens",
-                                "output_tokens", "estimated_cost", "accounted_amount"))
+        row.save(update_fields=fields)
         return _receipt(row)
 
 
@@ -459,6 +483,8 @@ def _settle_success(*, actor, profile_id, workspace_id, dispatch_id, policy, res
 def reconcile_dispatch(*, actor, profile_id, workspace_id, dispatch_id, policy,
                        accounted_amount, evidence, input_tokens=None, output_tokens=None):
     _gate(policy)
+    if policy.execution_mode != AiDispatch.ExecutionMode.OPENAI_OFFLINE:
+        _fail(ErrorCode.AI_DISABLED)
     _outside_business_transaction()
     amount = _amount(accounted_amount)
     if (input_tokens is None) != (output_tokens is None):
@@ -496,11 +522,14 @@ def reconcile_dispatch(*, actor, profile_id, workspace_id, dispatch_id, policy,
 
 
 def _adapter(adapter, policy):
-    if (type(adapter) is not OpenAIResponsesAdapter or not adapter._config.enabled
+    live = policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE
+    adapter_type = LiveOpenAIResponsesAdapter if live else OpenAIResponsesAdapter
+    if (type(adapter) is not adapter_type or not adapter._config.enabled
             or adapter._config.model != policy.model
             or adapter._config.max_output_tokens > policy.max_output_tokens
             or adapter._transport is None
-            or getattr(adapter._transport, "offline", None) is not True):
+            or not adapter._transport_allowed()
+            or (live and adapter.max_input_tokens != policy.max_input_tokens)):
         _fail(ErrorCode.AI_DISABLED)
 
 
@@ -513,15 +542,29 @@ def _unknown_safely(context, code):
         pass
 
 
+@sensitive_variables("result")
+def _account_failure(context, code, result=None):
+    if result is not None and context["policy"].execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE:
+        try:
+            _settle_success(**context, result=result, error_code=code)
+            return
+        except Exception:
+            # If authorization or storage changed, preserve the existing hold.
+            pass
+    _unknown_safely(context, code)
+
+
 @sensitive_variables()
 def _execute(*, actor, profile_id, workspace_id, idempotency_key, policy,
-             adapter, request, canonical_input, control, revalidate=None):
+             adapter, request, canonical_input, control, revalidate=None, persist=None):
     _gate(policy)
     _outside_business_transaction()
     _adapter(adapter, policy)
     if type(control) is not RequestControl:
         _fail()
     control.check()
+    if policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE:
+        adapter._encode(request)
     reserved = reserve_dispatch(actor=actor, profile_id=profile_id, workspace_id=workspace_id,
                                 idempotency_key=idempotency_key, feature=request.feature,
                                 canonical_input=canonical_input, policy=policy)
@@ -542,18 +585,22 @@ def _execute(*, actor, profile_id, workspace_id, idempotency_key, policy,
     claimed = begin_dispatch(**context)
     if not claimed.claimed:
         return DispatchExecution(claimed)
+    result = None
     try:
         result = adapter.generate(request, control)
         control.check()
         if revalidate is not None:
             revalidate()
-        settled = _settle_success(**context, result=result)
+        settled = _settle_success(**context, result=result, persist=persist)
         return DispatchExecution(settled, result)
+    except ReportedProviderError as error:
+        _account_failure(context, error.code, ProviderResult("", error.usage, "openai", error.model))
+        raise AIError(error.code) from None
     except AIError as error:
-        _unknown_safely(context, error.code)
+        _account_failure(context, error.code, result)
         raise
     except Exception:
-        _unknown_safely(context, ErrorCode.PROVIDER_UNAVAILABLE)
+        _account_failure(context, ErrorCode.PROVIDER_UNAVAILABLE, result)
         raise AIError(ErrorCode.PROVIDER_UNAVAILABLE) from None
 
 

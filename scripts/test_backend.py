@@ -30,11 +30,14 @@ def parse_arguments(arguments=None):
     return options
 
 
+def is_governance_migration(app, name):
+    return app == "ai" and name != "0001_initial"
+
+
 def scoped_migration_targets(targets):
     """Keep the intentionally unapplied AI migration visible, never fake it."""
-    forbidden = ("ai", "0002_dispatch_governance")
     targets = list(targets)
-    if forbidden not in targets:
+    if not any(is_governance_migration(*target) for target in targets):
         return targets
     if len(targets) == 1:
         raise RuntimeError("AI governance migration is forbidden in this scoped test run.")
@@ -49,7 +52,7 @@ def install_scoped_migration_policy(executor_class):
         # Django's migrate command can supply a plan computed BEFORE this
         # wrapper. Replacing targets alone must never forward that stale plan.
         plan = executor.migration_plan(targets)
-        if any(item.app_label == "ai" and item.name == "0002_dispatch_governance"
+        if any(is_governance_migration(item.app_label, item.name)
                for item, _ in plan):
             raise RuntimeError("A scoped migration unexpectedly depends on AI governance.")
         if args:
@@ -163,7 +166,7 @@ def run(options):
                 targets = migrated.loader.graph.leaf_nodes()
                 if options.exclude_ai_governance:
                     targets = scoped_migration_targets(targets)
-                    if ("ai", "0002_dispatch_governance") in migrated.loader.applied_migrations:
+                    if any(is_governance_migration(*item) for item in migrated.loader.applied_migrations):
                         raise RuntimeError("Forbidden AI governance migration was applied.")
                 if migrated.migration_plan(targets):
                     raise RuntimeError("The isolated test database has pending migrations.")

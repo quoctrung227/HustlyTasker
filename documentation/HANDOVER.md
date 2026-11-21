@@ -1,5 +1,299 @@
 # HUSTLYTASKER HANDOVER
 
+## HT-AI-MVP Task estimated hours development rollout — 2026-11-21
+
+**HT-AI-MVP — TASK SCHEMA ROLLOUT COMPLETE — PENDING CONTROLLED LIVE TEST APPROVAL.**
+Owner authorized only `tasks.0007_task_estimated_hours`. Fresh preflight verified
+`hustlytasker_db`, PostgreSQL 16.14, SQL system ID `7671936116369391654`, container
+`49ef93152944` (`hustlytasker_postgres`), mounted volume `docker_postgres_data` and
+loopback `127.0.0.1:5432`. There were 45 applied migrations through `ai.0003`,
+34 tables, 5 Tasks and no estimate column. There were no competing sessions.
+The targeted and complete plans each contained only Task 0007. Previously
+applied AI migration checksums matched the prior rollout receipts.
+
+The fresh ACL-restricted custom archive is at
+`D:\da\HustlyTaskerBackups\HT-AI-MVP-TASK-SCHEMA\20261121T083213Z_dc0e5259acc14355b5839f727ae4b79d\hustlytasker_development_20261121T083213Z.dump`.
+It contains 170,024 bytes, SHA-256
+`B4C9E091F351BA4B7D07F4FF0E91C98F11BCD659562568A5C92C0BEEF52A669F`.
+Archive listing, full read and actual restore exited 0. The restore used a
+temporary PostgreSQL 16.14 on internal Docker networking and tmpfs, system ID
+`7710539762299641902`, with no workspace `.env` or published port. Restore
+matched legacy data and logical schema. PostgreSQL verified 25 equivalent
+enum-array cast representations and a dropped attribute slot in the source
+content-type table explained its differing physical column numbers. Rehearsal
+applied only Task 0007, passed read-only smoke and preserved five NULL estimates.
+
+Normal targeted Django migration on development exited 0. History went 45 → 46
+and the complete plan is empty. Schema matched rehearsal: `numeric(6,2)` nullable
+with no default, and validated `task_estimated_hours_range` allowing NULL or
+0.01–1000.00. Constraints 207 → 208. All 169 indexes remain valid and unchanged.
+No backfill or business row changes. All 34 tables' legacy data matched, with
+the expected history entry and migration sequence advancement. Fingerprint
+`56d6b456b715fb4b98c199cfa8ac77caeafb165d7869a70d6084f1571733550c`.
+Task 5, assignment 5, deliverable 3, Review 0, Invitation 3, Notification 12
+and AuditLog 51 are unchanged, including the underlying Trash metadata. All
+five legacy Tasks have NULL hours.
+
+Django checks, model-drift and migration consistency checks passed read-only.
+Development and rehearsal each passed 45 in-process GET/OPTIONS checks in a
+PostgreSQL READ ONLY transaction. They included list/detail of four visible
+legacy Tasks, three cross-tenant denials, Invitation V2, Trash, Analytics,
+Deliverables with nested Review fields, and AI routes with generation off.
+No auth sessions, proposals or business rows were created by smoke.
+
+Broad isolated regression `e357fb557ed54931a0e492c56d21348a` discovered 823 cases
+with Python/launcher exit 0. Redirected stderr did not retain Django's final
+summary, so no skip count is asserted. Focused run
+`b451e2fbabbb4c08a3ff950490c74359` passed 47/47 with no skips and exit 0. Both
+used 46 isolated migrations. Test and rehearsal containers and networks were
+removed with ownership verification. Backup hash still matches. Evidence is
+Git-ignored under `.local_backups/HT-AI-MVP-TASK-SCHEMA/` and the two test run
+directories. This rollout changed documentation only, with existing source
+changes preserved at Git HEAD `60a8f65`.
+
+PostgreSQL is running. Ports 8000 and 5173 had no listeners before or after.
+AI live and Trash purge remain off, no local OpenAI key is present and no
+scheduler, SMTP or provider operation ran. SMTP exposure remains outstanding.
+Next gate is Owner approval of the two synthetic requests, data policy and
+budget, then private key configuration and local startup with official scripts.
+
+## Historical HT-AI-MVP estimated hours implementation — 2026-11-21
+
+**HT-AI-MVP — ESTIMATED HOURS IMPLEMENTED — PENDING DEVELOPMENT MIGRATION APPROVAL.**
+
+The Owner approved the schema implementation. Development rollout and real
+provider use require separate authorization. Read-only Django preflight on
+`hustlytasker_db`, PostgreSQL 16.14, system ID `7671936116369391654`, verified
+45 applied migrations, 5 Tasks and no `estimated_hours` column. AI migrations
+0002 and 0003 are already recorded. The complete and targeted plans both
+show exactly `tasks.0007_task_estimated_hours`, depending on `tasks.0006_soft_delete`.
+Collected SQL adds only a nullable `numeric(6,2)` column and a range CHECK.
+No migration ran against development.
+
+The Generator preview sends the edited hours as an exact decimal string or
+null. JSON numbers from older clients are decoded exactly. Confirmation
+validates before writing, calls the existing Task service inside the transaction
+and includes canonical hours in the scoped replay digest. Older matching
+confirmation receipts still recover their Task IDs, subject to input validation.
+Task list/detail return a fixed decimal string or null. The receipt and Task
+Detail show the stored value via the scoped read API. The manual write contract
+and Task workflow remain unchanged.
+
+Focused backend 47/47 PASS with 46 isolated migration records, Python and
+launcher exit 0. Chromium 3/3 PASS with fake transport. The UI test changes
+the proposed 2 hours to 3.25, verifies Task list/detail and reload, rejects
+overprecision and exercises rejection and advisory feedback. Axe and responsive
+checks passed for four viewports. Frontend unit/contract 1,305/1,305, typecheck,
+Biome and build passed. A focused readiness run passed 7/7. The initial full
+run exposed two historical Trash migration tests that mistakenly selected the
+latest Task leaf. They now pin the exact Trash targets before restoring the
+current graph in test cleanup. Focused Trash migration tests passed 2/2.
+Final full isolated regression passed 1,202/1,202 in 416.369 seconds, Python
+and launcher exit 0, run `adab384caccd4090b676dc72518783d0`. Django checks,
+model drift checks and all 46 isolated migration records passed. Browser,
+full and focused test databases and owned Docker resources were cleaned up.
+The final development inventory still showed 45 migrations, 5 Tasks and no
+estimate column. The original SMTP exposure remains an outstanding risk.
+No live call, SMTP operation, purge, or scheduler change.
+
+Changed source: `backend/apps/tasks/{models,estimates,serializers,services}.py`,
+`backend/apps/ai/{api,durable_services,live_generator,live_runtime,validation}.py`,
+the new Task 0007 migration, `frontend/src/pages/{task-generator,tasks}.tsx`,
+the estimated-hours frontend helper and `frontend/src/services/api/{ai,work-management}.ts`.
+Regression changes cover the Task API and migration, live Generator and
+readiness, the historical Trash migration, the frontend decimal contract and
+the `ai-mvp` browser suite.
+
+The Owner rollout gate is separate from implementation approval. Re-identify
+development, take a fresh backup and rehearse an isolated restore. Validate
+the exact plan immediately before running Django with target
+`tasks 0007_task_estimated_hours`. Keep live disabled until separate provider,
+synthetic data and budget approval.
+
+## Historical HT-AI-MVP estimate gap and final readiness — 2026-11-21
+
+**ESTIMATE PERSISTENCE BLOCKED — TASK SCHEMA GAP.** Read-only PostgreSQL
+inventory on the verified development system ID `7671936116369391654` found
+45 migration records, both AI migrations applied, 5 Tasks and no proposals.
+The Task table, current Django model and manual creation contract have no
+estimate-hours field. The UI shows advisory hours and sends them in the
+confirmation payload. Backend validates and removes them before `create_task`.
+See [schema proposal and controlled live smoke](AI_MVP.md). The proposed
+decimal field and migration have not been created. SMTP remains an outstanding
+risk, live AI is off and the currently loaded local configuration has no key.
+
+The two persistence tests require the proposed schema and an editable field.
+The new backend test verifies that invalid hours leave Task, AuditLog and
+confirmation receipt unchanged and that explicit null can confirm. The browser
+test now asserts estimates travel in the confirmation payload and verifies
+terminal rejection after reload. Runtime implementation and migrations were
+left unchanged. This checkpoint touched `test_live_generator.py`,
+`frontend/e2e/ai-mvp.spec.ts`, `AI_MVP.md`, `PROGRESS.md` and this handover.
+
+- Isolated `apps.ai`/`apps.tasks` regression 713/713 PASS (exit 0, run
+  `360004fa80c04889aaca2ac93cd9ea82`). The new test ran separately 1/1 PASS
+  (exit 0, run `7804220c280d4845abf9620329fce5f4`). Both complete isolated
+  migration chains had 45 records. Django/graph/drift and resource cleanup passed.
+- Frontend unit/contract 1,302/1,302 PASS. Typecheck, Biome and build exited 0.
+  Vite reported its existing bundle size advisory.
+- Isolated Chromium 3/3 PASS with fake transport (run
+  `4e69389a80764cbead51f5bd138ec956`). It verified Task confirmation/reload,
+  terminal reject/reload and grounded advisory analysis. Keyboard/focus,
+  responsive 375/768/1440 and landscape, and scoped axe checks passed.
+  Playwright, isolated backend and launcher exited 0 and cleanup was verified.
+- Offline evaluation harness tests 3/3 PASS. Both synthetic requests fit the
+  proposed local encoder bound. No data file from the Owner or real evaluation
+  outputs were supplied. MAE remains unavailable outside eligible paired cases.
+
+Next gate: Owner reviews the nullable estimate design and separately approves
+two synthetic live requests, data policy and cost if desired. The documentation
+contains a two-request cap and USD 0.02 proposed local budget. No development
+writes, SMTP operations, Trash scheduling or actual provider calls occurred.
+
+## HT-AI-MVP development rollout completed — 2026-11-21
+
+**HT-AI-MVP — DEVELOPMENT MIGRATION COMPLETE — PENDING LIVE PROVIDER ACCEPTANCE.**
+Owner deferred remediation of the outstanding SMTP exposure risk for this
+rollout. Credential validity and revocation remain unverified. See
+[Known Security Risks](AI_MVP.md#known-security-risks). The rollout left `.env`
+untouched and performed no SMTP operations or actual OpenAI calls. The local
+live AI and purge flags were checked off. The Trash scheduler was not started.
+
+Development was stopped at intake. The same `hustlytasker_postgres` container
+(`49ef93152944`), volume `docker_postgres_data`, bind `127.0.0.1:5432`, database
+`hustlytasker_db`, PostgreSQL 16.14 and SQL system ID `7671936116369391654`
+were verified. PostgreSQL is running and the web backend was left stopped.
+No other sessions were present at the final preflight. The complete Django
+plan and the targeted plan both contained `ai.0002_dispatch_governance` then
+`ai.0003_proposal_rejection`. The normal targeted Django migrate exited 0.
+
+The protected 147,092-byte custom archive is at
+`D:\da\HustlyTaskerBackups\HT-AI-MVP-ROLLOUT\20261121T074222Z_a3ccafba875a41749408621499be46b4\hustlytasker_development_20261121T074222Z.dump`.
+SHA-256 `D1FC6603EB39EB2D90913F6890A6D0C66C8986CB4EA557018CE73E82A4A611E8`.
+Archive list, full decoding and actual isolated restore each exited 0. The
+rehearsal database `ht_ai_a3ccafba875a41749408621499be46b4` had system ID
+`7710526913799958574` on a private Docker network with tmpfs and no published
+ports. Restore preserved the logical schema and legacy data. Comparison
+accounted for a verified dropped-attribute slot in `django_content_type` and
+the equivalent enum-array cast spellings PostgreSQL re-deparses on restore.
+Rehearsal applied the same two targets and matched the development catalog
+delta. Its owned container and network were removed and the archive retained.
+
+Development tables 31 → 34 and migration history 43 → 45. The three new
+governance tables are empty. `AiProposal` and `AiOperation` remain empty.
+The two proposal CHECKs match the rehearsal, all 207 constraints are valid
+and all 169 indexes are valid/ready. Django checks and migration consistency
+passed. Existing rows are unchanged: 5 Users, 3 Sessions, 2 Profiles, 3
+Workspaces, 5 Tasks, 5 assignments, 3 Deliverables, 0 Reviews, 3 Invitations,
+12 Notifications and 51 AuditLogs. Only 2 migration records, 3 content types
+and their 12 default permissions were added. Legacy fingerprint before/after:
+`a2e947961b52802c9c165d2e04fb91bed7a24e4f3f1677bfb9a9b8cf2aa2377d`.
+
+Separate isolated regression `5663ee9c063840baad331d02dd1c064f` passed
+817/817 with Python and launcher exits 0, no skips, and owned cleanup. It
+covered the fake AI paths, populated legacy migration tests, Task, Review,
+Trash, Invitation V2 and invitation Notifications. Evidence is Git-ignored
+under `.local_backups/HT-AI-MVP-ROLLOUT/`. Existing source changes and Git
+HEAD `60a8f65` were preserved. This rollout modified documentation only.
+
+Next gate is separate Owner authorization of live provider, budget and data
+policy. `estimated_hours` is still draft-only and its persistence requirement
+needs resolution before final AI acceptance. Paid evaluation remains pending.
+
+## Historical HT-AI-MVP rollout stop — 2026-11-21
+
+**ROLLOUT BLOCKED — DEVELOPMENT PRESERVED.** Owner conditionally approved
+only `ai.0002_dispatch_governance` followed by `ai.0003_proposal_rejection`.
+The SMTP credential gate is unresolved. `.env.example:36` contains a blank
+`DJANGO_SMTP_PASSWORD` in the working tree. Commit `2c421f1` introduced a
+value matching an app-password pattern and `HEAD` still contains it. The
+check reported only the path, line, commit and presence. Validity and
+revocation have not been verified. Owner must confirm the value was synthetic
+or revoke and rotate it if genuine. The task did not open `.env`, contact
+SMTP, change credentials or rewrite history.
+
+Git is `main` at `60a8f65` with the previously dirty AI MVP working tree
+preserved. Docker metadata matched the historical development container
+`49ef93152944` (`hustlytasker_postgres`, Compose service `postgres`), volume
+`docker_postgres_data`, and mapping `127.0.0.1:5432`. The container is exited.
+The task did not start it. Live PostgreSQL version, SQL identity, migration
+history, schema, row counts and planner output have not been rechecked. The
+43 applied migration records and 16.14 version are historical evidence only.
+
+Static migration review confirmed `ai.0001` → `ai.0002` → `ai.0003`.
+`0002` creates dispatch, budget-bucket and reservation tables. `0003` replaces
+two proposal CHECKs, retains the legacy AVAILABLE and CONFIRMED predicates,
+and adds REJECTED. The source has no backfill. Each migration is atomic on
+PostgreSQL. A failure in `0003` can leave `0002` applied and must be recorded
+without automatic reversal. `estimated_hours` is dropped before Task creation.
+No fresh backup, rehearsal, SQL apply, suite run or provider call was made.
+
+Resume after the SMTP gate is cleared. Re-identify the existing PostgreSQL
+instance, take a read-only baseline and require an exact two-migration plan.
+Create a fresh protected custom archive outside the repository, restore it in
+isolation and verify all legacy data. Standard Django post-migrate signals may
+append the three new model content types and their default permissions. Compare
+the exact added identities and unchanged legacy rows during rehearsal. Run
+targeted AI, Invitation V2, Task, Review and Trash regression before rollout.
+Apply only the approved AI chain after all gates pass. Live activation, paid
+evaluation and Trash purge/scheduler remain outside the approval.
+
+## Historical HT-AI-MVP implementation verification — 2026-11-21
+
+**HT-AI-MVP — IMPLEMENTATION COMPLETE — PENDING OWNER LIVE PROVIDER / MIGRATION APPROVAL.**
+
+Start from Git `main` at `60a8f65` (clean at intake). Smart Task Generator and Feedback Analyzer already had
+fixture APIs and React flows. This slice adds the live Responses API transport
+and explicit runtime gate, activates shared dispatch governance only in live
+mode and adds rejection for durable flat drafts. See [AI_MVP](AI_MVP.md).
+
+The development container was found stopped and left stopped. Its SQL inventory
+was not re-queried. Historical development evidence below records 43 migrations
+with `ai.0002` unapplied. The live path requires
+`ai.0002` and new `ai.0003_proposal_rejection`, a backend API key and explicit
+live enablement. No live provider charge or development migration is authorized
+in this task. Trash soft-delete/restore manual acceptance is Owner-reported.
+
+Working changes cover `backend/apps/ai`, AI configuration in `backend/config`,
+the existing frontend AI screens and API client, `.env.example`, `scripts/`
+and the affected documentation. The environment template now leaves the SMTP
+password blank. If the value previously tracked there was genuine, revoke it
+and update private configuration separately. The existing `.env` was untouched.
+
+### Verification in this checkpoint
+
+- Full isolated PostgreSQL backend suite passed 1,195/1,195 (exit 0,
+  run `5dd4b89522c8488782aa26d5ecade5fa`). History had 45 migrations including
+  `ai.0002`/`ai.0003`. `pip check`, Django checks and migration drift checks
+  passed. After a decimal formatting fix, the provider/governance suite passed
+  28/28 (exit 0). The populated 0002→0003 migration verification passed.
+- Frontend unit/contract suite passed 1,302/1,302 across 38 files (exit 0).
+  Typecheck, Biome and production build passed. Vite emitted a bundle size
+  advisory. Backend harness unit tests passed 19/19 and PowerShell launcher
+  tests passed 16/16.
+- Isolated Playwright passed 2/2 after allowing the UUID idempotency header on
+  the exact task-scoped Analyzer POST route. The initial run exposed this
+  client-side failure before Django received the request. The final run
+  `f44c9a9db6d047de932532c37fdcd387` used a fake outbound transport, real Django
+  and PostgreSQL, and verified focus, keyboard, preview and saved state at
+  widths 375/768/1440 and 812 landscape. Axe found no violations under the
+  selected WCAG tags. Playwright, isolated backend and launcher exited 0.
+  Cleanup of the owned isolated database, containers and networks completed.
+  Eight screenshots are Git-ignored under `.local_backups/HT-AI-MVP/screenshots/`.
+- Offline evaluation tests passed 3/3 (exit 0). The two Owner-prepared 50-case
+  datasets were not found in the accessible project or attachments. No live
+  model calls, evaluation scores or measured cost/latency are available.
+
+### Safe continuation
+
+Wait for Owner authorization of the exact development migration sequence.
+First re-identify the database, create a fresh protected backup and rehearse the
+two migrations in isolation. Live use separately needs an approved provider
+project, data policy and cost cap. Store `OPENAI_API_KEY` in the ignored local
+file used by the launcher and enable live mode only after both gates. Test a
+bounded synthetic case per feature before accepting real data or running the
+Owner datasets. See [AI_MVP](AI_MVP.md). Trash purge and scheduler remain off.
+
 ## Current rollout — 2026-11-20 — HT-TRASH-V1
 
 **HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**

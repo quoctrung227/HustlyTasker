@@ -1,11 +1,15 @@
-/** Fixture-only AI wire contracts. Scope/permission and confirmation stay server-owned. */
+/** AI wire contracts. Scope, permission and confirmation stay server-owned. */
 import { ApiError, apiClient, invalidResponse } from './client'
 import type { TaskPriority } from './work-management'
+import { isEstimatedHours, parseEstimatedHoursInput } from '../../features/tasks/estimated-hours'
 
 export const aiPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const
 export const aiScenarioIds = ['subtitle-check-v1', 'task-tree-v1'] as const
 export type AiScenarioId = typeof aiScenarioIds[number]
-export interface AiTaskNode {
+export type AiMode = 'fixture_demo' | 'openai_live'
+export type AiUnavailableReason = 'AI_NOT_CONFIGURED' | 'AI_MIGRATION_REQUIRED' | 'AI_DISABLED' | 'PROVIDER_UNAVAILABLE'
+export type AiUsage = { input_tokens: number | null; billable_output_tokens: number | null; cost_usd: string | null; status: 'fixture_zero' | 'provider_reported' }
+export interface AiTaskNode<Hours = number> {
   local_ref: string
   parent_ref: string | null
   title: string
@@ -13,10 +17,11 @@ export interface AiTaskNode {
   priority: TaskPriority
   proposed_deadline: string | null
   notes: string
+  estimated_hours?: Hours | null
 }
-export interface AiTaskPlan {
+export interface AiTaskPlan<Hours = number> {
   contract_version: 'ai.task-plan.v1'
-  tasks: AiTaskNode[]
+  tasks: AiTaskNode<Hours>[]
   assumptions: string[]
   warnings: string[]
 }
@@ -24,10 +29,12 @@ export interface AiProposal {
   contract_version: 'ai.v1'
   proposal_id: string
   revision: number
-  scenario_id: AiScenarioId
-  status: 'AVAILABLE' | 'EXPIRED' | 'CONFIRMED'
-  mode: 'fixture_demo'
-  generated_by_ai: false
+  scenario_id: AiScenarioId | 'openai-live-v1'
+  status: 'AVAILABLE' | 'EXPIRED' | 'CONFIRMED' | 'REJECTED'
+  mode: AiMode
+  generated_by_ai: boolean
+  provider?: 'openai'
+  model?: string
   persisted: true
   created_at: string
   expires_at: string
@@ -36,18 +43,20 @@ export interface AiProposal {
   recovery_expires_at: string | null
   payload: AiTaskPlan | null
   created_tasks: Record<string, string> | null
-  usage: { input_tokens: 0; billable_output_tokens: 0; cost_usd: '0.000000'; status: 'fixture_zero' }
+  usage: AiUsage
 }
 export interface AiAvailability {
   contract_version: 'ai.v1'
   enabled: boolean
-  mode: 'fixture_demo'
-  generated_by_ai: false
+  mode: AiMode
+  generated_by_ai: boolean
+  reason?: AiUnavailableReason | null
   scenarios: { id: AiScenarioId; label: string; brief: string }[]
-  limits: { max_brief_chars: 6000; max_tasks: 20; max_depth: 3; max_request_bytes: 32768 }
+  limits: { max_brief_chars: 6000; max_tasks: 20; max_depth: 0 | 3; max_request_bytes: 32768 }
 }
-export interface AiGenerateInput { readonly scenario_id: AiScenarioId; readonly brief?: string }
-export interface AiConfirmInput { readonly proposal_revision: number; readonly confirmed: true; readonly payload: AiTaskPlan }
+export type AiGenerateInput = { readonly scenario_id: AiScenarioId; readonly brief?: string } |
+  { readonly brief: string; readonly task_count?: number; readonly target_deadline?: string | null }
+export interface AiConfirmInput { readonly proposal_revision: number; readonly confirmed: true; readonly payload: AiTaskPlan<string | number> }
 
 const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -61,6 +70,21 @@ const safeText = (value: unknown, maximum: number, required = false): value is s
   typeof value === 'string' && Array.from(value).length <= maximum && !value.includes('\0') &&
   !/[\uD800-\uDFFF]/u.test(value) && (!required || value.trim().length > 0)
 const scenario = (value: unknown): value is AiScenarioId => aiScenarioIds.some((id) => id === value)
+const unavailableReasons = ['AI_NOT_CONFIGURED', 'AI_MIGRATION_REQUIRED', 'AI_DISABLED', 'PROVIDER_UNAVAILABLE'] as const
+export function aiUnavailableMessage(reason: string | null | undefined): string {
+  if (reason === 'AI_NOT_CONFIGURED') return 'AI chưa được cấu hình. Hãy liên hệ quản trị viên để kiểm tra cấu hình OpenAI.'
+  if (reason === 'AI_MIGRATION_REQUIRED') return 'AI đang chờ cập nhật cơ sở dữ liệu. Hãy liên hệ quản trị viên.'
+  if (reason === 'PROVIDER_UNAVAILABLE') return 'Dịch vụ AI đang gián đoạn. Hãy thử lại sau.'
+  return 'Chức năng AI đang tắt trong môi trường này.'
+}
+
+export function validAiUsage(value: unknown, mode: AiMode): value is AiUsage {
+  if (!record(value) || !exact(value, ['input_tokens', 'billable_output_tokens', 'cost_usd', 'status'])) return false
+  if (mode === 'fixture_demo') return value.input_tokens === 0 && value.billable_output_tokens === 0 && value.cost_usd === '0.000000' && value.status === 'fixture_zero'
+  const tokens = (count: unknown) => count === null || (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0)
+  return value.status === 'provider_reported' && tokens(value.input_tokens) && tokens(value.billable_output_tokens) &&
+    (value.cost_usd === null || (typeof value.cost_usd === 'string' && /^\d{1,12}\.\d{6,8}$/.test(value.cost_usd)))
+}
 
 /** Python parser-equivalent bounded datetime, without Date.parse's silent date rollover. */
 export function isAiDateTime(value: unknown): value is string {
@@ -89,17 +113,24 @@ function strings(value: unknown): value is string[] {
 export function validateAiBrief(value: string): boolean { return safeText(value, 6000, true) }
 
 /** Validate full proposal output/edit payload. This returns no permissions or persisted state. */
-export function validateAiPlan(value: unknown): AiTaskPlan {
+export function validateAiPlan(value: unknown, mode?: AiMode): AiTaskPlan
+export function validateAiPlan(value: unknown, mode: AiMode | undefined, edited: true): AiTaskPlan<string | number>
+export function validateAiPlan(value: unknown, mode?: AiMode, edited = false): AiTaskPlan<string | number> {
   if (!record(value) || !exact(value, ['contract_version', 'tasks', 'assumptions', 'warnings']) ||
       value.contract_version !== 'ai.task-plan.v1' || !Array.isArray(value.tasks) ||
       value.tasks.length < 1 || value.tasks.length > 20 || !strings(value.assumptions) || !strings(value.warnings)) throw invalidResponse()
-  const nodes = new Map<string, AiTaskNode>()
+  const nodes = new Map<string, AiTaskNode<string | number>>()
   for (const item of value.tasks) {
-    if (!record(item) || !exact(item, ['local_ref', 'parent_ref', 'title', 'description', 'priority', 'proposed_deadline', 'notes']) ||
+    if (!record(item)) throw invalidResponse()
+    const fields = ['local_ref', 'parent_ref', 'title', 'description', 'priority', 'proposed_deadline', 'notes']
+    if (mode === 'openai_live' || (mode !== 'fixture_demo' && Object.hasOwn(item, 'estimated_hours'))) fields.push('estimated_hours')
+    if (!exact(item, fields) ||
         !ref(item.local_ref) || nodes.has(item.local_ref) || !(item.parent_ref === null || ref(item.parent_ref)) ||
+        (mode === 'openai_live' && item.parent_ref !== null) ||
+        (Object.hasOwn(item, 'estimated_hours') && !validAiEstimate(item.estimated_hours, edited)) ||
         !safeText(item.title, 255, true) || !safeText(item.description, 2000) || !safeText(item.notes, 500) ||
         !aiPriorities.some((priority) => priority === item.priority) || !nullableDate(item.proposed_deadline)) throw invalidResponse()
-    nodes.set(item.local_ref, item as unknown as AiTaskNode)
+    nodes.set(item.local_ref, item as unknown as AiTaskNode<string | number>)
   }
   for (const node of nodes.values()) {
     let current = node, depth = 0
@@ -112,7 +143,13 @@ export function validateAiPlan(value: unknown): AiTaskPlan {
     }
   }
   if (!sizeWithin(value, 65536)) throw invalidResponse()
-  return value as unknown as AiTaskPlan
+  return value as unknown as AiTaskPlan<string | number>
+}
+function validAiEstimate(value: unknown, edited: boolean): boolean {
+  if (value === null) return true
+  if (edited && isEstimatedHours(value)) return true
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0.01 && value <= 1000 &&
+    (!edited || parseEstimatedHoursInput(String(value)) !== undefined)
 }
 function mapping(value: unknown): value is Record<string, string> {
   if (!record(value)) return false
@@ -121,24 +158,24 @@ function mapping(value: unknown): value is Record<string, string> {
     new Set(values.map((id) => String(id).toLowerCase())).size === values.length
 }
 export function validateAiProposal(value: unknown, expectedId?: string): AiProposal {
-  if (!record(value) || !exact(value, ['contract_version', 'proposal_id', 'revision', 'scenario_id', 'status',
+  if (!record(value) || (value.mode !== 'fixture_demo' && value.mode !== 'openai_live')) throw invalidResponse()
+  const live = value.mode === 'openai_live'
+  if (!exact(value, ['contract_version', 'proposal_id', 'revision', 'scenario_id', 'status',
       'mode', 'generated_by_ai', 'persisted', 'created_at', 'expires_at', 'payload_expires_at', 'confirmed_at',
-      'recovery_expires_at', 'payload', 'created_tasks', 'usage']) || !sizeWithin(value, 65536) ||
+      'recovery_expires_at', 'payload', 'created_tasks', 'usage', ...(live ? ['provider', 'model'] : [])]) || !sizeWithin(value, 65536) ||
       value.contract_version !== 'ai.v1' || !uuid(value.proposal_id) ||
       (expectedId !== undefined && value.proposal_id.toLowerCase() !== expectedId.toLowerCase()) ||
-      !Number.isSafeInteger(value.revision) || Number(value.revision) < 1 || !scenario(value.scenario_id) ||
-      value.mode !== 'fixture_demo' || value.generated_by_ai !== false || value.persisted !== true ||
+      !Number.isSafeInteger(value.revision) || Number(value.revision) < 1 ||
+      (live ? value.scenario_id !== 'openai-live-v1' || value.provider !== 'openai' || !safeText(value.model, 120, true) : !scenario(value.scenario_id)) ||
+      value.generated_by_ai !== live || value.persisted !== true ||
       !isAiDateTime(value.created_at) || !isAiDateTime(value.expires_at) || !isAiDateTime(value.payload_expires_at) ||
       Date.parse(value.expires_at) <= Date.parse(value.created_at) ||
       Date.parse(value.payload_expires_at) < Date.parse(value.expires_at) ||
-      !nullableDate(value.confirmed_at) || !nullableDate(value.recovery_expires_at) ||
-      !record(value.usage) || !exact(value.usage, ['input_tokens', 'billable_output_tokens', 'cost_usd', 'status']) ||
-      value.usage.input_tokens !== 0 || value.usage.billable_output_tokens !== 0 ||
-      value.usage.cost_usd !== '0.000000' || value.usage.status !== 'fixture_zero') throw invalidResponse()
+      !nullableDate(value.confirmed_at) || !nullableDate(value.recovery_expires_at) || !validAiUsage(value.usage, value.mode)) throw invalidResponse()
   if (value.status === 'AVAILABLE') {
-    validateAiPlan(value.payload)
+    validateAiPlan(value.payload, value.mode)
     if (value.created_tasks !== null || value.confirmed_at !== null || value.recovery_expires_at !== null) throw invalidResponse()
-  } else if (value.status === 'EXPIRED') {
+  } else if (value.status === 'EXPIRED' || (live && value.status === 'REJECTED')) {
     if (value.payload !== null || value.created_tasks !== null || value.confirmed_at !== null || value.recovery_expires_at !== null) throw invalidResponse()
   } else if (value.status === 'CONFIRMED') {
     if (value.payload !== null || !mapping(value.created_tasks) || !isAiDateTime(value.confirmed_at) ||
@@ -148,13 +185,16 @@ export function validateAiProposal(value: unknown, expectedId?: string): AiPropo
   return value as unknown as AiProposal
 }
 export function validateAiAvailability(value: unknown): AiAvailability {
-  if (!record(value) || !exact(value, ['contract_version', 'enabled', 'mode', 'generated_by_ai', 'scenarios', 'limits']) ||
+  if (!record(value) || (value.mode !== 'fixture_demo' && value.mode !== 'openai_live')) throw invalidResponse()
+  const live = value.mode === 'openai_live'
+  if (!exact(value, ['contract_version', 'enabled', 'mode', 'generated_by_ai', 'scenarios', 'limits', ...(live ? ['reason'] : [])]) ||
       value.contract_version !== 'ai.v1' || typeof value.enabled !== 'boolean' ||
-      value.mode !== 'fixture_demo' || value.generated_by_ai !== false || !Array.isArray(value.scenarios) ||
-      value.scenarios.length !== 2 || !record(value.limits) ||
+      value.generated_by_ai !== live || !Array.isArray(value.scenarios) ||
+      value.scenarios.length !== (live ? 0 : 2) || !record(value.limits) ||
+      (live && (value.enabled ? value.reason !== null : !unavailableReasons.some((reason) => reason === value.reason))) ||
       !exact(value.limits, ['max_brief_chars', 'max_tasks', 'max_depth', 'max_request_bytes']) ||
       value.limits.max_brief_chars !== 6000 || value.limits.max_tasks !== 20 ||
-      value.limits.max_depth !== 3 || value.limits.max_request_bytes !== 32768 ||
+      value.limits.max_depth !== (live ? 0 : 3) || value.limits.max_request_bytes !== 32768 ||
       !sizeWithin(value, 65536)) throw invalidResponse()
   const ids = new Set<string>()
   for (const item of value.scenarios) {
@@ -186,14 +226,25 @@ export const aiApi = {
     return validateAiAvailability(value.ai)
   },
   async generate(profileId: string, workspaceId: string, input: AiGenerateInput, key: string, signal?: AbortSignal): Promise<AiProposal> {
-    if (!scenario(input.scenario_id) || (input.brief !== undefined && !validateAiBrief(input.brief))) {
-      throw new ApiError(400, 'validation', 'Vui lòng chọn mẫu và nhập yêu cầu giả lập hợp lệ.', { brief: 'Nhập yêu cầu giả lập từ 1 đến 6.000 ký tự.' })
+    const fixture = 'scenario_id' in input
+    if (fixture ? (!scenario(input.scenario_id) || (input.brief !== undefined && !validateAiBrief(input.brief))) : !validateAiBrief(input.brief)) {
+      throw new ApiError(400, 'validation', 'Mô tả yêu cầu chưa hợp lệ.', { brief: 'Nhập yêu cầu từ 1 đến 6.000 ký tự.' })
     }
-    const body = { scenario_id: input.scenario_id, ...(input.brief === undefined ? {} : { brief: input.brief }) }
+    if (!fixture && input.task_count !== undefined && (!Number.isInteger(input.task_count) || input.task_count < 1 || input.task_count > 20)) {
+      throw new ApiError(400, 'validation', 'Số công việc chưa hợp lệ.', { task_count: 'Nhập số nguyên từ 1 đến 20.' })
+    }
+    if (!fixture && input.target_deadline !== undefined && !nullableDate(input.target_deadline)) {
+      throw new ApiError(400, 'validation', 'Thời hạn chung chưa hợp lệ.', { target_deadline: 'Vui lòng kiểm tra thời hạn chung.' })
+    }
+    const body = fixture ? { scenario_id: input.scenario_id, ...(input.brief === undefined ? {} : { brief: input.brief }) }
+      : { brief: input.brief, ...(input.task_count === undefined ? {} : { task_count: input.task_count }),
+        ...(input.target_deadline === undefined ? {} : { target_deadline: input.target_deadline }) }
     requestSize(body)
-    return validateAiProposal(await apiClient.request<unknown>(basePath(profileId, workspaceId), {
+    const proposal = validateAiProposal(await apiClient.request<unknown>(basePath(profileId, workspaceId), {
       method: 'POST', body, idempotencyKey: key, signal, protected: true,
     }))
+    if (proposal.mode !== (fixture ? 'fixture_demo' : 'openai_live')) throw invalidResponse()
+    return proposal
   },
   async proposal(profileId: string, workspaceId: string, proposalId: string, signal?: AbortSignal): Promise<AiProposal> {
     const id = entityId(proposalId)
@@ -201,7 +252,7 @@ export const aiApi = {
   },
   async confirm(profileId: string, workspaceId: string, proposalId: string, input: AiConfirmInput, key: string, signal?: AbortSignal): Promise<AiProposal> {
     const id = entityId(proposalId)
-    const plan = validateAiPlan(input.payload)
+    const plan = validateAiPlan(input.payload, undefined, true)
     if (input.confirmed !== true || !Number.isSafeInteger(input.proposal_revision) || input.proposal_revision < 1) {
       throw new ApiError(400, 'validation', 'Cần xác nhận rõ ràng phiên bản đề xuất hiện tại.')
     }
@@ -211,6 +262,15 @@ export const aiApi = {
       method: 'POST', body, idempotencyKey: key, signal, protected: true,
     }), id)
     if (proposal.status !== 'CONFIRMED') throw invalidResponse()
+    return proposal
+  },
+  async reject(profileId: string, workspaceId: string, proposalId: string, revision: number, signal?: AbortSignal): Promise<AiProposal> {
+    const id = entityId(proposalId)
+    if (!Number.isSafeInteger(revision) || revision < 1) throw invalidResponse()
+    const proposal = validateAiProposal(await apiClient.request<unknown>(`${basePath(profileId, workspaceId)}${id}/reject/`, {
+      method: 'POST', body: { proposal_revision: revision }, signal, protected: true,
+    }), id)
+    if (proposal.status !== 'REJECTED' || proposal.mode !== 'openai_live') throw invalidResponse()
     return proposal
   },
 }

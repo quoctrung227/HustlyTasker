@@ -1,4 +1,4 @@
-"""Dedicated synthetic proposal state, separate from business/audit content."""
+"""AI proposal and dispatch state, separate from business/audit content."""
 
 import uuid
 
@@ -12,6 +12,7 @@ class AiProposal(models.Model):
     class Status(models.TextChoices):
         AVAILABLE = "AVAILABLE"
         CONFIRMED = "CONFIRMED"
+        REJECTED = "REJECTED"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
@@ -31,7 +32,7 @@ class AiProposal(models.Model):
 
     class Meta:
         constraints = [
-            models.CheckConstraint(condition=models.Q(status__in=("AVAILABLE", "CONFIRMED")), name="ai_prop_valid_status"),
+            models.CheckConstraint(condition=models.Q(status__in=("AVAILABLE", "CONFIRMED", "REJECTED")), name="ai_prop_valid_status"),
             models.CheckConstraint(condition=models.Q(revision__gte=1), name="ai_prop_positive_revision"),
             models.CheckConstraint(condition=models.Q(expires_at__gt=models.F("created_at")), name="ai_prop_expiry_order"),
             models.CheckConstraint(condition=models.Q(payload_expires_at__gte=models.F("expires_at")), name="ai_prop_payload_order"),
@@ -40,6 +41,9 @@ class AiProposal(models.Model):
                          recovery_expires_at__isnull=True, created_tasks__isnull=True)
                 | models.Q(status="CONFIRMED", confirmed_at__isnull=False,
                            recovery_expires_at__isnull=False, payload__isnull=True)
+                | models.Q(status="REJECTED", confirmed_at__isnull=True,
+                           recovery_expires_at__isnull=True, payload__isnull=True,
+                           created_tasks__isnull=True)
             ), name="ai_prop_lifecycle"),
             models.CheckConstraint(condition=(
                 models.Q(confirmed_at__isnull=True)

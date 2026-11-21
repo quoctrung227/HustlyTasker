@@ -1,17 +1,13 @@
-"""Responses API mapping through an explicitly offline, injected transport.
-
-No HTTP client, credentials, environment loader, ORM or application wiring lives
-here. ``enabled`` enables only fake transport execution, never paid inference.
-The existing fixture services intentionally do not construct this adapter.
-"""
+"""Responses API encoding and validation shared by offline and live transports."""
 
 import json
 import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Protocol
+from typing import Callable, Protocol
 from uuid import UUID
+from django.views.decorators.debug import sensitive_variables
 
 from .contracts import (
     FEEDBACK_VERSION, ISSUE_CATEGORIES, PRIORITIES, TASK_PLAN_VERSION,
@@ -71,6 +67,27 @@ class OpenAIConfig:
 class TransportResponse:
     status_code: int
     body: bytes = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class LiveInput:
+    """Server-built request. Only data enters the untrusted user message."""
+
+    feature: Feature
+    data: dict = field(repr=False)
+    schema: dict
+    schema_name: str
+    instructions: str
+    validate: Callable[[str], object] = field(repr=False)
+
+
+class ReportedProviderError(AIError):
+    """A safe failure with usage from a response whose model was verified."""
+
+    def __init__(self, code, usage, model):
+        super().__init__(code)
+        self.usage = usage
+        self.model = model
 
 
 class OfflineTransport(Protocol):
@@ -276,6 +293,53 @@ class OpenAIResponsesAdapter:
         except Exception:
             raise AIError(ErrorCode.PROVIDER_UNAVAILABLE) from None
 
+    def _prepare(self, request):
+        data, schema, validated, scope = _validated_input(request)
+
+        def validate(raw):
+            if request.feature is Feature.TASK_PLAN:
+                parse_task_plan(raw, request.limits)
+            else:
+                parse_feedback_analysis(raw, validated.sources, scope,
+                                        validated.sources[0].task_id, request.limits)
+
+        name = ("hustlytasker_task_plan_v1" if request.feature is Feature.TASK_PLAN
+                else "hustlytasker_feedback_v1")
+        return data, schema, name, _SYSTEM, validate
+
+    def _transport_allowed(self):
+        return getattr(self._transport, "offline", None) is True
+
+    def _body_size_allowed(self, body):
+        return len(body) <= _MAX_OUTBOUND_BYTES
+
+    def _request_options(self):
+        return {}
+
+    def _parse_response(self, value, validate):
+        raw, model = self._output(value)
+        validate(raw)
+        usage = _usage(value.get("usage"), self._config.max_output_tokens)
+        return ProviderResult(raw, usage, provider="openai_offline", model=model)
+
+    @sensitive_variables()
+    def _encode(self, request):
+        data, schema, name, instructions, validate = self._prepare(request)
+        body = _json({
+            "model": self._config.model, "store": False, "stream": False, "tools": [],
+            "max_output_tokens": self._config.max_output_tokens,
+            **self._request_options(),
+            "input": [
+                {"role": "system", "content": [{"type": "input_text", "text": instructions}]},
+                {"role": "user", "content": [{"type": "input_text", "text": _json(data)}]},
+            ],
+            "text": {"format": {"type": "json_schema", "name": name, "strict": True, "schema": schema}},
+        }).encode("utf-8", errors="strict")
+        if not self._body_size_allowed(body):
+            _invalid()
+        return body, validate
+
+    @sensitive_variables()
     def _generate(self, request, control):
         config = self._config
         if not config.enabled:
@@ -286,23 +350,9 @@ class OpenAIResponsesAdapter:
         transport = self._transport
         if transport is None or not callable(getattr(transport, "post", None)):
             _invalid()
-        if getattr(transport, "offline", None) is not True:
+        if not self._transport_allowed():
             _invalid(ErrorCode.AI_DISABLED)
-        data, schema, validated, scope = _validated_input(request)
-        body = _json({
-            "model": config.model, "store": False, "stream": False, "tools": [],
-            "max_output_tokens": config.max_output_tokens,
-            "input": [
-                {"role": "system", "content": [{"type": "input_text", "text": _SYSTEM}]},
-                {"role": "user", "content": [{"type": "input_text", "text": _json(data)}]},
-            ],
-            "text": {"format": {"type": "json_schema", "name": (
-                "hustlytasker_task_plan_v1" if request.feature is Feature.TASK_PLAN
-                else "hustlytasker_feedback_v1"
-            ), "strict": True, "schema": schema}},
-        }).encode("utf-8", errors="strict")
-        if len(body) > _MAX_OUTBOUND_BYTES:
-            _invalid()
+        body, validate = self._encode(request)
         now = control.clock()
         try:
             valid_now = type(now) in (int, float) and now >= 0 and math.isfinite(now)
@@ -339,27 +389,25 @@ class OpenAIResponsesAdapter:
         if response.status_code != 200:
             _invalid(ErrorCode.PROVIDER_UNAVAILABLE)
         value = _decode(response.body, config.max_response_bytes)
-        raw, model = self._output(value)
-        if request.feature is Feature.TASK_PLAN:
-            parse_task_plan(raw, request.limits)
-        else:
-            parse_feedback_analysis(raw, validated.sources, scope,
-                                    validated.sources[0].task_id, request.limits)
-        usage = _usage(value.get("usage"), config.max_output_tokens)
+        result = self._parse_response(value, validate)
         bounded.check()
-        return ProviderResult(raw, usage, provider="openai_offline", model=model)
+        return result
 
-    def _output(self, value):
-        if value.get("object") != "response" or value.get("status") != "completed":
-            _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
-        if value.get("error") is not None or value.get("incomplete_details") is not None:
-            _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
+    def _response_model(self, value):
         model = value.get("model")
         accepted = {self._config.model}
         if self._config.model == "gpt-5.4-mini":
             accepted.add("gpt-5.4-mini-2026-03-17")
         if type(model) is not str or model not in accepted:
             _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
+        return model
+
+    def _output(self, value):
+        if value.get("object") != "response" or value.get("status") != "completed":
+            _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
+        if value.get("error") is not None or value.get("incomplete_details") is not None:
+            _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
+        model = self._response_model(value)
         output = value.get("output")
         if type(output) is not list or not 1 <= len(output) <= 10:
             _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
@@ -391,3 +439,40 @@ class OpenAIResponsesAdapter:
         if len(messages) != 1:
             _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
         return messages[0], model
+
+
+class LiveOpenAIResponsesAdapter(OpenAIResponsesAdapter):
+    def __init__(self, *, config, transport, max_input_tokens):
+        super().__init__(config=config, transport=transport)
+        self.max_input_tokens = max_input_tokens
+
+    def _transport_allowed(self):
+        return getattr(self._transport, "offline", None) is False
+
+    def _prepare(self, request):
+        if type(request) is not LiveInput or not isinstance(request.feature, Feature):
+            _invalid()
+        return request.data, request.schema, request.schema_name, request.instructions, request.validate
+
+    def _body_size_allowed(self, body):
+        # Conservative byte-based input bound with room for provider framing.
+        return super()._body_size_allowed(body) and len(body) + 1024 <= self.max_input_tokens
+
+    def _request_options(self):
+        return {"service_tier": "default"}
+
+    @sensitive_variables()
+    def _parse_response(self, value, validate):
+        if value.get("object") != "response" or value.get("service_tier", "default") != "default":
+            _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
+        model = self._response_model(value)
+        reported = _usage(value.get("usage"), self._config.max_output_tokens)
+        if reported.input_tokens is None or reported.input_tokens > self.max_input_tokens:
+            _invalid(ErrorCode.INVALID_PROVIDER_RESPONSE)
+        usage = UsageMetadata(reported.input_tokens, reported.billable_output_tokens, None, "provider_reported")
+        try:
+            raw, _ = self._output(value)
+            validate(raw)
+        except AIError as error:
+            raise ReportedProviderError(error.code, usage, model) from None
+        return ProviderResult(raw, usage, provider="openai", model=model)

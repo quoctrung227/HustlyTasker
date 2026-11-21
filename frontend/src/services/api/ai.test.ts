@@ -52,6 +52,20 @@ function scenarioAt(value: AiAvailability, index: number) {
 beforeEach(() => { apiClient.clearCsrf(); apiClient.setForbiddenHandler(null) })
 afterEach(() => { apiClient.clearCsrf(); apiClient.setForbiddenHandler(null); vi.unstubAllGlobals() })
 
+it('keeps unavailable live metadata, flat previews and live usage distinct from fixtures', () => {
+  const metadata = { ...availability(), enabled: false, mode: 'openai_live', generated_by_ai: true,
+    reason: 'AI_NOT_CONFIGURED', scenarios: [], limits: { ...availability().limits, max_depth: 0 } }
+  expect(validateAiAvailability(metadata)).toEqual(metadata)
+  expect(() => validateAiAvailability({ ...metadata, enabled: true })).toThrow(ApiError)
+  const flat: AiProposal = { ...proposal(), mode: 'openai_live', generated_by_ai: true, scenario_id: 'openai-live-v1',
+    provider: 'openai', model: 'gpt-5.4-mini', payload: { ...plan(), tasks: plan().tasks.map((task) => ({ ...task, parent_ref: null, estimated_hours: 2.5 })) },
+    usage: { input_tokens: 150, billable_output_tokens: 75, cost_usd: '0.00009750', status: 'provider_reported' } }
+  expect(validateAiProposal(flat)).toEqual(flat)
+  expect(validateAiProposal({ ...flat, status: 'REJECTED', payload: null }).status).toBe('REJECTED')
+  expect(() => validateAiProposal({ ...flat, payload: plan() })).toThrow(ApiError)
+  expect(() => validateAiProposal({ ...flat, generated_by_ai: false })).toThrow(ApiError)
+})
+
 describe('bounded fixture contracts', () => {
   it('accepts nested preview, confirmed mapping and expired tombstone without inventing fields', () => {
     expect(validateAiPlan(plan())).toEqual(plan())
@@ -241,7 +255,7 @@ describe('existing transport with constrained AI metadata', () => {
   it('drops unknown/error-reflected code and localizes approved field names only', async () => {
     const fetchMock = vi.fn().mockResolvedValue(json({ code: 'private error data', detail: 'private', fields: { brief: ['private'], provider_key: ['secret'] } }, 400))
     vi.stubGlobal('fetch', fetchMock)
-    await expect(new ApiClient().request(base)).rejects.toMatchObject({ code: null, fieldErrors: { brief: 'Nhập yêu cầu giả lập hợp lệ từ 1 đến 6.000 ký tự.' } })
+    await expect(new ApiClient().request(base)).rejects.toMatchObject({ code: null, fieldErrors: { brief: 'Nhập yêu cầu hợp lệ từ 1 đến 6.000 ký tự.' } })
   })
   it('keeps existing ApiError constructor shape backward compatible', () => {
     const error = new ApiError(403, 'forbidden', 'Safe')

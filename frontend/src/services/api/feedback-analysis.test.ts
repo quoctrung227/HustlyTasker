@@ -46,6 +46,21 @@ function at<T>(values: T[], index = 0): T {
 beforeEach(() => { apiClient.clearCsrf(); apiClient.setForbiddenHandler(null) })
 afterEach(() => { apiClient.clearCsrf(); apiClient.setForbiddenHandler(null); vi.unstubAllGlobals() })
 
+it('checks live manual provenance and evidence source bindings on the wire', () => {
+  const input = { sources: [], feedback_text: 'Giảm tốc độ phụ đề.' }
+  expect(validateFeedbackInput(input, 'openai_live')).toEqual(input)
+  expect(() => validateFeedbackInput(input)).toThrow(ApiError)
+  const live: FeedbackAnalysisResult = { ...result([]), mode: 'openai_live', generated_by_ai: true, fixture_version: null,
+    provider: 'openai', model: 'gpt-5.4-mini', sources: [{ kind: 'manual', id: null, ref: 'S1' }],
+    usage: { input_tokens: 150, billable_output_tokens: 75, cost_usd: '0.00009750', status: 'provider_reported' },
+    payload: { ...result([]).payload, contract_version: 'ai.feedback.v2', issues: [{ category: 'CLARITY', description: 'Phụ đề chạy nhanh.',
+      severity: 'MEDIUM', source_refs: ['S1'], evidence: [{ source_ref: 'S1', quote: 'Giảm tốc độ phụ đề.' }] }] } }
+  expect(validateFeedbackAnalysis(live, [], 'openai_live', true)).toEqual(live)
+  expect(() => validateFeedbackAnalysis(live, [], 'openai_live')).toThrow(ApiError)
+  firstIssue(live).evidence = [{ source_ref: 'S2', quote: 'Giảm tốc độ phụ đề.' }]
+  expect(() => validateFeedbackAnalysis(live, [], 'openai_live', true)).toThrow(ApiError)
+})
+
 describe('stateless Feedback Analyzer strict contracts', () => {
   it('accepts actual fixture provenance, manifest and payload without inventing persistence', () => {
     expect(validateFeedbackAnalysis(result(), selected)).toEqual(result())
@@ -176,6 +191,20 @@ describe('stateless Feedback Analyzer strict contracts', () => {
 })
 
 describe('existing API client stateless analysis transport', () => {
+  it('sends the live task-scoped UUID with CSRF and does not replay a dispatched request', async () => {
+    const input = { sources: [], feedback_text: 'Giảm tốc độ phụ đề.' }
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ csrf_token: 'a'.repeat(64) }))
+      .mockResolvedValueOnce(json({ code: 'ALREADY_DISPATCHED' }, 409))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(feedbackAnalysisApi.analyze(profileId, workspaceId, taskId, input, undefined, otherId))
+      .rejects.toMatchObject({ status: 409, code: 'ALREADY_DISPATCHED' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenNthCalledWith(2, path, expect.objectContaining({
+      method: 'POST', credentials: 'same-origin', body: JSON.stringify(input),
+      headers: expect.objectContaining({ 'X-CSRFToken': 'a'.repeat(64), 'Idempotency-Key': otherId }),
+    }))
+  })
+
   it('uses actual nested POST/CSRF/session contract without idempotency or mutation fallback', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(json({ csrf_token: 'a'.repeat(64) })).mockResolvedValueOnce(json(result()))
     vi.stubGlobal('fetch', fetchMock)
@@ -241,7 +270,7 @@ describe('existing API client stateless analysis transport', () => {
     }, 400)))
     const failure = await feedbackAnalysisApi.analyze(profileId, workspaceId, taskId, { sources: selected }).catch((error: unknown) => error)
     expect(failure).toMatchObject({ status: 400, code: 'VALIDATION_ERROR', fieldErrors: {
-      sources: 'Chọn từ 1 đến 20 nguồn phản hồi hợp lệ thuộc công việc hiện tại.',
+      sources: 'Vui lòng kiểm tra nguồn phản hồi đã chọn hoặc nhập.',
       focus: 'Nhập trọng tâm tối đa 1.000 ký tự Unicode hợp lệ, không chứa ký tự NUL.',
     } })
     expect((failure as ApiError).fieldErrors).not.toHaveProperty('actor')

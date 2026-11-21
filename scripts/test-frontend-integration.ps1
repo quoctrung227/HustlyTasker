@@ -2,7 +2,7 @@
 param(
     [ValidateRange(1024,65535)]
     [int]$BackendPort = 8001,
-    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members','workspace-members','invitation-delivery-failure','workspace-inheritance','task-brief','task-ux','reassign-analytics','invitation-v2','trash')]
+    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','ai-mvp','task-stability','members','workspace-members','invitation-delivery-failure','workspace-inheritance','task-brief','task-ux','reassign-analytics','invitation-v2','trash')]
     [string]$Suite = 'foundation'
 )
 
@@ -29,6 +29,7 @@ $htCreatedPg = $false
 $htCreatedServer = $false
 $htServerReady = $false
 $htSpec = switch ($Suite) {
+    'ai-mvp' {'e2e/ai-mvp.spec.ts'}
     'trash' {'e2e/trash.spec.ts'}
     'invitation-v2' {'e2e/invitation-v2.spec.ts'}
     'reassign-analytics' {'e2e/reassign-analytics.spec.ts'}
@@ -51,6 +52,7 @@ $htSpec = switch ($Suite) {
     default {'e2e/real-api.spec.ts'}
 }
 $htArtifactTask = switch ($Suite) {
+    'ai-mvp' {'HT-AI-MVP'}
     'trash' {'HT-TRASH-V1'}
     'invitation-v2' {'HT-ORG-INVITATION-V2-IMPLEMENTATION'}
     'reassign-analytics' {'HT-TASK-REASSIGN-ANALYTICS-V1'}
@@ -258,7 +260,7 @@ try {
     if (-not $htReady) {throw 'Isolated PostgreSQL readiness timeout.'}
     # Fixture enablement exists only in the ownership-checked isolated server.
     # No deployment flag or local environment file is consumed or changed.
-    $htServeMode = if ($Suite -eq 'trash') {'serve-trash'} elseif ($Suite -eq 'workspace-members') {'serve-workspace-members'} elseif ($Suite -in @('invitation-v2','members','invitation-delivery-failure')) {'serve-invitation-v2'} elseif ($Suite -in @('workspace-inheritance','reassign-analytics','task-stability','collaboration','work-management','foundation')) {'serve-invitation-regression'} elseif ($Suite -in @('ai-generator','feedback-analyzer')) {'serve-ai'} else {'serve'}
+    $htServeMode = if ($Suite -eq 'ai-mvp') {'serve-ai-mvp'} elseif ($Suite -eq 'trash') {'serve-trash'} elseif ($Suite -eq 'workspace-members') {'serve-workspace-members'} elseif ($Suite -in @('invitation-v2','members','invitation-delivery-failure')) {'serve-invitation-v2'} elseif ($Suite -in @('workspace-inheritance','reassign-analytics','task-stability','collaboration','work-management','foundation')) {'serve-invitation-regression'} elseif ($Suite -in @('ai-generator','feedback-analyzer')) {'serve-ai'} else {'serve'}
     Invoke-CheckedDocker @('create','--name',$htServer,'--network',$htHttpNetwork,
         '--publish',"127.0.0.1:${BackendPort}:8000",'--workdir','/workspace/backend',
         '--mount',"type=bind,source=$htRepository,target=/workspace,readonly",

@@ -73,6 +73,7 @@ class TaskReadSerializer(serializers.ModelSerializer):
     can_unassign = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
     estimated_compensation_vnd = serializers.SerializerMethodField()
+    estimated_hours = serializers.DecimalField(max_digits=6, decimal_places=2, allow_null=True, read_only=True, coerce_to_string=True)
 
     class Meta:
         model = Task
@@ -85,6 +86,7 @@ class TaskReadSerializer(serializers.ModelSerializer):
             "status",
             "priority",
             "deadline",
+            "estimated_hours",
             "raw_video_url",
             "reference_video_url",
             "template_project_url",

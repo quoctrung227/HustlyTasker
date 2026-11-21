@@ -1,5 +1,23 @@
 # HustlyTasker frontend guide
 
+## HT-AI-MVP
+
+Task list opens the Generator. The manager can enter a brief, count and deadline,
+edit the returned flat drafts and select the Tasks to create in a confirmation
+dialog. The optional estimate accepts decimal hours from 0.01 to 1,000, with up
+to two decimal places. The confirmation previews the selected values. After
+submission, the receipt and Task Detail read the persisted hours. Feedback
+Analyzer is on Task detail. The reviewer can choose sources or
+enter feedback, read exact excerpts and edit or discard suggestions locally.
+The existing explicit Review actions retain their current permissions.
+
+Availability is server reported. Development has applied and verified
+`tasks.0007_task_estimated_hours`. The current local launchers can be used for
+manual development work. Live requires separate approval. See [AI_MVP](AI_MVP.md)
+for private backend configuration and live acceptance gates. For isolated
+browser verification, use `scripts/test-frontend-integration.ps1 -Suite ai-mvp`.
+The suite uses a fake HTTPS transport with real React, Django and PostgreSQL.
+
 ## Trash V1 development rollout — Owner manual acceptance pending
 
 **HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**

@@ -10,10 +10,10 @@ export type ApiErrorKind =
   | 'network'
   | 'invalid-response'
 
-const aiErrorCodes = ['AI_DISABLED', 'PERMISSION_DENIED', 'NOT_FOUND', 'VALIDATION_ERROR',
+const aiErrorCodes = ['AI_DISABLED', 'AI_NOT_CONFIGURED', 'AI_MIGRATION_REQUIRED', 'PERMISSION_DENIED', 'NOT_FOUND', 'VALIDATION_ERROR',
   'IDEMPOTENCY_CONFLICT', 'ALREADY_CONFIRMED', 'STALE_PROPOSAL', 'STALE_CONTEXT',
   'EXPIRED', 'RECOVERY_EXPIRED', 'RATE_LIMITED', 'BUDGET_EXCEEDED', 'PROVIDER_UNAVAILABLE',
-  'PROVIDER_TIMEOUT', 'INVALID_PROVIDER_RESPONSE', 'CANCELLED'] as const
+  'PROVIDER_TIMEOUT', 'AI_REFUSED', 'ALREADY_DISPATCHED', 'INVALID_PROVIDER_RESPONSE', 'CANCELLED'] as const
 export type AiErrorCode = typeof aiErrorCodes[number]
 
 export class ApiError extends Error {
@@ -129,8 +129,11 @@ function safeFieldErrors(payload: unknown): Record<string, string> {
     expected_assignment_id: 'Phân công đã thay đổi. Hãy tải lại công việc trước khi tiếp tục.',
     expected_assigned_at: 'Phân công đã thay đổi. Hãy tải lại công việc trước khi tiếp tục.',
     role: 'Vai trò này không được hỗ trợ hoặc vượt quyền quản lý hiện tại. Hãy tải lại danh sách.',
-    brief: 'Nhập yêu cầu giả lập hợp lệ từ 1 đến 6.000 ký tự.',
-    sources: 'Chọn từ 1 đến 20 nguồn phản hồi hợp lệ thuộc công việc hiện tại.',
+    brief: 'Nhập yêu cầu hợp lệ từ 1 đến 6.000 ký tự.',
+    task_count: 'Nhập số nguyên từ 1 đến 20.',
+    target_deadline: 'Vui lòng kiểm tra thời hạn chung.',
+    feedback_text: 'Nhập phản hồi hợp lệ từ 1 đến 4.000 ký tự.',
+    sources: 'Vui lòng kiểm tra nguồn phản hồi đã chọn hoặc nhập.',
     focus: 'Nhập trọng tâm tối đa 1.000 ký tự Unicode hợp lệ, không chứa ký tự NUL.',
     scenario_id: 'Vui lòng chọn mẫu mô phỏng được hỗ trợ.',
     payload: 'Đề xuất chưa hợp lệ. Vui lòng kiểm tra nội dung, cấu trúc và thời hạn.',
@@ -229,7 +232,7 @@ export class ApiClient {
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (options.idempotencyKey !== undefined) {
       const entity = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-      const aiPost = new RegExp(`^/api/v1/profiles/${entity}/workspaces/${entity}/ai/task-proposals/(?:${entity}/confirm/)?$`, 'i')
+      const aiPost = new RegExp(`^/api/v1/profiles/${entity}/workspaces/${entity}/(?:ai/task-proposals/(?:${entity}/confirm/)?|tasks/${entity}/ai/feedback-analysis/)$`, 'i')
       if (method !== 'POST' || !aiPost.test(normalizedPath) ||
           typeof options.idempotencyKey !== 'string' || !new RegExp(`^${entity}$`, 'i').test(options.idempotencyKey)) {
         throw new TypeError('Idempotency keys require the scoped AI POST contract and a UUID.')

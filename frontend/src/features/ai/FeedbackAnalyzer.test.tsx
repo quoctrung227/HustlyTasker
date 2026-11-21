@@ -84,6 +84,33 @@ beforeEach(() => {
   }
 })
 
+it('edits and discards grounded live advice locally after a manual-feedback request', async () => {
+  vi.mocked(aiApi.availability).mockResolvedValue({ ...available, mode: 'openai_live', generated_by_ai: true,
+    reason: null, scenarios: [], limits: { ...available.limits, max_depth: 0 } })
+  vi.mocked(feedbackAnalysisApi.analyze).mockResolvedValue({ ...outcome({ sources: [] }),
+    mode: 'openai_live', generated_by_ai: true, fixture_version: null, provider: 'openai', model: 'gpt-5.4-mini',
+    usage: { status: 'provider_reported', input_tokens: 20, billable_output_tokens: 15, cost_usd: '0.00001500' },
+    sources: [{ kind: 'manual', id: null, ref: 'S1' }],
+    payload: { contract_version: 'ai.feedback.v2', summary: 'Kiểm tra thời gian hiển thị phụ đề.', uncertainty: '', warnings: [],
+      issues: [{ category: 'CLARITY', description: 'Phụ đề chạy quá nhanh.', source_refs: ['S1'], severity: 'MEDIUM', evidence: [{ source_ref: 'S1', quote: 'chạy quá nhanh' }] }],
+      suggested_actions: [{ action: 'Tăng thời gian hiển thị.', priority: 'MEDIUM', rationale: '', source_refs: ['S1'] }] } })
+  const { actions } = await open()
+  fireEvent.change(screen.getByLabelText('Nhập phản hồi bổ sung'), { target: { value: 'Phụ đề chạy quá nhanh.' } })
+  const submit = screen.getByRole('button', { name: 'Phân tích bằng AI' })
+  await actions.click(submit)
+  expect(await screen.findByRole('heading', { name: 'Kết quả phân tích phản hồi' })).toHaveFocus()
+  expect(screen.getByRole('blockquote')).toHaveTextContent('chạy quá nhanh')
+  expect(feedbackAnalysisApi.analyze).toHaveBeenCalledWith(profileId, workspaceId, taskId,
+    { sources: [], feedback_text: 'Phụ đề chạy quá nhanh.' }, expect.any(AbortSignal), expect.any(String))
+  fireEvent.change(screen.getByLabelText('Gợi ý 1'), { target: { value: 'Kiểm tra tốc độ ở giây đầu.' } })
+  expect(screen.getByLabelText('Gợi ý 1')).toHaveValue('Kiểm tra tốc độ ở giây đầu.')
+  await actions.click(screen.getByRole('button', { name: 'Bỏ kết quả' }))
+  expect(submit).toHaveFocus()
+  expect(screen.queryByLabelText('Gợi ý 1')).not.toBeInTheDocument()
+  expect(collaborationApi.requestDeliverableChanges).not.toHaveBeenCalled()
+  expect(workApi.createTask).not.toHaveBeenCalled()
+})
+
 describe('stateless fixture Feedback Analyzer', () => {
   it('does not expose an action or collect sources for a user without manager capability', async () => {
     mount(false)
