@@ -8,6 +8,7 @@ import type { Deliverable, Review, TaskComment } from '../../services/api/collab
 import type { Page } from '../../services/api/types'
 import type { Task } from '../../services/api/work-management'
 import { workKeys } from '../../services/api/work-management'
+import { analyticsKeys } from '../../services/api/analytics'
 import { ReviewDeliverable, SubmitDeliverable } from './CollaborationActions'
 
 const deliverableLabels: Record<Deliverable['status'], string> = { PENDING: 'Chờ nộp', SUBMITTED: 'Chờ duyệt', APPROVED: 'Đã duyệt', REJECTED: 'Cần chỉnh sửa' }
@@ -132,6 +133,7 @@ function ScopedTaskCollaboration({ profileId, workspaceId, task, currentUserId, 
   function refresh() {
     void client.invalidateQueries({ queryKey: scope })
     void client.invalidateQueries({ queryKey: workKeys.scope(profileId, workspaceId) })
+    void client.invalidateQueries({ queryKey: analyticsKeys.profile(profileId) })
     void client.invalidateQueries({ queryKey: notificationKeys.user(currentUserId) })
     onChanged?.()
   }

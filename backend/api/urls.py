@@ -4,6 +4,7 @@ from .views import HealthCheckView
 
 
 urlpatterns = [
+    path("v1/", include("apps.trash.urls")),
     path(
         "auth/",
         include("apps.accounts.urls"),
@@ -23,6 +24,10 @@ urlpatterns = [
     path(
         "v1/",
         include("apps.tasks.urls"),
+    ),
+    path(
+        "v1/",
+        include("apps.tasks.analytics_urls"),
     ),
     path(
         "v1/",

@@ -91,7 +91,7 @@ export function LoginPage() {
           <Button className="password-toggle" variant="ghost" onClick={() => setVisible(!visible)} aria-pressed={visible}>{visible ? <EyeSlashIcon aria-hidden="true" /> : <EyeIcon aria-hidden="true" />}{visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}</Button>
           <Button className="login-submit" type="submit" busy={busy}>Đăng nhập<ArrowRightIcon aria-hidden="true" /></Button>
         </form>
-        <div className="work-actions"><Link className="text-link" to="/forgot-password">Quên mật khẩu?</Link><Link className="text-link" to="/register" state={invitationReturn ? { from: '/invitations/respond' } : undefined}>Đăng ký tài khoản</Link><Link className="text-link" to="/invitations/respond">Tôi có mã lời mời</Link></div>
+        <div className="work-actions"><Link className="text-link" to="/forgot-password">Quên mật khẩu?</Link><Link className="text-link" to="/register" state={invitationReturn ? { from: '/invitations/respond' } : undefined}>Đăng ký tài khoản</Link><Link className="text-link" to="/invitations">Lời mời tổ chức của tôi</Link></div>
         <p className="login-security"><LockKeyIcon aria-hidden="true" />Đăng nhập an toàn bằng tài khoản của bạn.</p>
       </div>
       <footer className="login-main__footer">HustlyTasker<span>Không gian cho những người cùng làm.</span></footer>

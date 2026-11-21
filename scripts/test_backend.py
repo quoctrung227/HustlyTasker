@@ -1,5 +1,6 @@
 """Shared serial PostgreSQL checks/tests for the local launcher and GitHub CI."""
 import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -18,11 +19,48 @@ def parse_arguments(arguments=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("labels", nargs="*", help="Optional dotted Django test labels")
     parser.add_argument("--verbosity", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--exclude-ai-governance", action="store_true",
+        help="Scoped regression only: retain ai.0001 and refuse ai.0002 in this disposable run")
     options = parser.parse_args(arguments)
     if any(not re.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*", label, re.ASCII)
            for label in options.labels):
         parser.error("Only dotted test labels are allowed; no paths/settings/runner overrides.")
+    if options.exclude_ai_governance and (not options.labels or any(label == "apps.ai" or "governance" in label or "dispatch" in label for label in options.labels)):
+        parser.error("The no-AI-governance policy requires explicit non-governance test labels.")
     return options
+
+
+def scoped_migration_targets(targets):
+    """Keep the intentionally unapplied AI migration visible, never fake it."""
+    forbidden = ("ai", "0002_dispatch_governance")
+    targets = list(targets)
+    if forbidden not in targets:
+        return targets
+    if len(targets) == 1:
+        raise RuntimeError("AI governance migration is forbidden in this scoped test run.")
+    return [target for target in targets if target[0] != "ai"] + [("ai", "0001_initial")]
+
+
+def install_scoped_migration_policy(executor_class):
+    original_migrate = executor_class.migrate
+
+    def migrate_without_ai_governance(executor, targets, *args, **kwargs):
+        targets = scoped_migration_targets(targets)
+        # Django's migrate command can supply a plan computed BEFORE this
+        # wrapper. Replacing targets alone must never forward that stale plan.
+        plan = executor.migration_plan(targets)
+        if any(item.app_label == "ai" and item.name == "0002_dispatch_governance"
+               for item, _ in plan):
+            raise RuntimeError("A scoped migration unexpectedly depends on AI governance.")
+        if args:
+            args = (plan, *args[1:])
+            kwargs.pop("plan", None)
+        else:
+            kwargs["plan"] = plan
+        return original_migrate(executor, targets, *args, **kwargs)
+
+    executor_class.migrate = migrate_without_ai_governance
+    return original_migrate
 
 
 def check_cluster(connection, config):
@@ -72,6 +110,14 @@ def run(options):
     from django.db.migrations.executor import MigrationExecutor
     from django.test.runner import DiscoverRunner
 
+    if options.exclude_ai_governance:
+        # Django's test DB setup and historical migration-test cleanup both call
+        # migrate(all leaves). Bound that operation in THIS isolated process,
+        # while leaving the graph/history honest about pending ai.0002. Every
+        # selected migration is still executed normally; no fake/schema sync.
+        install_scoped_migration_policy(MigrationExecutor)
+        print("SCOPED_TEST_POLICY: AI0002 forbidden, explicit labels only", flush=True)
+
     print("Checking dependencies, Django and migration graph/model drift...", flush=True)
     result = subprocess.run([sys.executable, "-m", "pip", "check"], check=False)
     if result.returncode:
@@ -114,9 +160,16 @@ def run(options):
                     raise RuntimeError("Django did not select the owned test database.")
                 migrated = MigrationExecutor(connection)
                 migrated.loader.check_consistent_history(connection)
-                if migrated.migration_plan(migrated.loader.graph.leaf_nodes()):
+                targets = migrated.loader.graph.leaf_nodes()
+                if options.exclude_ai_governance:
+                    targets = scoped_migration_targets(targets)
+                    if ("ai", "0002_dispatch_governance") in migrated.loader.applied_migrations:
+                        raise RuntimeError("Forbidden AI governance migration was applied.")
+                if migrated.migration_plan(targets):
                     raise RuntimeError("The isolated test database has pending migrations.")
-                print("Complete migration chain applied to isolated test DB: PASS", flush=True)
+                label = "Scoped non-AI-governance chain" if options.exclude_ai_governance else "Complete migration chain"
+                print(label + " applied to isolated test DB: PASS", flush=True)
+                print("TEST_MIGRATION_HISTORY_JSON=" + json.dumps(sorted(migrated.loader.applied_migrations)), flush=True)
 
         # Internal keepdb only reuses the database we just created and marked.
         # It prevents Django autoclobbering anything; finally drops only our DB.

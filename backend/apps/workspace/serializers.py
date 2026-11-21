@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from functools import cached_property
 
 from rest_framework import serializers
 
@@ -34,12 +35,27 @@ class StrictInputSerializer(serializers.Serializer):
 class ProfileReadSerializer(serializers.ModelSerializer):
     """Minimal Profile metadata visible to an active Profile member."""
 
+    can_delete = serializers.SerializerMethodField()
+
+    @cached_property
+    def _deletable_profile_ids(self):
+        actor = getattr(self.context.get("request"), "user", None)
+        if not getattr(actor, "is_authenticated", False) or not getattr(actor, "is_active", False):
+            return set()
+        return set(ProfileMembership.objects.filter(user_id=actor.pk, user__is_active=True,
+            is_active=True, role=ProfileMembership.Role.OWNER,
+            profile__deleted_at__isnull=True).values_list("profile_id", flat=True))
+
+    def get_can_delete(self, profile):
+        return profile.deleted_at is None and profile.pk in self._deletable_profile_ids
+
     class Meta:
         model = Profile
         fields = (
             "id",
             "name",
             "status",
+            "can_delete",
             "created_at",
             "updated_at",
         )
@@ -87,6 +103,19 @@ class WorkspaceReadSerializer(serializers.ModelSerializer):
     """Minimal Workspace metadata without transitional ownership data."""
 
     profile_id = serializers.UUIDField(read_only=True)
+    can_delete = serializers.SerializerMethodField()
+
+    @cached_property
+    def _deletion_management_profiles(self):
+        actor = getattr(self.context.get("request"), "user", None)
+        if not getattr(actor, "is_authenticated", False) or not getattr(actor, "is_active", False):
+            return set()
+        return set(ProfileMembership.objects.filter(user_id=actor.pk, user__is_active=True,
+            is_active=True, role__in=(ProfileMembership.Role.OWNER, ProfileMembership.Role.ADMIN),
+            profile__deleted_at__isnull=True, profile__status=Profile.Status.ACTIVE).values_list("profile_id", flat=True))
+
+    def get_can_delete(self, workspace):
+        return workspace.deleted_at is None and workspace.profile_id in self._deletion_management_profiles
 
     class Meta:
         model = Workspace
@@ -97,6 +126,7 @@ class WorkspaceReadSerializer(serializers.ModelSerializer):
             "description",
             "period",
             "status",
+            "can_delete",
             "created_at",
             "updated_at",
         )
@@ -174,10 +204,10 @@ class ProfileInvitationReadSerializer(serializers.ModelSerializer):
     """Sanitized manager metadata; invitation credentials are never exposed."""
 
     profile_id = serializers.UUIDField(read_only=True)
-    recipient_email = serializers.EmailField(
-        source="recipient_email_normalized",
-        read_only=True,
-    )
+    recipient_email = serializers.SerializerMethodField()
+    recipient_display_label = serializers.SerializerMethodField()
+    recipient_username = serializers.SerializerMethodField()
+    recipient_masked_email = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
 
     class Meta:
@@ -186,6 +216,7 @@ class ProfileInvitationReadSerializer(serializers.ModelSerializer):
             "id",
             "profile_id",
             "recipient_email",
+            "acceptance_kind", "recipient_display_label", "recipient_username", "recipient_masked_email",
             "requested_role",
             "status",
             "delivery_status",
@@ -204,9 +235,24 @@ class ProfileInvitationReadSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         return obj.effective_status
 
+    def get_recipient_email(self, obj):
+        return obj.recipient_email_normalized if obj.acceptance_kind == "EMAIL_TOKEN" else None
+
+    def get_recipient_display_label(self, obj):
+        from .account_invitations import safe_account_display_label
+        return safe_account_display_label(obj.recipient_user) if obj.recipient_user_id else "Tài khoản chưa đăng ký"
+
+    def get_recipient_username(self, obj):
+        from .account_invitations import safe_account_username
+        return safe_account_username(obj.recipient_user) if obj.recipient_user_id else None
+
+    def get_recipient_masked_email(self, obj):
+        from .account_invitations import masked_account_email
+        return masked_account_email(obj.recipient_user) if obj.recipient_user_id and not self.get_recipient_username(obj) else None
+
 
 class ProfileInvitationCreateSerializer(StrictInputSerializer):
-    recipient_email = serializers.EmailField(max_length=254)
+    recipient_user_id = serializers.UUIDField()
     requested_role = serializers.ChoiceField(
         choices=ProfileInvitation.Role.choices,
         default=ProfileInvitation.Role.MEMBER,
@@ -217,6 +263,76 @@ class ProfileInvitationActionSerializer(StrictInputSerializer):
     """Manager lifecycle actions have no client-controlled fields."""
 
     pass
+
+
+class ProfileInvitationCandidateQuerySerializer(StrictInputSerializer):
+    search = serializers.CharField(required=False, allow_blank=True, max_length=100, trim_whitespace=True)
+    page = serializers.IntegerField(required=False, min_value=1)
+
+    def to_internal_value(self, data):
+        value = data.get("search") if isinstance(data, Mapping) else None
+        if isinstance(value, str):
+            try:
+                self.validate_search(value)
+            except serializers.ValidationError as error:
+                raise serializers.ValidationError({"search": error.detail}) from None
+        return super().to_internal_value(data)
+
+    def validate_search(self, value):
+        if "\ufffd" in value or any(ord(c) < 32 or 127 <= ord(c) <= 159 or 0xD800 <= ord(c) <= 0xDFFF for c in value):
+            raise serializers.ValidationError("Search must contain valid text without control characters.")
+        return value
+
+
+class ProfileInvitationRecipientSerializer(serializers.ModelSerializer):
+    profile_id = serializers.UUIDField(read_only=True)
+    profile_name = serializers.CharField(source="profile.name", read_only=True)
+    inviter_display_label = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    can_accept = serializers.SerializerMethodField()
+    can_decline = serializers.SerializerMethodField()
+    can_open_profile = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProfileInvitation
+        fields = ("id", "profile_id", "profile_name", "inviter_display_label", "requested_role",
+                  "status", "expires_at", "can_accept", "can_decline", "can_open_profile")
+        read_only_fields = fields
+
+    def get_inviter_display_label(self, obj):
+        from .account_invitations import safe_account_display_label
+        return safe_account_display_label(obj.invited_by_membership.user)
+
+    def get_status(self, obj):
+        return obj.effective_status
+
+    def _capabilities(self, obj):
+        from .account_invitations import recipient_invitation_capabilities
+        # A per-serializer-instance cache shares the live projection between its
+        # three fields; no permission result survives a request or mutation.
+        key = str(obj.pk)
+        cache = getattr(self, "_invitation_capabilities", None)
+        if cache is None:
+            cache = self._invitation_capabilities = {}
+        if key not in cache:
+            request = self.context["request"]
+            rows = getattr(request, "_invitation_current_memberships", None)
+            if rows is None:
+                rows = {}
+                for membership in ProfileMembership.objects.filter(user_id=request.user.pk).values("profile_id", "role", "is_active"):
+                    rows.setdefault(str(membership["profile_id"]), []).append(membership)
+                request._invitation_current_memberships = rows
+            cache[key] = recipient_invitation_capabilities(obj, request.user, rows)
+        return cache[key]
+
+    def get_can_accept(self, obj):
+        return self._capabilities(obj)["can_accept"]
+
+    def get_can_decline(self, obj):
+        return self._capabilities(obj)["can_decline"]
+
+    def get_can_open_profile(self, obj):
+        return self._capabilities(obj)["can_open_profile"]
 
 
 class ProfileInvitationTokenSerializer(StrictInputSerializer):

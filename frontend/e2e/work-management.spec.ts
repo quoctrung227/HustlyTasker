@@ -171,7 +171,7 @@ test.describe('Real work-management UI — isolated Django/PostgreSQL, no API mo
     expect(updated.deadline).toBeNull()
     expect(updated.status).toBe('PENDING')
 
-    await page.getByRole('button', { name: 'Phân công', exact: true }).click()
+    await page.getByRole('button', { name: 'Phân công nhân viên', exact: true }).click()
     dialog = page.getByRole('dialog', { name: 'Phân công công việc', exact: true })
     const rosterResponse = await page.request.get(`${apiWorkspace}members/`)
     expect(rosterResponse.status()).toBe(200)
@@ -260,7 +260,7 @@ test.describe('Real work-management UI — isolated Django/PostgreSQL, no API mo
     await expect(page.getByRole('button', { name: 'Tạo công việc', exact: true })).toHaveCount(0)
     await page.goto(`${taskPage}/${rootId}`)
     await expect(page.getByRole('heading', { name: 'Hierarchy root Integration', exact: true })).toBeVisible()
-    for (const name of ['Chỉnh sửa công việc', 'Phân công', 'Tạo công việc con', 'Bắt đầu công việc']) {
+    for (const name of ['Chỉnh sửa công việc', 'Phân công nhân viên', 'Thay đổi phân công', 'Tạo công việc con', 'Bắt đầu công việc']) {
       await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0)
     }
     expect((await page.request.post(apiTasks, { data: { title: 'Rejected anonymous-CSRF write' } })).status()).toBe(403)
@@ -285,7 +285,7 @@ test.describe('Real work-management UI — isolated Django/PostgreSQL, no API mo
     await loginUI(page, 'editor')
     await page.goto(`${taskPage}/${fixtureId('task_assigned')}`)
     await expect(page.getByRole('heading', { name: 'Assigned editor Integration', exact: true })).toBeVisible()
-    for (const name of ['Chỉnh sửa công việc', 'Phân công', 'Tạo công việc con']) {
+    for (const name of ['Chỉnh sửa công việc', 'Phân công nhân viên', 'Thay đổi phân công', 'Tạo công việc con']) {
       await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0)
     }
     const token = await csrf(page.request)

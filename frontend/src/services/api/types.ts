@@ -35,6 +35,8 @@ export interface Profile {
   status: LifecycleStatus
   created_at: string
   updated_at: string
+  /** Current server permission hint; absent means no delete action. */
+  can_delete?: boolean
 }
 
 /** Ownership and lifecycle are assigned by the server from the current session. */
@@ -52,6 +54,7 @@ export interface Workspace {
   status: LifecycleStatus
   created_at: string
   updated_at: string
+  can_delete?: boolean
 }
 
 export interface Page<T> {

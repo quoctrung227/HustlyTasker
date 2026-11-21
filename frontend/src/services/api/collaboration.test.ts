@@ -144,6 +144,11 @@ describe('Comment collection metadata is a create hint, not author authority', (
 })
 
 describe('Personal notification contracts and navigation', () => {
+  it('accepts the current unassignment event without changing recipient or target semantics', async () => {
+    vi.mocked(apiClient.request).mockResolvedValue(page([{ ...notification, event_type: 'TASK_UNASSIGNED', title: 'Thay đổi phân công' }]))
+    expect((await notificationApi.feed()).results[0]?.event_type).toBe('TASK_UNASSIGNED')
+    expect(notificationTaskPath((await notificationApi.feed()).results[0] ?? notification)).toBe(`/profiles/${profileId}/workspaces/${workspaceId}/tasks/${taskId}`)
+  })
   it('uses only the supported read filter and a locally constructed page', async () => {
     vi.mocked(apiClient.request).mockResolvedValue(page([notification]))
     expect(await notificationApi.feed(false, 2)).toEqual(page([notification]))

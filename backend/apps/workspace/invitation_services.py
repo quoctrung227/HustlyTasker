@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.views.decorators.debug import sensitive_variables
 
 from apps.audit.models import AuditLog
+from apps.common.deletion import profile_live_q, workspace_live_q
 
 from .access import TenantAccessNotFound, resolve_profile_access_context
 from .invitation_delivery import (
@@ -45,7 +46,11 @@ class InvitationRateLimitExceeded(Exception):
 
 
 def _write_invitation_audit(*, actor, invitation, action, before, after):
-    AuditLog.objects.create(
+    identity = {}
+    if invitation.acceptance_kind == ProfileInvitation.AcceptanceKind.ACCOUNT:
+        identity = {"recipient_user_id": str(invitation.recipient_user_id),
+                    "invited_by_membership_id": str(invitation.invited_by_membership_id)}
+    return AuditLog.objects.create(
         user=actor,
         action=action,
         entity_name="ProfileInvitation",
@@ -55,6 +60,7 @@ def _write_invitation_audit(*, actor, invitation, action, before, after):
             "requested_role": invitation.requested_role,
             "before": before,
             "after": after,
+            **identity,
         },
     )
 
@@ -108,9 +114,9 @@ def _can_issue_role(membership, requested_role):
     )
 
 
-def _lock_manager_context(*, actor, profile_id, requested_role=None):
+def _lock_manager_context(*, actor, profile_id, requested_role=None, lock_user=True):
     context = resolve_profile_access_context(actor, profile_id)
-    profile = Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(profile_live_q()).filter(
         id=context.profile_id,
     ).first()
     if profile is None:
@@ -120,7 +126,8 @@ def _lock_manager_context(*, actor, profile_id, requested_role=None):
             "Invitation changes are not allowed while the Profile is archived."
         )
 
-    membership = ProfileMembership.objects.select_for_update().filter(
+    memberships = ProfileMembership.objects.select_for_update() if lock_user else ProfileMembership.objects.select_for_update(of=("self",))
+    membership = memberships.filter(
         id=context.membership_id,
         profile_id=context.profile_id,
         user_id=context.user_id,
@@ -339,10 +346,12 @@ def _get_locked_manager_invitation(
     actor,
     profile_id,
     invitation_id,
+    lock_user=True,
 ):
     profile, manager_membership = _lock_manager_context(
         actor=actor,
         profile_id=profile_id,
+        lock_user=lock_user,
     )
     invitation = ProfileInvitation.objects.select_for_update().filter(
         id=invitation_id,
@@ -402,81 +411,10 @@ def revoke_profile_invitation(*, actor, profile_id, invitation_id):
 
 
 def resend_profile_invitation(*, actor, profile_id, invitation_id):
-    with transaction.atomic():
-        profile, manager_membership, invitation = _get_locked_manager_invitation(
-            actor=actor,
-            profile_id=profile_id,
-            invitation_id=invitation_id,
-        )
-        ensure_invitation_delivery_available()
-        now = timezone.now()
-        _materialize_expiration(
-            invitation=invitation,
-            actor=actor,
-            now=now,
-        )
-        if invitation.status not in (
-            ProfileInvitation.Status.PENDING,
-            ProfileInvitation.Status.EXPIRED,
-        ):
-            raise InvitationConflict()
-        if ProfileInvitation.objects.filter(replaces=invitation).exists():
-            raise InvitationConflict()
-
-        _enforce_issuance_limits(
-            actor=actor,
-            normalized_email=invitation.recipient_email_normalized,
-            now=now,
-        )
-
-        if invitation.status == ProfileInvitation.Status.PENDING:
-            before = {"status": invitation.status}
-            invitation.status = ProfileInvitation.Status.REVOKED
-            invitation.revoked_at = now
-            invitation.revoked_by = actor
-            invitation.save(
-                update_fields=(
-                    "status",
-                    "revoked_at",
-                    "revoked_by",
-                    "updated_at",
-                )
-            )
-            _write_invitation_audit(
-                actor=actor,
-                invitation=invitation,
-                action="profile.invitation.rotated",
-                before=before,
-                after={"status": invitation.status},
-            )
-
-        recipient_user = _resolve_recipient_account(
-            invitation.recipient_email_normalized
-        )
-        if recipient_user is not None and ProfileMembership.objects.filter(
-            profile=profile,
-            user=recipient_user,
-            is_active=True,
-        ).exists():
-            raise InvitationConflict()
-
-        replacement = _issue_invitation_locked(
-            profile=profile,
-            inviter_membership=manager_membership,
-            normalized_email=invitation.recipient_email_normalized,
-            requested_role=invitation.requested_role,
-            recipient_user=recipient_user,
-            now=now,
-            replaces=invitation,
-        )
-        _write_invitation_audit(
-            actor=actor,
-            invitation=replacement,
-            action="profile.invitation.resent",
-            before={"replaces_invitation_id": str(invitation.id)},
-            after={"status": replacement.status},
-        )
-        return replacement
+    # Cutover never creates or extends legacy credentials. Only ACCOUNT email
+    # reminders can be retried, on the exact same invitation and expiry.
+    from .account_invitations import resend_account_invitation
+    return resend_account_invitation(actor=actor, profile_id=profile_id, invitation_id=invitation_id)
 
 
 @sensitive_variables("raw_token")
@@ -484,8 +422,9 @@ def _lookup_token_candidate(raw_token):
     if not isinstance(raw_token, str) or not raw_token:
         raise InvitationConflict()
     digest = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-    candidate = ProfileInvitation.objects.only("id", "profile_id").filter(
+    candidate = ProfileInvitation.objects.filter(profile_live_q("profile")).only("id", "profile_id").filter(
         token_digest=digest,
+        acceptance_kind=ProfileInvitation.AcceptanceKind.EMAIL_TOKEN,
     ).first()
     if candidate is None:
         raise InvitationConflict()
@@ -513,8 +452,9 @@ def _validate_recipient_locked(*, actor, invitation):
     return locked_actor
 
 
-def _validate_original_inviter_locked(invitation):
-    inviter = ProfileMembership.objects.select_for_update().filter(
+def _validate_original_inviter_locked(invitation, *, lock_user=True):
+    memberships = ProfileMembership.objects.select_for_update() if lock_user else ProfileMembership.objects.select_for_update(of=("self",))
+    inviter = memberships.filter(
         id=invitation.invited_by_membership_id,
         profile_id=invitation.profile_id,
         user__is_active=True,
@@ -525,7 +465,7 @@ def _validate_original_inviter_locked(invitation):
 
 
 def _lock_usable_token(*, actor, candidate, digest, now):
-    profile = Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(profile_live_q()).filter(
         id=candidate.profile_id,
     ).first()
     if profile is None:
@@ -534,6 +474,7 @@ def _lock_usable_token(*, actor, candidate, digest, now):
         id=candidate.id,
         profile=profile,
         token_digest=digest,
+        acceptance_kind=ProfileInvitation.AcceptanceKind.EMAIL_TOKEN,
     ).select_related("profile").first()
     if invitation is None:
         raise InvitationConflict()
@@ -543,6 +484,12 @@ def _lock_usable_token(*, actor, candidate, digest, now):
         or invitation.delivery_status != ProfileInvitation.DeliveryStatus.SENT
     ):
         raise InvitationConflict()
+    # Existing legacy responses can race ACCOUNT operations during cutover.
+    # Lock both identities in the same global order before recipient/inviter
+    # validation, rather than recipient-first then inviter through a joined FK.
+    list(User.objects.select_for_update().filter(
+        pk__in=(actor.pk, invitation.invited_by_membership.user_id),
+    ).order_by("pk"))
     _validate_recipient_locked(actor=actor, invitation=invitation)
     if _materialize_expiration(invitation=invitation, actor=actor, now=now):
         return profile, invitation, False
@@ -585,7 +532,7 @@ def _join_current_workspace_after_acceptance(*, actor, profile, membership, now)
         # Profile Admins already inherit same-tenant Workspace governance.
         return
     month = timezone.localdate(now, timezone.get_default_timezone()).replace(day=1)
-    current = list(Workspace.objects.select_for_update().filter(
+    current = list(Workspace.objects.select_for_update(of=("self",)).filter(workspace_live_q()).filter(
         profile=profile, period=month, status=Workspace.Status.ACTIVE,
     ).order_by("id")[:2])
     if len(current) != 1:

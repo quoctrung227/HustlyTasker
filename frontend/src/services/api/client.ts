@@ -97,6 +97,8 @@ function safeFieldErrors(payload: unknown): Record<string, string> {
   if ('password' in payload) fields.password = 'Vui lòng kiểm tra mật khẩu.'
   const managementFields: Record<string, string> = {
     recipient_email: 'Vui lòng nhập địa chỉ email người nhận hợp lệ.',
+    recipient_user_id: 'Tài khoản được chọn chưa đủ điều kiện nhận lời mời. Hãy kiểm tra lại danh sách.',
+    search: 'Nội dung tìm kiếm chưa hợp lệ. Dùng tối đa 100 ký tự.',
     requested_role: 'Vai trò này không nằm trong quyền mời của bạn. Hãy tải lại quyền hiện tại.',
     username: 'Tên đăng nhập chưa hợp lệ hoặc không khả dụng. Vui lòng kiểm tra lại.',
     first_name: 'Tên không được vượt quá 150 ký tự.',
@@ -123,6 +125,9 @@ function safeFieldErrors(payload: unknown): Record<string, string> {
     estimated_compensation_vnd: 'Tiền công dự kiến phải là số nguyên VNĐ không âm, tối đa 999.999.999.999.999.999.',
     parent_id: 'Quan hệ cha/con phải cùng không gian, không có vòng lặp và tối đa 3 cấp con.',
     target_profile_membership_id: 'Thành viên này chưa đủ điều kiện cho thao tác. Hãy tải lại danh sách và chọn thành viên hợp lệ.',
+    reason: 'Lý do phải tối đa 4.000 ký tự Unicode hợp lệ, không chứa ký tự NUL.',
+    expected_assignment_id: 'Phân công đã thay đổi. Hãy tải lại công việc trước khi tiếp tục.',
+    expected_assigned_at: 'Phân công đã thay đổi. Hãy tải lại công việc trước khi tiếp tục.',
     role: 'Vai trò này không được hỗ trợ hoặc vượt quyền quản lý hiện tại. Hãy tải lại danh sách.',
     brief: 'Nhập yêu cầu giả lập hợp lệ từ 1 đến 6.000 ký tự.',
     sources: 'Chọn từ 1 đến 20 nguồn phản hồi hợp lệ thuộc công việc hiện tại.',

@@ -1,10 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Alert, Button, Dialog, ErrorState, FormField, Input, Pagination } from '../../components/ui'
+import { Alert, Button, Dialog, FormField, Input } from '../../components/ui'
 import { isApiError } from '../../services/api/client'
-import type { Page } from '../../services/api/types'
 import { taskPriorities } from '../../services/api/work-management'
-import type { Task, TaskCreateInput, TaskPriority, TaskUpdateInput, WorkspaceMember } from '../../services/api/work-management'
+import type { Task, TaskCreateInput, TaskPriority, TaskUpdateInput } from '../../services/api/work-management'
 import { TaskDeadlineInput } from './TaskDeadlineInput'
 import { formatMinuteDeadline, parseMinuteDeadline } from './task-deadline'
 import { formatEstimatedCompensation, parseEstimatedCompensation, parseTaskDocumentUrl, taskDocumentFields, TASK_DOCUMENT_URL_MAX_LENGTH } from './task-brief'
@@ -287,90 +286,4 @@ function ScopedTaskStart({ profileId, workspaceId, task, active = false, onStart
   </div>
 }
 
-type TaskAssignProps = ScopeProps & SavedProps & {
-  task: Task
-  canAssign?: boolean
-  members?: Page<WorkspaceMember>
-  membersPage: number
-  membersLoading?: boolean
-  membersError?: unknown
-  onMembersPageChange: (page: number) => void
-  onRetryMembers?: () => void
-  onOpen?: () => void
-  onAssign: (input: { target_profile_membership_id: string }, signal?: AbortSignal) => Promise<Task>
-}
-
-export function TaskAssign(props: TaskAssignProps) {
-  return <ScopedTaskAssign key={`${props.profileId}:${props.workspaceId}:${props.task.id}`} {...props} />
-}
-
-function ScopedTaskAssign(props: TaskAssignProps) {
-  const [open, setOpen] = useState(false)
-  const [pending, setPending] = useState(false)
-  const allowed = props.canAssign === true && Boolean(props.profileId) && props.task.workspace_id === props.workspaceId &&
-    ['PENDING', 'ASSIGNED', 'WORKING'].includes(props.task.status)
-  useEffect(() => { if (!allowed) { setOpen(false); setPending(false) } }, [allowed])
-  if (!allowed) return null
-  const close = () => { if (!pending) setOpen(false) }
-  return <>
-    <Button variant="secondary" onClick={() => { setOpen(true); props.onOpen?.() }}>Phân công</Button>
-    {open && <Dialog open busy={pending} title="Phân công công việc" onClose={close}>
-      <AssignmentForm {...props} onPendingChange={setPending} onCancel={close} onSaved={(task) => { setOpen(false); props.onSaved?.(task) }} />
-    </Dialog>}
-  </>
-}
-
-function AssignmentForm(props: TaskAssignProps & { onPendingChange: (pending: boolean) => void; onCancel: () => void }) {
-  const id = useId()
-  const [selected, setSelected] = useState('')
-  const [pending, setPending] = useState(false)
-  const [failure, setFailure] = useState<Failure | null>(null)
-  const request = useRef<AbortController | null>(null)
-  const candidates = props.members?.results.filter((member) => member.is_assignable === true && member.profile_membership_id !== props.task.active_assignment?.profile_membership_id) ?? []
-  const currentSelection = candidates.some((member) => member.profile_membership_id === selected) ? selected : ''
-  useEffect(() => () => { request.current?.abort() }, [])
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (request.current || props.membersLoading || props.membersError) return
-    if (!currentSelection) { setFailure({ message: 'Chọn một thành viên có thể nhận việc.', fields: { target_profile_membership_id: 'Chọn Editor đang hoạt động trong trang này.' } }); return }
-    const controller = new AbortController()
-    request.current = controller
-    setPending(true)
-    props.onPendingChange(true)
-    setFailure(null)
-    let saved: Task | undefined
-    try { saved = await props.onAssign({ target_profile_membership_id: currentSelection }, controller.signal) } catch (error) {
-      if (!controller.signal.aborted) setFailure(formFailure(error, ['target_profile_membership_id'], props.onDenied))
-    } finally {
-      if (!controller.signal.aborted) { request.current = null; setPending(false); props.onPendingChange(false) }
-    }
-    if (saved && !controller.signal.aborted) props.onSaved?.(saved)
-  }
-
-  return <form className="work-form" onSubmit={submit} noValidate aria-busy={pending || props.membersLoading || undefined}>
-    {failure && <FormFailure failure={failure} ids={{ target_profile_membership_id: id }} />}
-    {props.membersLoading && <p role="status">Đang tải thành viên…</p>}
-    {Boolean(props.membersError) && <ErrorState error={props.membersError} onRetry={props.onRetryMembers} />}
-    <div className={`field${failure?.fields.target_profile_membership_id ? ' field--invalid' : ''}`}>
-      <label className="field__label" htmlFor={id}>Thành viên</label>
-      <select className="input" id={id} value={currentSelection} onChange={(event) => setSelected(event.target.value)} disabled={pending || props.membersLoading || Boolean(props.membersError)}
-        aria-invalid={failure?.fields.target_profile_membership_id ? true : undefined} aria-describedby={`${id}-hint${failure?.fields.target_profile_membership_id ? ` ${id}-error` : ''}`}>
-        <option value="">Chọn thành viên</option>
-        {candidates.map((member) => <option key={member.id} value={member.profile_membership_id}>
-          {member.display_label}{candidates.filter((candidate) => candidate.display_label === member.display_label).length > 1 ? ` (…${member.profile_membership_id.slice(-8)})` : ''}
-        </option>)}
-      </select>
-      <p className="field__hint" id={`${id}-hint`}>Danh sách hiển thị người đủ điều kiện nhận việc. Quyền nhận việc sẽ được kiểm tra lại khi phân công.</p>
-      {failure?.fields.target_profile_membership_id && <p className="field__error" id={`${id}-error`}>{failure.fields.target_profile_membership_id}</p>}
-    </div>
-    {!props.membersLoading && !props.membersError && !candidates.length && <p className="field__hint">Không có Editor phù hợp trong trang này.</p>}
-    {props.members && <Pagination disabled={pending || props.membersLoading} count={props.members.count} page={props.membersPage} onPageChange={(page) => {
-      if (!pending && !props.membersLoading) { setSelected(''); props.onMembersPageChange(page) }
-    }} />}
-    <div className="work-actions">
-      <Button type="submit" busy={pending} disabled={props.membersLoading || Boolean(props.membersError) || !candidates.length}>Xác nhận phân công</Button>
-      <Button variant="secondary" disabled={pending} onClick={props.onCancel}>Hủy</Button>
-    </div>
-  </form>
-}
+export { TaskAssign } from './TaskAssignment'

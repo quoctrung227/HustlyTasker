@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import test_backend as harness
@@ -55,6 +56,50 @@ class HarnessSafetyTests(unittest.TestCase):
     def test_targeted_labels_are_allowed(self):
         self.assertEqual(harness.parse_arguments(["apps.accounts.tests"]).labels,
             ["apps.accounts.tests"])
+
+    def test_scoped_no_ai_policy_requires_labels(self):
+        for labels in ([], ["apps.ai"], ["apps.ai.test_governance_migrations"]):
+            with self.subTest(labels=labels), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    harness.parse_arguments(["--exclude-ai-governance", *labels])
+        options = harness.parse_arguments(["--exclude-ai-governance", "apps.tasks"])
+        self.assertTrue(options.exclude_ai_governance)
+
+    def test_scoped_migration_targets_keep_ai_initial_and_other_leaves(self):
+        targets = [("workspace", "0006_soft_delete"), ("ai", "0002_dispatch_governance")]
+        self.assertEqual(harness.scoped_migration_targets(targets),
+            [("workspace", "0006_soft_delete"), ("ai", "0001_initial")])
+        self.assertEqual(targets[-1], ("ai", "0002_dispatch_governance"))
+
+    def test_scoped_policy_refuses_explicit_ai_governance_execution(self):
+        with self.assertRaises(RuntimeError):
+            harness.scoped_migration_targets([("ai", "0002_dispatch_governance")])
+
+    def test_scoped_policy_replaces_precomputed_keyword_and_positional_plans(self):
+        safe = [(SimpleNamespace(app_label="tasks", name="0006_soft_delete"), False)]
+        unsafe = [(SimpleNamespace(app_label="ai", name="0002_dispatch_governance"), False)]
+        class Executor:
+            def migration_plan(self, targets):
+                return safe
+            def migrate(self, targets, plan=None, state=None):
+                return targets, plan, state
+        harness.install_scoped_migration_policy(Executor)
+        targets = [("tasks", "0006_soft_delete"), ("ai", "0002_dispatch_governance")]
+        for arguments in (((), {"plan": unsafe, "state": "existing"}), ((unsafe, "existing"), {})):
+            actual_targets, actual_plan, state = Executor().migrate(targets, *arguments[0], **arguments[1])
+            self.assertEqual(actual_targets[-1], ("ai", "0001_initial"))
+            self.assertIs(actual_plan, safe)
+            self.assertEqual(state, "existing")
+
+    def test_scoped_policy_rejects_unexpected_ai_dependency_before_mutation(self):
+        class Executor:
+            def migration_plan(self, targets):
+                return [(SimpleNamespace(app_label="ai", name="0002_dispatch_governance"), False)]
+            def migrate(self, targets, **kwargs):
+                raise AssertionError("Must not reach mutation")
+        harness.install_scoped_migration_policy(Executor)
+        with self.assertRaises(RuntimeError):
+            Executor().migrate([("workspace", "0006_soft_delete")])
 
     def test_cli_cannot_override_settings_runner_or_keepdb(self):
         for arguments in (["--settings=config.settings"], ["--keepdb"],
@@ -117,7 +162,8 @@ class HarnessSafetyTests(unittest.TestCase):
         environment = {**os.environ, **ENVIRONMENT, "PYTHONPATH":str(harness.ROOT / "backend"),
             "DJANGO_ENVIRONMENT":"production", "DJANGO_SECURE_SSL_REDIRECT":"true",
             "DJANGO_MAILER_BACKEND":"django.core.mail.backends.smtp.EmailBackend",
-            "POSTGRES_DB":"hustlytasker_db", "PGSERVICE":"do-not-use-deployment-service"}
+            "POSTGRES_DB":"hustlytasker_db", "PGSERVICE":"do-not-use-deployment-service",
+            "DJANGO_TRASH_PURGE_ENABLED":"true", "TRASH_PURGE_ENABLED":"true"}
         code = (
             "import os; import config.test_settings as s; "
             "assert s.DATABASES['default']['NAME']=='hustlytasker_test_control'; "
@@ -125,7 +171,8 @@ class HarnessSafetyTests(unittest.TestCase):
             "assert s.DATABASES['default']['TEST']['NAME']=='test_hustlytasker_" + RUN_ID + "'; "
             "assert s.ENVIRONMENT=='development' and not s.SECURE_SSL_REDIRECT; "
             "assert s.MAILERS['default']['BACKEND']=='django.core.mail.backends.locmem.EmailBackend'; "
-            "assert 'PGSERVICE' not in os.environ"
+            "assert 'PGSERVICE' not in os.environ; "
+            "assert not s.TRASH_PURGE_ENABLED"
         )
         result = subprocess.run([sys.executable,"-c",code],env=environment,capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr.decode())

@@ -64,10 +64,10 @@ beforeEach(() => {
 afterEach(() => { apiClient.setForbiddenHandler(null) })
 
 describe('recipient invitation routes and secret lifetime', () => {
-  it('opens a discoverable protected response form without consuming a token on GET', async () => {
-    setup('/profiles')
-    await userEvent.setup().click(await screen.findByRole('link', { name: 'Tôi có mã lời mời' }))
+  it('keeps the direct legacy response route without promoting codes in the new UI', async () => {
+    setup(path)
     expect(await ready()).toHaveAttribute('type', 'password')
+    expect(screen.queryByRole('link', { name: 'Tôi có mã lời mời' })).not.toBeInTheDocument()
     expect(membersApi.acceptInvitation).not.toHaveBeenCalled()
     expect(membersApi.declineInvitation).not.toHaveBeenCalled()
   })

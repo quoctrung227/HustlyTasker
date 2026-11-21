@@ -30,6 +30,7 @@ class ProfileInvitationApiTests(APITestCase):
         "id",
         "profile_id",
         "recipient_email",
+        "acceptance_kind", "recipient_display_label", "recipient_username", "recipient_masked_email",
         "requested_role",
         "status",
         "delivery_status",
@@ -199,29 +200,24 @@ class ProfileInvitationApiTests(APITestCase):
                 self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_owner_create_defaults_member_and_response_is_sanitized(self):
-        captured = {}
-
-        def capture_delivery(*, invitation, raw_token):
-            captured["token"] = raw_token
-
         self.client.force_login(self.owner)
         with patch(
-            "apps.workspace.invitation_services.schedule_invitation_delivery",
-            side_effect=capture_delivery,
-        ):
+            "apps.workspace.invitation_services.secrets.token_urlsafe",
+        ) as token:
             response = self.client.post(
                 self.list_url(),
-                {"recipient_email": f" {self.recipient.email.upper()} "},
+                {"recipient_user_id": str(self.recipient.pk)},
                 format="json",
             )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(set(response.data), self.invitation_fields)
-        self.assertEqual(response.data["recipient_email"], self.recipient.email)
+        self.assertIsNone(response.data["recipient_email"])
+        self.assertEqual(response.data["acceptance_kind"], "ACCOUNT")
         self.assertEqual(response.data["requested_role"], "MEMBER")
         self.assertNotIn("token", response.data)
         self.assertNotIn("token_digest", response.data)
-        self.assertNotIn(captured["token"], json.dumps(response.data))
+        token.assert_not_called()
         self.assert_no_store(response)
 
     def test_owner_list_and_detail_are_paginated_and_never_expose_secret(self):
@@ -292,13 +288,13 @@ class ProfileInvitationApiTests(APITestCase):
         ):
             allowed = self.client.post(
                 self.list_url(),
-                {"recipient_email": "admin-allowed@example.test"},
+                {"recipient_user_id": str(self.recipient.pk)},
                 format="json",
             )
             denied = self.client.post(
                 self.list_url(),
                 {
-                    "recipient_email": "admin-denied@example.test",
+                    "recipient_user_id": str(self.wrong_recipient.pk),
                     "requested_role": "ADMIN",
                 },
                 format="json",
@@ -346,7 +342,7 @@ class ProfileInvitationApiTests(APITestCase):
             self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
             self.assertEqual(response.data, {"detail": "Not found."})
 
-    def test_management_actions_enforce_strict_payload_and_rotate_token(self):
+    def test_management_actions_keep_existing_legacy_expiry_and_forbid_rotation(self):
         invitation, old_token = self.seed_invitation()
         self.client.force_login(self.owner)
 
@@ -357,30 +353,24 @@ class ProfileInvitationApiTests(APITestCase):
         )
         self.assertEqual(unknown_field.status_code, status.HTTP_400_BAD_REQUEST)
 
-        captured = {}
-
-        def capture_delivery(*, invitation, raw_token):
-            captured["token"] = raw_token
-
+        original_expiry = invitation.expires_at
         with patch(
             "apps.workspace.invitation_services.schedule_invitation_delivery",
-            side_effect=capture_delivery,
-        ):
+        ) as sender:
             response = self.client.post(
                 self.resend_url(invitation.id),
                 {},
                 format="json",
             )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
         invitation.refresh_from_db()
-        replacement = ProfileInvitation.objects.get(
-            id=response.data["id"],
-        )
-        self.assertEqual(invitation.status, ProfileInvitation.Status.REVOKED)
-        self.assertEqual(replacement.replaces_id, invitation.id)
-        self.assertNotEqual(captured["token"], old_token)
-        self.assertNotIn(captured["token"], json.dumps(response.data))
+        self.assertEqual(invitation.status, ProfileInvitation.Status.PENDING)
+        self.assertEqual(invitation.expires_at, original_expiry)
+        self.assertFalse(ProfileInvitation.objects.filter(replaces=invitation).exists())
+        sender.assert_not_called()
+        self.client.force_login(self.recipient)
+        self.assertEqual(self.client.post(self.accept_url(), {"token": old_token}, format="json").status_code, 200)
 
     def test_accept_and_decline_require_matching_authenticated_recipient(self):
         invitation, raw_token = self.seed_invitation()
@@ -485,7 +475,7 @@ class ProfileInvitationApiTests(APITestCase):
         ):
             response = client.post(
                 self.list_url(),
-                {"recipient_email": self.recipient.email},
+                {"recipient_user_id": str(self.recipient.pk)},
                 format="json",
                 HTTP_X_CSRFTOKEN=csrf_response.data["csrf_token"],
             )
@@ -514,57 +504,34 @@ class ProfileInvitationApiTests(APITestCase):
             status.HTTP_429_TOO_MANY_REQUESTS,
         )
 
-    def test_create_throttle_keys_normalized_recipient_across_inviters(self):
+    def test_create_uses_durable_account_quota_across_inviters_and_email_changes(self):
+        for _ in range(5):
+            old, _ = self.seed_invitation()
+            ProfileInvitation.objects.filter(pk=old.pk).update(status="REVOKED", revoked_at=timezone.now(), revoked_by=self.owner)
+        self.recipient.email = "changed-recipient@example.test"
+        self.recipient.save()
         self.client.force_login(self.owner)
-        with patch.object(
-            InvitationRecipientThrottle,
-            "get_rate",
-            return_value="1/day",
-        ), patch(
-            "apps.workspace.invitation_services.schedule_invitation_delivery"
-        ):
-            first = self.client.post(
-                self.list_url(),
-                {"recipient_email": self.recipient.email.upper()},
-                format="json",
-            )
-            self.client.force_login(self.other_owner)
-            second = self.client.post(
-                self.list_url(self.other_profile.id),
-                {"recipient_email": f" {self.recipient.email} "},
-                format="json",
-            )
-
-        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        first = self.client.post(self.list_url(), {"recipient_user_id": str(self.recipient.pk)}, format="json")
+        self.client.force_login(self.other_owner)
+        second = self.client.post(self.list_url(self.other_profile.id), {"recipient_user_id": str(self.recipient.pk)}, format="json")
+        self.assertEqual(first.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
         self.assertEqual(second.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
-    def test_delivery_unavailable_is_generic_503_without_secret(self):
+    def test_mail_failure_keeps_created_web_invitation_without_503_or_secret(self):
         self.client.force_login(self.owner)
-        with patch(
-            "apps.workspace.views.create_profile_invitation",
-            side_effect=InvitationDeliveryUnavailable(),
-        ):
-            response = self.client.post(
-                self.list_url(),
-                {"recipient_email": self.recipient.email},
-                format="json",
-            )
-
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
-        self.assertEqual(
-            response.data,
-            {"detail": "Invitation delivery is currently unavailable."},
-        )
+        with patch("apps.common.email_delivery.EmailMessage.send", side_effect=RuntimeError("synthetic-private-mail-diagnostic")), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.list_url(), {"recipient_user_id": str(self.recipient.pk)}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(ProfileInvitation.objects.get().delivery_status, "FAILED")
+        self.assertNotIn("synthetic-private-mail-diagnostic", json.dumps(response.data))
+        self.assertIsNone(response.data["recipient_email"])
 
     def test_unknown_fields_and_owner_role_are_rejected_before_service(self):
         self.client.force_login(self.owner)
         unknown = self.client.post(
             self.list_url(),
             {
-                "recipient_email": self.recipient.email,
+                "recipient_user_id": str(self.recipient.pk),
                 "token": "client-controlled-secret",
             },
             format="json",
@@ -572,7 +539,7 @@ class ProfileInvitationApiTests(APITestCase):
         owner_role = self.client.post(
             self.list_url(),
             {
-                "recipient_email": self.recipient.email,
+                "recipient_user_id": str(self.recipient.pk),
                 "requested_role": "OWNER",
             },
             format="json",

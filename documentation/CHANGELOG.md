@@ -2,6 +2,226 @@
 
 Lịch sử thay đổi của dự án HustlyTasker.
 
+## Unreleased - 2026-11-20
+
+### HT-TRASH-V1 — controlled development migration complete
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+Applied only workspace0006 (10:47:47.315037 UTC) then tasks0006
+(10:48:00.223314 UTC) after new restricted 141,777-byte custom backup, full archive
+read/actual isolated restore, scoped rehearsal and exact planner/preservation
+gates. Each native migration process exited 0. Development history 41 → 43,
+tables remain 31; all original business rows/hashes and schema definitions remain,
+with only nine nullable legacy-NULL columns and three CHECKs/FKs/due indexes plus
+three FK indexes. Content types/permissions remain 27/108; AI0002 is UNAPPLIED.
+Fresh isolated 59/59, 46 read-only handler and 27 HTTP GET direct/proxy checks
+pass, exits 0. Official backend/Vite loopback startup and final preservation pass;
+861 baseline files and all 35 migration hashes remain, with no runtime change.
+Backup retained; owned rehearsal resources cleaned. Purge flag false, no purge
+process or registered/enabled schedule; no development test fixture, email/AI
+call, commit/push or deployment. See [rollout evidence](TRASH_V1_ROLLOUT.md).
+
+### Historical HT-TRASH-V1 implementation verification before development rollout
+
+Source adds deletion metadata and 720-hour deadlines to Task, Workspace
+and Profile, Trash APIs, React Trash navigation and server-controlled actions.
+Effective deletion suppresses business access without changing archive or Task
+status; restore leaves assignment/membership flags intact. Operational analytics
+omit Trash while approved snapshots remain under current financial RBAC.
+
+Owner selected conditional purge/no ledger. Remaining Review/financial history,
+Invitation retention and unresolved Audit/FK/AI references block unsafe removal;
+AuditLog and global Users are retained. Purge is disabled by default; command and
+disabled schedule export do not enable a development job. Two candidate migrations
+are not applied development. Focused PostgreSQL59/59/full frontend1295 and quality
+checks and real isolated Trash browser7/7 pass; work/collaboration regressions
+also pass7/7each. First full backend:1,167 tests,17 failures,exit1. Fixed missing
+authenticated context in five manual Profile/Workspace mutation serializers,
+which incorrectly returned can_delete=false on creation; current-role read/write
+contracts now pass141/141. Corrected full backend1,168/1,168 passes in448.046s,
+0fail/error/skip, actualPython/launcher0 and owned cleanup;44 disposable migration
+records include AI0002 only there. Reassignment/Workspace browser4/4each pass,
+bringing the eight suites to44unique PASS; final post-spec typecheck/lint/build
+pass. Final Trash rerun7/7 PASS51.1s, source audit and owned cleanup pass; repeated
+Trash tests are not double-counted. All33 prior migration hashes remain unchanged,
+and final read-only development metadata remains41migrations/noTrashcolumns/noAI2.
+**HT-TRASH-V1 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION AND PURGE APPROVAL.** Historical
+counts below are not new Trash verification. See [design](TRASH_V1_DESIGN.md) and
+[HANDOVER](HANDOVER.md).
+
+## Unreleased - 2026-11-13
+
+### HT-ORG-INVITATION-V2 — Development rollout complete, Owner manual acceptance pending
+
+Applied only workspace.0005_account_invitations11:44:56.741107Z then
+notifications.0004_invitation_context11:44:58.160588Z after fresh read-only
+identity/plans, protected132398-byte custom backup, actual isolated restore and
+19synthetic API/service smoke checks/locmem only. Development history39→41 and
+tables29→31; all prior business/metadata row fingerprints preserved, with only
+expected2content-type/8permission additions and new quota tables empty. Existing
+legacy2rows(ACCEPTED/REVOKED,SENT) unchanged; no real PENDING row existed, so
+pending-token compatibility used a synthetic isolated fixture. AI0002 remains
+UNAPPLIED/no governance tables. Official backend/Vite loopback startup,5read-only
+Owner-handler projections and25HTTP GET direct/proxy checks PASS, exits0 and
+final preservation0. This is not manual or authenticated browser acceptance.
+Previous1108backend/1236frontend/25browser test counts are implementation history,
+not rerun rollout results. Initial verifier-only corrections are retained in
+[rollout evidence](ORG_INVITATION_V2_ROLLOUT.md); no runtime/migration source,
+`.env`, genuine mail, live AI, commit/push/deploy or automatic rollback changed.
+
+### HT-ORG-INVITATION-V2 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL
+
+Implemented account-only new invitations, privacy-filtered registered-account
+search/picker, personal inbox/ID decisions and typed Web invitation notifications
+without pre-existing Profile membership. SMTP failure no longer invalidates a
+committed Web invitation; retries use the same Invitation/expiry with durable
+attempt quotas. Kept current-month Workspace grant/rejoin cleanup/ADMIN inheritance,
+legacy token handling until expiry, role ceilings, SessionAuthentication and CSRF.
+New source migrations workspace0005 and notifications0004 remain unapplied to
+development. PostgreSQL locks/records enforce approved rolling send/search/mail
+limits. Corrected invalid search error mapping, account email-reuse collisions
+and implicit joined-User lock ordering; added security/concurrency/migration/UI
+tests. Corrected focused 62/62 and full backend 1108/1108 PASS; final frontend 1236
+tests / 36 files, quality and six final real browser suites 25/25 pass with actual
+exits 0 / owned cleanup. Initial invalid-search errors and browser locator/native
+search Escape test failures are retained with their final corrected evidence.
+No development/environment/real-email/provider/deployment change is authorized.
+
+### HT-ORG-INVITATION-V2 — Specification and source audit only
+
+Preserved the Owner's full specification in [ORG_INVITATION_V2.md](ORG_INVITATION_V2.md)
+and added source-backed gaps, proposed account-bound API/schema/Notification/UI,
+legacy compatibility, security/concurrency/BR-E tests and seven pending decisions.
+Existing five statuses/delivery states are reused in the proposal. Documented
+SENT/token constraints, Task-only notification scope and BR09 current-month grant
+conflict, including stale Workspace access cleanup on rejoin. Applied existing
+UI UX Pro Max guidance to design only. No runtime/schema/env/DB/mail change or
+new backend/frontend/browser test result. Status: DESIGN READY — PENDING OWNER
+DECISIONS; implementation and migrations not authorized.
+
+### HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01 — Controlled development rollout verified
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+Applied only reviews.0003_review_compensation_snapshot06:27:28Z and
+notifications.0003_task_unassigned06:27:29Z after fresh backend1056/1056 PASS,
+frontend1182/1182/quality0, protected custom backup/archive checks, actual isolated
+restore/two-target rehearsal and writer/preservation gates. Development history
+37→39, business rows retained, tasks.0005 APPLIED, ai.0002 UNAPPLIED.
+
+Official new Django/Vite loopback startup,19HTTP GET checks, native read-only
+Owner API smoke, system/model/constraint/index and final data-preservation checks
+PASS. No browser suite rerun or manual Owner UI acceptance is claimed. Backend
+Python/launcher0; all owned test/rehearsal resources removed, backup retained.
+ai.0002 ran only within a separate disposable full-test database under explicit
+Owner approval, never development or restored rehearsal. No runtime/migration/
+.env/credentials change for this rollout; no automatic rollback/restore, real
+mail/AI request, public deployment or next feature. The first private CHECK SQL
+rendering comparison stop is retained with its successful strict-verifier-only
+repeat. [PROGRESS](PROGRESS.md) and [HANDOVER](HANDOVER.md) own detailed receipts.
+
+
+### Historical rollout stop before test-isolation approval
+
+Owner conditionally authorizes only reviews.0003_review_compensation_snapshot
+and notifications.0003_task_unassigned on local development after fresh full
+regression, new real custom backup, restore of that archive to isolated
+PostgreSQL, exact scoped plans and coordinated shutdown of old backend writers.
+Fresh frontend1182/1182 PASS46.46s/npm0, typecheck/build0/Vite15.99s and
+Biome112files0. Read-only Django preflight06:03:20Z validates37records, exact
+single-candidate/noAI plans, no drift and valid constraints/indexes; fresh
+development has29tables/5Users/2Sessions/5Tasks/3Deliverables/0Reviews/
+9Notifications/42Audits and0app connections/no8000or5173server. Full backend
+NOT RUN: AI governance migration tests require ai.0002 on disposable full-test
+PostgreSQL, so the absolute AI-migration ban needs one scope clarification.
+Candidate authorization is not requested again. **ROLLOUT BLOCKED — DEVELOPMENT
+STATE PRESERVED** pending that answer; no backup/restore, APPLIED or startup
+claim. The prior preflight proved old Review writers fail23502 and snapshot/event rollback
+has data-loss/constraint limits; those limits remain and no automatic rollback
+or restore over development is authorized. No migration source or business rule
+is changed for this rollout. [HANDOVER](HANDOVER.md) will record actual new
+evidence, source/data preservation and final Owner manual acceptance boundary.
+No ai.0002 development/rehearsal apply, production, deployment or next feature.
+Final read-only preservation06:05:25Z PASS: exact fresh29-table data/schema/history
+fingerprint before=after886193d95cb05c6cbc54ffed2e481ac97d9652452b78463b5f46d7d21bb81937;
+37records/5Users/2Sessions/5Tasks/3Deliverables/0Reviews/9Notifications/42Audits
+retained, candidates/ai.0002 UNAPPLIED. No process stopped, full backend/archive/
+restored rehearsal/apply/startup NOT EXECUTED. This is a preserved stop checkpoint,
+not completed rollout or Owner manual acceptance.
+
+### HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT — SRS correction
+
+**BUSINESS PASS — MIGRATION PREFLIGHT PASS WITH COORDINATED WRITER STOP REQUIRED.** The Owner supplied SRS V3
+section4.2.1, superseding the prior unassign-preserves-status interpretation.
+The service audit confirms the prior code really kept ASSIGNED/WORKING; this was
+an implementation mismatch, not an inaccurate description of otherwise-correct code.
+Corrected unassign to PENDING while retaining assignment history, submissions,
+reviews, atomic audit/notifications, locks and live authorization. Transfer from
+WORKING remains ASSIGNED; REVIEW/COMPLETED ordinary actions remain denied.
+Fresh guarded isolated PostgreSQL158/158 PASS60.885s, launcher/Python0/cleanup0;
+seven migration tests demonstrate legacy false/NULL preservation and the actual
+compatibility/reversal boundaries. The37-record schema-equivalent baseline matches
+development; each exact forward plan applies only one candidate, final39 records,
+no ai.0002. This is synthetic fixture/schema reconstruction, not backup/restore.
+Old Review writers fail23502; reversing snapshots loses amounts and reversing the
+Notification CHECK with new events fails atomically. Coordinated activation is
+required; no automatic rollback is authorized. Full frontend1182 PASS46.81s/npm0,
+lint112files0; typecheck/build0, Vite10.33s/chunk639.43kB advisory. Guarded real
+browser4/4 PASS47.7s, run e8cbb590088b42dfba66b8b568d7025e; launcher/Playwright/
+backend0 and owned DB/resource cleanup, actual UI removal asserts PENDING.
+Final read-only preservation05:43:43Z PASS: exact29-table schema/data/history
+fingerprint,37migrations/5Users/2Sessions/4Tasks/38Audits retained; candidates and
+ai.0002 UNAPPLIED, tasks.0005 APPLIED,0owned test resources. Full backend1051 was
+not rerun here. [HANDOVER](HANDOVER.md) owns fresh receipts; development approval
+is PENDING and this task stops at OWNER APPROVAL GATE.
+
+### HT-TASK-REASSIGN-ANALYTICS-V1 — Candidate reassignment and real analytics
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL — OWNER REVIEW GATE.**
+
+Historical V1 evidence below; its preserve-status unassign behavior is superseded
+by the Owner preflight correction above. The earlier code/tests are retained as history.
+
+- Add scoped POST unassign and extend existing assign with optional reason and
+  paired expected assignment ID/timestamp. New confirmed UI always supplies the
+  pair; stale/ABA requests conflict. Existing locks/one-active constraint and
+  business history are preserved. Unassign keeps status; reassign keeps the
+  existing ASSIGNED transition; pending/finished/cancelled review states reject.
+- Emit TASK_UNASSIGNED to the eligible previous worker and existing TASK_ASSIGNED
+  to the new worker atomically with mutation/audit; no mail, callbacks or AI.
+- Add read-only scoped analytics APIs and sidebar Thống kê: six creation-cohort
+  KPI, HCM date filters, exact-string VND totals with coverage, status donut,
+  approval-event monthly trend and paginated employee/detail results. Nonmanager
+  SELF and current compensation permissions constrain server payloads.
+- Capture compensation at future approval in an additive Review candidate;
+  historical amounts stay unknown, never recalculated from today's Task price.
+  Acceptance credit uses the approved Deliverable uploader, independent of later
+  responsibility. No payment, payroll, revenue or profit claim is introduced.
+- Candidate migrations reviews.0003_review_compensation_snapshot and
+  notifications.0003_task_unassigned are prepared for isolated verification.
+  **Development application is not authorized/performed by this task.** Existing
+  tasks.0005 APPLIED and ai.0002 UNAPPLIED must be retained. Final verification,
+  preservation and Owner review status are recorded in [HANDOVER](HANDOVER.md).
+  Isolated test success does not imply development UI readiness or Owner manual
+  acceptance before the separately approved candidate rollout.
+- Fresh frontend full1181/1181 PASS51.84s/npm0, focused279/279 PASS37.61s;
+  typecheck, Biome112files and production build0/24.76s. Chunk639.38kB advisory
+  remains. Fresh full isolated PostgreSQL1051/1051 PASS373.676s, launcher and
+  actual Python0; dependency/Django/model/graph/full-chain checks and owned
+  cleanup PASS. First full fixture chronology failure and interrupted corrected
+  run remain separate evidence. New isolated real browser4/4 PASS35.8s, actual
+  launcher/Playwright/backend0 and cleanup; four-size responsive, keyboard/focus,
+  axe0 and dashboard/dialog PNG inspection verified. Initial new-test locator
+  failure fixed only by accessible combobox selection; runtime/assertions remain.
+  Eight affected browser suites37/37 PASS; combined final41/41 across9 passing
+  suites,0failed/0skipped/all actual exits0. Failed attempts remain distinct.
+- Final resume→2026-11-13T05:24:15Z29-table data/schema/history fingerprint exact;
+  37migrations/5Users/2Sessions/4Tasks/3Deliverables/38Audits retained. Independent
+  November11 activity explains the older35→38Audit difference; whole-task equality
+  from November10 is not claimed. Both candidates/ai.0002 remain UNAPPLIED,
+  Task0005 APPLIED;4backend/10browser run cleanup leaves0owned resources. No
+  development write/migration/fixture, real mail/AI, commit/push or deployment.
+
 ## Unreleased - 2026-11-10
 
 ### HT-FE-TASK-ASSIGNEE-NAME-FIX-01 — Serve the current assignee DTO locally

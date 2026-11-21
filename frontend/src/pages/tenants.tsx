@@ -12,6 +12,7 @@ import { useWorkContext } from '../features/workspaces/useWorkContext'
 import { workApi } from '../services/api/work-management'
 import { ProfileOnboarding } from '../features/profiles/ProfileOnboarding'
 import { useAuth } from '../features/auth/AuthProvider'
+import { TrashDeleteAction } from '../features/trash/TrashActions'
 
 function usePage() {
   const [search, setSearch] = useSearchParams()
@@ -28,7 +29,7 @@ export function ProfilesPage() {
   const { page, setPage } = usePage()
   const query = useQuery({ queryKey: queryKeys.profiles(page), queryFn: ({ signal }) => tenantApi.profiles(page, signal) })
   return <><PageHeader eyebrow="NHÓM CỦA BẠN" title="Tổ chức" description="Những người cùng mục tiêu. Những không gian cùng làm việc." action={query.isSuccess && query.data.count > 0 ? <Link className="button button--primary" to="/profiles/new">Tạo tổ chức</Link> : undefined} />
-    <p><Link className="text-link" to="/invitations/respond">Tôi có mã lời mời</Link></p>
+    <p><Link className="text-link" to="/invitations">Lời mời tổ chức của tôi</Link></p>
     <div className="list-toolbar"><p>{query.data ? <><strong>{query.data.count}</strong> tổ chức bạn có thể truy cập</> : 'Danh sách tổ chức'}</p><span className="subtle-label"><ShieldLabel />Chỉ dữ liệu được cấp quyền</span></div>
     {query.isPending ? <PageSkeleton label="Đang tải tổ chức…" /> : query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : query.data.count === 0 ? <ProfileOnboarding /> : query.data.results.length === 0 ? <EmptyState title="Trang này không có tổ chức" description="Quay lại trang trước để xem các tổ chức bạn có quyền truy cập." action={<Link className="button button--secondary" to="/profiles">Về trang đầu</Link>} /> : <><div className="profile-grid">{query.data.results.map((profile) => <ProfileCard key={profile.id} profile={profile} />)}</div><Pagination page={page} count={query.data.count} onPageChange={setPage} /></>}
   </>
@@ -49,7 +50,8 @@ export function ProfileDetailPage() {
   if (profile.isPending) return <PageSkeleton label="Đang tải thông tin tổ chức…" />
   if (profile.isError) return <><PageHeader title="Nội dung không khả dụng" back={{ to: '/profiles', label: 'Tổ chức' }} /><ErrorState error={profile.error} onRetry={() => void profile.refetch()} /></>
   return <><PageHeader eyebrow="THÔNG TIN TỔ CHỨC" title={profile.data.name} description="Không gian chung cho những đóng góp của cả nhóm." back={{ to: '/profiles', label: 'Tổ chức' }} action={<Badge status={profile.data.status} />} />
-    <div className="work-actions"><Link className="button button--secondary" to={`/profiles/${profileId}/members`}>Thành viên tổ chức</Link><Link className="text-link" to="/invitations/respond">Phản hồi lời mời</Link></div>
+    <div className="work-actions"><Link className="button button--secondary" to={`/profiles/${profileId}/members`}>Thành viên tổ chức</Link><Link className="text-link" to="/invitations">Lời mời tổ chức của tôi</Link></div>
+    {profile.data.can_delete === true && <div className="work-actions"><TrashDeleteAction objectType="PROFILE" objectId={profile.data.id} title={profile.data.name} canDelete /></div>}
     <Card className="metadata-card"><span className="organization-icon"><BuildingsIcon aria-hidden="true" /></span><dl><div><dt>Ngày tạo</dt><dd>{dateLabel(profile.data.created_at)}</dd></div><div><dt>Cập nhật lần cuối</dt><dd>{dateLabel(profile.data.updated_at)}</dd></div><div><dt>Không gian truy cập được</dt><dd>{workspaces.data?.count ?? '—'}</dd></div></dl></Card>
     <section className="section-block"><div className="section-heading"><div><p className="eyebrow">NHỊP LÀM VIỆC HẰNG THÁNG</p><h2>Không gian làm việc</h2></div><Link className="text-link" to={`/profiles/${profileId}/workspaces`}>Xem tất cả<ArrowRightIcon aria-hidden="true" /></Link></div>
       {workspaces.isPending ? <PageSkeleton label="Đang tải không gian…" /> : workspaces.isError ? <ErrorState error={workspaces.error} onRetry={() => void workspaces.refetch()} /> : workspaces.data.results.length === 0 ? <EmptyState title="Chưa có không gian làm việc" description="Các không gian bạn được cấp quyền trong tổ chức sẽ hiển thị tại đây." /> : <WorkspaceRows workspaces={workspaces.data.results.slice(0, 3)} />}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router'
-import { BellIcon, BuildingsIcon, SquaresFourIcon, SignOutIcon, ListIcon, ArrowUpRightIcon, CaretRightIcon, UserCircleIcon } from '@phosphor-icons/react'
+import { BellIcon, BuildingsIcon, ChartBarIcon, SquaresFourIcon, SignOutIcon, ListIcon, ArrowUpRightIcon, CaretRightIcon, UserCircleIcon, TrashIcon } from '@phosphor-icons/react'
 import { Brand } from '../components/brand'
 import { Button, Dialog } from '../components/ui'
 import { useAuth } from '../features/auth/AuthProvider'
@@ -11,7 +11,9 @@ function Navigation({ close }: { close?: () => void }) {
     <p className="navigation__label">KHÔNG GIAN CỦA BẠN</p>
     <NavLink to="/dashboard" onClick={close}><SquaresFourIcon aria-hidden="true" />Tổng quan</NavLink>
     <NavLink to="/profiles" onClick={close}><BuildingsIcon aria-hidden="true" />Tổ chức</NavLink>
+    <NavLink to="/analytics" onClick={close}><ChartBarIcon aria-hidden="true" />Thống kê</NavLink>
     <NavLink to="/notifications" onClick={close}><BellIcon aria-hidden="true" />Thông báo</NavLink>
+    <NavLink to="/trash" onClick={close}><TrashIcon aria-hidden="true" />Thùng rác</NavLink>
     <NavLink to="/account" onClick={close}><UserCircleIcon aria-hidden="true" />Tài khoản</NavLink>
   </nav>
 }
@@ -22,7 +24,7 @@ export function AppLayout() {
   const location = useLocation()
   const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || 'Bạn'
   const initials = name.trim().slice(0, 1).toLocaleUpperCase('vi-VN')
-  const section = location.pathname.startsWith('/profiles') ? 'Tổ chức' : location.pathname === '/notifications' ? 'Thông báo' : location.pathname === '/account' ? 'Tài khoản' : 'Tổng quan'
+  const section = location.pathname.startsWith('/profiles') ? 'Tổ chức' : location.pathname.startsWith('/invitations') ? 'Lời mời tổ chức' : location.pathname === '/analytics' ? 'Thống kê' : location.pathname === '/notifications' ? 'Thông báo' : location.pathname === '/trash' ? 'Thùng rác' : location.pathname === '/account' ? 'Tài khoản' : 'Tổng quan'
   return <div className="app-shell">
     <a href="#main-content" className="skip-link">Đến nội dung chính</a>
     <aside className="sidebar" aria-label="Thanh bên">

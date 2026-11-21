@@ -4,6 +4,7 @@ import { isApiError } from '../../services/api/client'
 import type { Workspace } from '../../services/api/types'
 import { WorkspaceForm } from './WorkspaceCreate'
 import type { WorkspaceUpdateInput } from './WorkspaceCreate'
+import { TrashDeleteAction } from '../trash/TrashActions'
 
 type LifecycleAction = 'archive' | 'restore'
 
@@ -70,7 +71,7 @@ function ScopedWorkspaceActions({ profileId, workspace, capabilities, onUpdate, 
     if (saved && !controller.signal.aborted) { setAction(null); onSaved?.(saved) }
   }
 
-  if (!canEdit && !canArchive && !canRestore) return null
+  if (!canEdit && !canArchive && !canRestore && workspace.can_delete !== true) return null
   const lifecycleOpen = action === 'archive' ? canArchive : action === 'restore' && canRestore
 
   return <>
@@ -78,6 +79,7 @@ function ScopedWorkspaceActions({ profileId, workspace, capabilities, onUpdate, 
       {canEdit && <Button variant="secondary" onClick={() => setAction('edit')}>Chỉnh sửa không gian</Button>}
       {canArchive && <Button variant="secondary" onClick={() => setAction('archive')}>Lưu trữ không gian</Button>}
       {canRestore && <Button variant="secondary" onClick={() => setAction('restore')}>Khôi phục không gian</Button>}
+      {inScope && workspace.can_delete === true && <TrashDeleteAction objectType="WORKSPACE" objectId={workspace.id} title={workspace.name} canDelete onDenied={onDenied} />}
     </section>
     {action === 'edit' && canEdit && <Dialog open busy={pending} title="Chỉnh sửa không gian" onClose={close}>
       <WorkspaceForm key={`${profileId}:${workspace.id}`} mode="edit" workspace={workspace} onSubmit={onUpdate} onPendingChange={setPending}

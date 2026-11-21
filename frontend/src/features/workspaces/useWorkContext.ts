@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys, tenantApi } from '../../services/api/queries'
 import { workApi, workKeys } from '../../services/api/work-management'
+import { analyticsKeys } from '../../services/api/analytics'
 
 export function useWorkContext(profileId: string, workspaceId?: string) {
   const client = useQueryClient()
@@ -10,6 +11,7 @@ export function useWorkContext(profileId: string, workspaceId?: string) {
   const active = profile.isSuccess && profile.data.status === 'ACTIVE' && (!workspaceId || (workspace.isSuccess && workspace.data.status === 'ACTIVE'))
   function invalidate(workspaceChanged = false) {
     void client.invalidateQueries({ queryKey: workspaceId ? workKeys.scope(profileId, workspaceId) : workKeys.profile(profileId) })
+    void client.invalidateQueries({ queryKey: analyticsKeys.profile(profileId) })
     if (workspaceChanged) void client.invalidateQueries({ queryKey: queryKeys.profile(profileId) })
   }
   function denied() {

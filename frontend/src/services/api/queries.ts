@@ -17,14 +17,14 @@ function isUser(value: unknown): value is User {
 
 function isProfile(value: unknown): value is Profile {
   return record(value) && uuid(value.id) && text(value.name) && status(value.status) &&
-    dateTime(value.created_at) && dateTime(value.updated_at)
+    dateTime(value.created_at) && dateTime(value.updated_at) && (value.can_delete === undefined || typeof value.can_delete === 'boolean')
 }
 
 function isWorkspace(value: unknown): value is Workspace {
   return record(value) && uuid(value.id) && uuid(value.profile_id) && text(value.name) &&
     nullableText(value.description) && (value.period === null ||
       (text(value.period) && /^[0-9]{4}-(0[1-9]|1[0-2])-01$/.test(value.period))) &&
-    status(value.status) && dateTime(value.created_at) && dateTime(value.updated_at)
+    status(value.status) && dateTime(value.created_at) && dateTime(value.updated_at) && (value.can_delete === undefined || typeof value.can_delete === 'boolean')
 }
 
 function asUser(payload: unknown): User {

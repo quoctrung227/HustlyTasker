@@ -24,7 +24,7 @@ User = get_user_model()
 
 
 class ProfileCreationApiTests(APITestCase):
-    profile_fields = {"id", "name", "status", "created_at", "updated_at"}
+    profile_fields = {"id", "name", "status", "can_delete", "created_at", "updated_at"}
 
     @classmethod
     def setUpTestData(cls):
@@ -64,6 +64,7 @@ class ProfileCreationApiTests(APITestCase):
         self.assertEqual(set(response.data), self.profile_fields)
         self.assertEqual(response.data["name"], "Nhóm sáng tạo")
         self.assertEqual(response.data["status"], Profile.Status.ACTIVE)
+        self.assertIs(response.data["can_delete"], True)
         self.assertIn("no-store", response["Cache-Control"])
         profile = Profile.objects.get(pk=response.data["id"])
         membership = ProfileMembership.objects.get(profile=profile)
@@ -86,6 +87,7 @@ class ProfileCreationApiTests(APITestCase):
         detail = self.client.get(reverse("workspace:profile-detail", kwargs={"profile_id": created["id"]}))
 
         self.assertEqual(listing.status_code, status.HTTP_200_OK)
+        self.assertIs(created["can_delete"], True)
         self.assertEqual(listing.data["count"], 1)
         self.assertEqual(listing.data["results"], [created])
         self.assertEqual(detail.status_code, status.HTTP_200_OK)
@@ -98,6 +100,7 @@ class ProfileCreationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["profile_id"], profile_id)
+        self.assertIs(response.data["can_delete"], True)
         workspace = Workspace.objects.get(pk=response.data["id"])
         self.assertEqual(workspace.profile_id, UUID(profile_id))
         self.assertEqual(workspace.owner_id, self.creator.pk)

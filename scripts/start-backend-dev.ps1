@@ -27,7 +27,8 @@ function Read-HustlyDevelopmentEnvironment([string[]]$Lines) {
         'POSTGRES_PORT', 'POSTGRES_BIND_ADDRESS', 'DJANGO_MAILER_BACKEND',
         'DJANGO_SMTP_HOST', 'DJANGO_SMTP_PORT', 'DJANGO_SMTP_USERNAME',
         'DJANGO_SMTP_PASSWORD', 'DJANGO_SMTP_USE_TLS', 'DJANGO_SMTP_USE_SSL',
-        'DJANGO_SMTP_TIMEOUT', 'DJANGO_DEFAULT_FROM_EMAIL', 'DJANGO_SERVER_EMAIL'
+        'DJANGO_SMTP_TIMEOUT', 'DJANGO_DEFAULT_FROM_EMAIL', 'DJANGO_SERVER_EMAIL',
+        'DJANGO_TRASH_PURGE_ENABLED'
     )
     $htLineNumber = 0
     foreach ($htLine in $Lines) {
@@ -75,7 +76,7 @@ function New-HustlyDevelopmentProcessInfo([string]$Repository, [hashtable]$Value
     # The selected file is authoritative. Stale deployment/Python/libpq settings
     # in the terminal cannot change settings module, import path or DB endpoint.
     foreach ($htName in @($htInfo.EnvironmentVariables.Keys)) {
-        if ($htName -match '^(DJANGO_|POSTGRES_|DRF_|PG|PYTHON)' -or $htName -eq 'DATABASE_URL') {
+        if ($htName -match '^(DJANGO_|POSTGRES_|DRF_|PG|PYTHON|TRASH_)' -or $htName -eq 'DATABASE_URL') {
             $htInfo.EnvironmentVariables.Remove($htName)
         }
     }

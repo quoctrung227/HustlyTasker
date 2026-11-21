@@ -1,8 +1,12 @@
+from datetime import datetime
+from uuid import UUID
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.audit.models import AuditLog
+from apps.common.deletion import task_live_q
 from apps.notifications.models import Notification
 from apps.notifications.services import emit_task_notifications
 from apps.reviews.models import Deliverable, Review
@@ -51,9 +55,41 @@ class InvalidTaskAssignmentReference(ValidationError):
         })
 
 
+def normalize_assignment_reason(value):
+    """An optional explicit handover note, never notification display text."""
+    if value is None:
+        return None
+    if (not isinstance(value, str) or len(value) > 4000
+        or any(char == "\x00" or 0xD800 <= ord(char) <= 0xDFFF for char in value)):
+        raise ValidationError({"reason": "Use valid text of at most 4000 characters."})
+    return value.strip() or None
+
+
+def _check_assignment_expectation(assignment, *, expected_assignment_id, expected_assigned_at):
+    """Compare the displayed assignment under locks, including row reuse ABA."""
+    if expected_assignment_id is _UNSET and expected_assigned_at is _UNSET:
+        return  # Existing clients may omit both fields.
+    if expected_assignment_id is _UNSET or expected_assigned_at is _UNSET:
+        raise ValidationError({"expected_assignment_id": "Supply both assignment expectation fields."})
+    if expected_assignment_id is None and expected_assigned_at is None:
+        if assignment is not None:
+            raise TaskAssignmentConflict("The Task assignment changed; refresh before confirming.")
+        return
+    if expected_assignment_id is None or expected_assigned_at is None:
+        raise ValidationError({"expected_assignment_id": "Assignment expectation fields must both be null or both set."})
+    try:
+        expected_id = UUID(str(expected_assignment_id))
+    except (TypeError, ValueError, AttributeError):
+        raise ValidationError({"expected_assignment_id": "Use a valid assignment reference."}) from None
+    if not isinstance(expected_assigned_at, datetime) or not timezone.is_aware(expected_assigned_at):
+        raise ValidationError({"expected_assigned_at": "Use a timezone-aware assignment timestamp."})
+    if assignment is None or assignment.pk != expected_id or assignment.assigned_at != expected_assigned_at:
+        raise TaskAssignmentConflict("The Task assignment changed; refresh before confirming.")
+
+
 def _lock_task(*, workspace, task_id):
     try:
-        task = Task.objects.select_for_update().filter(
+        task = Task.objects.select_for_update(of=("self",)).filter(task_live_q()).filter(
             id=task_id,
             workspace_id=workspace.id,
         ).first()
@@ -288,6 +324,9 @@ def assign_task(
     workspace_id,
     task_id,
     target_profile_membership_id,
+    reason=None,
+    expected_assignment_id=_UNSET,
+    expected_assigned_at=_UNSET,
 ):
     context, workspace, _ = lock_workspace_mutation_context(
         actor=actor,
@@ -305,6 +344,16 @@ def assign_task(
         raise TaskAssignmentConflict(
             "This Task cannot be assigned in its current state."
         )
+
+    reason = normalize_assignment_reason(reason)
+    active_assignment = TaskAssignment.objects.select_for_update().filter(
+        task_id=task.id, is_active=True,
+    ).first()
+    _check_assignment_expectation(
+        active_assignment,
+        expected_assignment_id=expected_assignment_id,
+        expected_assigned_at=expected_assigned_at,
+    )
 
     try:
         target_membership = (
@@ -333,10 +382,6 @@ def assign_task(
     if target_workspace_membership_id is None:
         raise InvalidTaskAssignmentReference()
 
-    active_assignment = TaskAssignment.objects.select_for_update().filter(
-        task_id=task.id,
-        is_active=True,
-    ).first()
     if (
         active_assignment is not None
         and active_assignment.user_id == target_membership.user_id
@@ -346,8 +391,10 @@ def assign_task(
         )
 
     previous_assignment_id = None
+    previous_user_id = None
     if active_assignment is not None:
         previous_assignment_id = active_assignment.id
+        previous_user_id = active_assignment.user_id
         active_assignment.is_active = False
         active_assignment.save(update_fields=("is_active", "updated_at"))
 
@@ -407,6 +454,11 @@ def assign_task(
         metadata={
             "task_id": str(task.id),
             "target_profile_membership_id": str(target_membership.id),
+            "target_user_id": str(target_membership.user_id),
+            "assignment_id": str(assignment.id),
+            "assignment_assigned_at": assignment.assigned_at.isoformat(),
+            "previous_user_id": str(previous_user_id) if previous_user_id else None,
+            "reason": reason,
             "previous_assignment_id": (
                 str(previous_assignment_id)
                 if previous_assignment_id is not None
@@ -422,7 +474,55 @@ def assign_task(
         task=task,
         event_type=Notification.EventType.TASK_ASSIGNED,
     )
+    if previous_assignment_id is not None:
+        emit_task_notifications(
+            event=event, actor=actor, task=task,
+            event_type=Notification.EventType.TASK_UNASSIGNED,
+        )
     return assignment
+
+
+@transaction.atomic
+def unassign_task(
+    *, actor, profile_id, workspace_id, task_id,
+    expected_assignment_id, expected_assigned_at, reason=None,
+):
+    context, workspace, _ = lock_workspace_mutation_context(
+        actor=actor, profile_id=profile_id, workspace_id=workspace_id,
+    )
+    _require_manager(context)
+    task = _lock_task(workspace=workspace, task_id=task_id)
+    if task.status not in (Task.Status.PENDING, Task.Status.ASSIGNED, Task.Status.WORKING):
+        raise TaskAssignmentConflict("This Task cannot be unassigned in its current state.")
+    if expected_assignment_id is None or expected_assigned_at is None:
+        raise ValidationError({"expected_assignment_id": "An existing assignment and timestamp are required."})
+    reason = normalize_assignment_reason(reason)
+    assignment = TaskAssignment.objects.select_for_update().filter(task_id=task.id, is_active=True).first()
+    _check_assignment_expectation(
+        assignment, expected_assignment_id=expected_assignment_id,
+        expected_assigned_at=expected_assigned_at,
+    )
+    assignment.is_active = False
+    assignment.save(update_fields=("is_active", "updated_at"))
+    # SRS V3 4.2.1: removing responsibility returns open work to PENDING.
+    # Existing submissions, review decisions and assignment rows are retained;
+    # a later assignment still requires the existing explicit Start workflow.
+    previous_status = _save_task_status(task=task, next_status=Task.Status.PENDING)
+    event = _write_audit(
+        actor=actor, action="task.unassigned", entity=assignment,
+        profile_id=workspace.profile_id, workspace_id=workspace.id,
+        metadata={
+            "task_id": str(task.pk), "previous_assignment_id": str(assignment.pk),
+            "previous_user_id": str(assignment.user_id), "assignment_id": None,
+            "target_user_id": None, "target_profile_membership_id": None,
+            "reason": reason, "task_status_before": previous_status, "task_status_after": task.status,
+        },
+    )
+    emit_task_notifications(
+        event=event, actor=actor, task=task,
+        event_type=Notification.EventType.TASK_UNASSIGNED,
+    )
+    return task
 
 
 @transaction.atomic
@@ -600,6 +700,9 @@ def _review_deliverable(
         status=review_status,
         comment=comment,
     )
+    if review_status == Review.Status.APPROVED:
+        review.compensation_snapshot_recorded = True
+        review.compensation_snapshot_vnd = task.estimated_compensation_vnd
     try:
         with transaction.atomic():
             review.full_clean()

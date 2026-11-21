@@ -9,10 +9,12 @@ class Notification(BaseModel):
 
     class EventType(models.TextChoices):
         TASK_ASSIGNED = "TASK_ASSIGNED"
+        TASK_UNASSIGNED = "TASK_UNASSIGNED"
         REVIEW_SUBMITTED = "REVIEW_SUBMITTED"
         REVIEW_APPROVED = "REVIEW_APPROVED"
         REVIEW_CHANGES_REQUESTED = "REVIEW_CHANGES_REQUESTED"
         TASK_COMMENTED = "TASK_COMMENTED"
+        PROFILE_INVITED = "PROFILE_INVITED"
 
     user = models.ForeignKey(
         User,
@@ -31,7 +33,7 @@ class Notification(BaseModel):
         default=False
     )
 
-    # Nullable as a group: historical notifications have no safe tenant mapping.
+    # Typed nullable contexts preserve unmapped legacy rows without inventing targets.
     event_type = models.CharField(max_length=32, choices=EventType.choices, null=True, blank=True)
     profile = models.ForeignKey("workspace.Profile", on_delete=models.PROTECT,
                                 related_name="notifications", null=True, blank=True)
@@ -41,22 +43,32 @@ class Notification(BaseModel):
                              related_name="notifications", null=True, blank=True)
     event = models.ForeignKey("audit.AuditLog", on_delete=models.PROTECT,
                               related_name="notifications", null=True, blank=True)
+    invitation = models.ForeignKey("workspace.ProfileInvitation", on_delete=models.PROTECT,
+                                   related_name="notifications", null=True, blank=True)
 
     class Meta:
         constraints = [
             models.CheckConstraint(
                 condition=(
                     models.Q(event_type__isnull=True, profile__isnull=True,
-                             workspace__isnull=True, task__isnull=True, event__isnull=True)
-                    | models.Q(event_type__isnull=False, profile__isnull=False,
-                               workspace__isnull=False, task__isnull=False, event__isnull=False)
+                             workspace__isnull=True, task__isnull=True, event__isnull=True,
+                             invitation__isnull=True)
+                    | models.Q(event_type__in=(
+                        "TASK_ASSIGNED", "TASK_UNASSIGNED", "REVIEW_SUBMITTED", "REVIEW_APPROVED",
+                        "REVIEW_CHANGES_REQUESTED", "TASK_COMMENTED",
+                    ), event_type__isnull=False, profile__isnull=False, workspace__isnull=False, task__isnull=False,
+                        event__isnull=False, invitation__isnull=True)
+                    | models.Q(event_type="PROFILE_INVITED", event_type__isnull=False, profile__isnull=False,
+                               workspace__isnull=True, task__isnull=True, event__isnull=False,
+                               invitation__isnull=False)
                 ),
                 name="notif_context_complete",
             ),
             models.CheckConstraint(
                 condition=models.Q(event_type__isnull=True) | models.Q(event_type__in=(
-                    "TASK_ASSIGNED", "REVIEW_SUBMITTED", "REVIEW_APPROVED",
+                    "TASK_ASSIGNED", "TASK_UNASSIGNED", "REVIEW_SUBMITTED", "REVIEW_APPROVED",
                     "REVIEW_CHANGES_REQUESTED", "TASK_COMMENTED",
+                    "PROFILE_INVITED",
                 )),
                 name="notif_valid_event_type",
             ),
@@ -71,7 +83,22 @@ class Notification(BaseModel):
 
     def clean(self):
         super().clean()
-        fields = (self.event_type, self.profile_id, self.workspace_id, self.task_id, self.event_id)
+        fields = (self.event_type, self.profile_id, self.workspace_id, self.task_id,
+                  self.event_id, self.invitation_id)
+        if self.event_type == self.EventType.PROFILE_INVITED:
+            from apps.workspace.models import ProfileInvitation
+            if (not all((self.profile_id, self.event_id, self.invitation_id))
+                or self.workspace_id is not None or self.task_id is not None):
+                raise ValidationError("Invitation notification context must be complete.")
+            canonical = ProfileInvitation.objects.filter(
+                pk=self.invitation_id, acceptance_kind=ProfileInvitation.AcceptanceKind.ACCOUNT,
+            ).values("profile_id", "recipient_user_id").first()
+            if canonical != {"profile_id": self.profile_id, "recipient_user_id": self.user_id}:
+                raise ValidationError("Invitation notification must belong to its recipient and Profile.")
+            return
+        if self.invitation_id is not None:
+            raise ValidationError("Task or legacy notifications cannot reference an invitation.")
+        fields = fields[:-1]
         if any(value is not None for value in fields) and not all(value is not None for value in fields):
             raise ValidationError("Notification context must be complete or entirely legacy.")
         if self.task_id:

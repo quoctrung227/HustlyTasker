@@ -5,8 +5,9 @@ import { Alert, Button, Card, Dialog, EmptyState, ErrorState, FormField, Input, 
 import { PageHeader, dateLabel } from '../../components/page'
 import { isApiError } from '../../services/api/client'
 import { memberKeys, membersApi } from '../../services/api/members'
-import type { InvitationRole, MemberCapabilities, ProfileInvitation, ProfileRole } from '../../services/api/members'
+import type { InvitationCandidate, InvitationRole, MemberCapabilities, ProfileInvitation, ProfileRole } from '../../services/api/members'
 import { queryKeys, tenantApi } from '../../services/api/queries'
+import './InvitationV2.css'
 
 const roleLabels: Record<ProfileRole, string> = { OWNER: 'Chủ sở hữu', ADMIN: 'Quản trị viên', MEMBER: 'Thành viên' }
 const invitationLabels: Record<ProfileInvitation['status'], string> = {
@@ -18,94 +19,122 @@ const deliveryLabels: Record<ProfileInvitation['delivery_status'], string> = {
 const lostScope = (error: unknown) => isApiError(error) && error.kind !== 'csrf' && [401, 403, 404].includes(error.status)
 const uncertain = (error: unknown) => !isApiError(error) || error.status === 0 || error.status >= 500
 const uncertainMessage = 'Chưa thể xác nhận kết quả. Lời mời có thể đã được lưu. Đóng biểu mẫu và kiểm tra danh sách trước khi thử lại.'
-const deliveryUnavailableMessage = 'Dịch vụ email hiện chưa sẵn sàng hoặc chưa được cấu hình. Chưa thể xác nhận việc gửi email. Lời mời có thể đã được lưu. Đóng biểu mẫu và kiểm tra danh sách trước khi thử lại; nếu vẫn lỗi, liên hệ quản trị để kiểm tra cấu hình email.'
 
 type MutationProps = {
   profileId: string
+  currentUserId: string
   onChanged: (showNewest?: boolean) => void
   onDenied: (error: unknown) => void
   onNotice: (message: string, kind?: 'success' | 'error') => void
 }
-type Failure = { message: string; fields: Partial<Record<'recipient_email' | 'requested_role', string>> }
+type Failure = { message: string; fields: Partial<Record<'recipient_user_id' | 'requested_role', string>> }
 
-function InviteForm({ profileId, roles, onChanged, onDenied, onNotice, onClose, onPending }: MutationProps & {
+function InviteForm({ profileId, currentUserId, roles, onChanged, onDenied, onNotice, onClose, onPending }: MutationProps & {
   roles: InvitationRole[]; onClose: () => void; onPending: (pending: boolean) => void
 }) {
   const id = useId()
-  const [email, setEmail] = useState('')
+  const [draft, setDraft] = useState('')
+  const [search, setSearch] = useState('')
+  const [candidatePage, setCandidatePage] = useState(1)
+  const [selected, setSelected] = useState<InvitationCandidate | null>(null)
   const [role, setRole] = useState<InvitationRole | ''>(roles.includes('MEMBER') ? 'MEMBER' : '')
   const [pending, setPending] = useState(false)
+  const [ambiguousResult, setAmbiguousResult] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const request = useRef<AbortController | null>(null)
   const summary = useRef<HTMLDivElement>(null)
-  const ids = { recipient_email: `${id}-recipient`, requested_role: `${id}-role` }
+  const ids = { recipient_user_id: `${id}-recipient`, requested_role: `${id}-role` }
+  const candidates = useQuery({ queryKey: memberKeys.candidates(currentUserId, profileId, search, candidatePage),
+    queryFn: ({ signal }) => membersApi.candidates(profileId, search, candidatePage, signal), staleTime: 0, retry: false })
+  const allowedRoles = roles.filter((value) => !candidates.data || candidates.data.capabilities.allowed_invitation_roles.includes(value))
+  const searchPending = draft.trim() !== search || candidates.isFetching
   useEffect(() => () => { request.current?.abort() }, [])
   useEffect(() => { if (failure) summary.current?.focus() }, [failure])
   useEffect(() => {
+    const timer = window.setTimeout(() => { setSearch(draft.trim()); setCandidatePage(1) }, 300)
+    return () => window.clearTimeout(timer)
+  }, [draft])
+  useEffect(() => { if (candidates.isError && lostScope(candidates.error)) onDenied(candidates.error) }, [candidates.isError, candidates.error, onDenied])
+  useEffect(() => {
     if (role && !roles.includes(role)) {
-      request.current?.abort(); request.current = null
-      setPending(false); onPending(false); setRole('')
+      request.current?.abort(); request.current = null; setPending(false); onPending(false); setRole('')
       setFailure({ message: 'Vai trò được phép đã thay đổi. Kiểm tra danh sách lời mời trước khi gửi lại.', fields: { requested_role: 'Chọn vai trò hiện được phép.' } })
     }
   }, [onPending, role, roles])
+  useEffect(() => {
+    if (!selected) return
+    const current = candidates.data?.results.find((candidate) => candidate.id === selected.id)
+    if (current && !current.can_invite) setSelected(null)
+  }, [candidates.data, selected])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (request.current) return
+    if (request.current || ambiguousResult) return
     const fields: Failure['fields'] = {}
-    const normalized = email.trim()
-    if (!normalized || normalized.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) || normalized.includes('\u0000')) {
-      fields.recipient_email = 'Nhập địa chỉ email hợp lệ (tối đa 254 ký tự).'
-    }
-    if (!role || !roles.includes(role)) fields.requested_role = 'Chọn vai trò hiện được phép.'
+    if (!selected?.can_invite) fields.recipient_user_id = 'Chọn một tài khoản đủ điều kiện trong danh sách.'
+    if (!role || !allowedRoles.includes(role)) fields.requested_role = 'Chọn vai trò hiện được phép.'
     if (Object.keys(fields).length) { setFailure({ message: 'Vui lòng kiểm tra thông tin lời mời.', fields }); return }
-    if (!role) return
+    if (!role || !selected || searchPending || candidates.isError || candidates.data?.capabilities.can_invite !== true) return
     const controller = new AbortController()
-    request.current = controller
-    setPending(true); onPending(true); setFailure(null)
-    let saved = false
+    request.current = controller; setPending(true); onPending(true); setFailure(null)
+    let saved: ProfileInvitation | null = null
     try {
-      await membersApi.createInvitation(profileId, { recipient_email: normalized, requested_role: role }, controller.signal)
-      saved = !controller.signal.aborted
+      const result = await membersApi.createInvitation(profileId, { recipient_user_id: selected.id, requested_role: role }, controller.signal)
+      if (!controller.signal.aborted) saved = result
     } catch (error) {
       if (!controller.signal.aborted) {
         const api = isApiError(error) ? error : null
         const fieldErrors: Failure['fields'] = {}
-        for (const name of ['recipient_email', 'requested_role'] as const) if (api?.fieldErrors[name]) fieldErrors[name] = api.fieldErrors[name]
-        if (api?.status === 503) onNotice('')
-        setFailure({ message: api?.status === 503 ? deliveryUnavailableMessage : uncertain(error) ? uncertainMessage : api?.message || 'Chưa thể tạo lời mời. Vui lòng thử lại.', fields: fieldErrors })
+        for (const name of ['recipient_user_id', 'requested_role'] as const) if (api?.fieldErrors[name]) fieldErrors[name] = api.fieldErrors[name]
+        if (uncertain(error)) setAmbiguousResult(true)
+        setFailure({ message: uncertain(error) ? uncertainMessage : api?.message || 'Chưa thể tạo lời mời. Vui lòng thử lại.', fields: fieldErrors })
         if (lostScope(error)) onDenied(error)
         else if (uncertain(error) || api?.status === 409) onChanged(true)
       }
-    } finally {
-      if (!controller.signal.aborted) { request.current = null; setPending(false); onPending(false) }
-    }
+    } finally { if (!controller.signal.aborted) { request.current = null; setPending(false); onPending(false) } }
     if (saved) {
-      onNotice('Đã tạo lời mời. Hãy xem trạng thái email trong danh sách; lời mời chưa đồng nghĩa thành viên đã tham gia.')
+      onNotice(saved.delivery_status === 'FAILED'
+        ? 'Đã tạo lời mời trên Web. Email chưa gửi được; người nhận vẫn có thể phản hồi trên Web.'
+        : 'Đã tạo lời mời trên Web. Chỉ khi người nhận chấp nhận thì tư cách thành viên mới được cấp.')
       onChanged(true); onClose()
     }
   }
 
+  const relationLabels = { AVAILABLE: 'Có thể mời', ACTIVE_MEMBER: 'Đã là thành viên', PENDING_INVITATION: 'Đã có lời mời đang chờ', UNAVAILABLE: 'Không thể mời tài khoản này' }
   return <form className="work-form" aria-label="Mời thành viên" noValidate onSubmit={(event) => void submit(event)} aria-busy={pending || undefined}>
-    <p>Người nhận phải đăng nhập đúng tài khoản và chủ động chấp nhận lời mời. Quyền Workspace được quản lý riêng.</p>
+    <p>Chọn tài khoản đã đăng ký. Người nhận phản hồi trên Web, không nhập mã mời. Quyền Workspace tháng hiện tại chỉ được cấp sau khi chấp nhận theo chính sách của tổ chức.</p>
     {failure && <div ref={summary} className="form-summary" tabIndex={-1}><Alert kind="error" title="Chưa thể hoàn tất lời mời"><p>{failure.message}</p>
       {Object.keys(failure.fields).length > 0 && <ul>{Object.entries(failure.fields).map(([name, message]) => <li key={name}><a href={`#${ids[name as keyof typeof ids]}`} onClick={(event) => {
         event.preventDefault(); document.getElementById(ids[name as keyof typeof ids])?.focus()
       }}>{message}</a></li>)}</ul>}
     </Alert></div>}
-    <FormField id={ids.recipient_email} label="Email người nhận" hint="Bắt buộc. Dùng email của tài khoản sẽ chấp nhận lời mời." error={failure?.fields.recipient_email}>
-      <Input type="email" autoComplete="off" maxLength={254} required disabled={pending} value={email} onChange={(event) => setEmail(event.target.value)} />
+    <FormField id={`${id}-search`} label="Tìm tài khoản" hint="Tìm theo tên hoặc username được phép. Danh sách được tìm kiếm trên máy chủ, 20 tài khoản mỗi trang.">
+      <Input type="search" autoComplete="off" maxLength={100} disabled={pending} value={draft} onChange={(event) => setDraft(event.target.value)} />
     </FormField>
+    <fieldset className="invitation-candidates" id={ids.recipient_user_id} tabIndex={-1} disabled={pending} aria-describedby={failure?.fields.recipient_user_id ? `${id}-recipient-error` : undefined}>
+      <legend>Chọn tài khoản</legend>
+      {selected && <p className="field__hint">Đã chọn: <strong>{selected.display_label}</strong>{selected.username ? ` · ${selected.username}` : selected.masked_email ? ` · ${selected.masked_email}` : ''}</p>}
+      {searchPending || candidates.isPending ? <p role="status">Đang tìm tài khoản…</p> : candidates.isError ? <ErrorState error={candidates.error} onRetry={() => void candidates.refetch()} /> : <>
+        {!candidates.data.capabilities.can_invite && <Alert kind="error">Quyền mời thành viên đã thay đổi. Đóng biểu mẫu và tải lại trang.</Alert>}
+        {candidates.data.results.length ? <ul className="invitation-candidate-list">{candidates.data.results.map((candidate) => <li key={candidate.id}>
+          <label className="invitation-candidate"><input type="radio" name={`${id}-account`} checked={selected?.id === candidate.id} disabled={!candidate.can_invite || !candidates.data.capabilities.can_invite} onChange={() => { setSelected(candidate); setFailure(null) }} />
+            <span className="invitation-candidate__text"><strong>{candidate.display_label}</strong>{(candidate.username || candidate.masked_email) && <span>{candidate.username || candidate.masked_email}</span>}<span className="field__hint">{relationLabels[candidate.relation]}</span></span>
+          </label>
+        </li>)}</ul> : <p>Không có tài khoản phù hợp. Thử tên hoặc username khác.</p>}
+        <Pagination page={candidatePage} count={candidates.data.count} onPageChange={setCandidatePage} disabled={pending} label="Phân trang tài khoản" />
+      </>}
+      {failure?.fields.recipient_user_id && <p className="field__error" id={`${id}-recipient-error`}>{failure.fields.recipient_user_id}</p>}
+    </fieldset>
     <div className={`field${failure?.fields.requested_role ? ' field--invalid' : ''}`}>
       <label className="field__label" htmlFor={ids.requested_role}>Vai trò tổ chức</label>
       <select id={ids.requested_role} className="input" required value={role} disabled={pending} onChange={(event) => setRole(event.target.value as InvitationRole | '')}
         aria-invalid={failure?.fields.requested_role ? true : undefined} aria-describedby={`${ids.requested_role}-hint${failure?.fields.requested_role ? ` ${ids.requested_role}-error` : ''}`}>
-        <option value="">Chọn vai trò</option>{roles.map((value) => <option key={value} value={value}>{roleLabels[value]}</option>)}
+        <option value="">Chọn vai trò</option>{allowedRoles.map((value) => <option key={value} value={value}>{roleLabels[value]}</option>)}
       </select>
       <p className="field__hint" id={`${ids.requested_role}-hint`}>Chỉ các vai trò bạn được quyền mời xuất hiện ở đây. Lời mời không thể cấp quyền Chủ sở hữu.</p>
       {failure?.fields.requested_role && <p className="field__error" id={`${ids.requested_role}-error`}>{failure.fields.requested_role}</p>}
     </div>
-    <div className="work-actions"><Button type="submit" busy={pending}>Gửi lời mời</Button><Button variant="secondary" disabled={pending} onClick={onClose}>Đóng</Button></div>
+    <div className="work-actions"><Button type="submit" busy={pending} disabled={searchPending || candidates.isError || ambiguousResult || candidates.data?.capabilities.can_invite !== true}>Gửi lời mời</Button><Button variant="secondary" disabled={pending} onClick={onClose}>Đóng</Button></div>
   </form>
 }
 
@@ -116,13 +145,12 @@ function InviteCreate({ capabilities, ...props }: MutationProps & { capabilities
   useEffect(() => { if (!allowed) { setOpen(false); setPending(false) } }, [allowed])
   const close = () => { if (!pending) setOpen(false) }
   if (!allowed) return null
-  return <><Button onClick={() => setOpen(true)}>Mời thành viên</Button>
+  return <><Button onClick={() => setOpen(true)}>Thêm thành viên</Button>
     {open && <Dialog open busy={pending} title="Mời thành viên" onClose={close}>
       <InviteForm {...props} roles={capabilities.allowed_invitation_roles} onClose={() => setOpen(false)} onPending={setPending} />
     </Dialog>}
   </>
 }
-
 function InvitationActions({ invitation, capabilities, ...props }: MutationProps & { invitation: ProfileInvitation; capabilities: MemberCapabilities }) {
   const [confirm, setConfirm] = useState(false)
   const [pending, setPending] = useState<'revoke' | 'resend' | null>(null)
@@ -131,7 +159,7 @@ function InvitationActions({ invitation, capabilities, ...props }: MutationProps
   const errorSummary = useRef<HTMLDivElement>(null)
   const authorized = capabilities.can_manage_invitations && capabilities.allowed_invitation_roles.includes(invitation.requested_role)
   const canRevoke = authorized && invitation.status === 'PENDING'
-  const canResend = authorized && ['PENDING', 'EXPIRED'].includes(invitation.status)
+  const canResend = authorized && invitation.acceptance_kind === 'ACCOUNT' && invitation.status === 'PENDING'
   const allowed = canRevoke || canResend
   useEffect(() => () => { request.current?.abort() }, [])
   useEffect(() => {
@@ -147,31 +175,34 @@ function InvitationActions({ invitation, capabilities, ...props }: MutationProps
     let saved = false
     try {
       if (action === 'revoke') await membersApi.revokeInvitation(props.profileId, invitation.id, controller.signal)
-      else await membersApi.resendInvitation(props.profileId, invitation.id, controller.signal)
+      else {
+        const result = await membersApi.resendInvitation(props.profileId, invitation.id, controller.signal)
+        if (!controller.signal.aborted && result.acceptance_kind === 'ACCOUNT' && result.delivery_status === 'FAILED') {
+          props.onNotice('Lời mời trên Web vẫn còn hiệu lực, nhưng lần thử gửi email chưa thành công.', 'error')
+          props.onChanged(); return
+        }
+      }
       saved = !controller.signal.aborted
     } catch (error) {
       if (!controller.signal.aborted) {
-        if (action === 'resend' && isApiError(error) && error.status === 503) {
-          // The replaced row can leave this page. Retain the failure outside
-          // its component rather than losing it while showing the newest row.
-          setFailure(null); props.onNotice(deliveryUnavailableMessage, 'error')
-        } else setFailure(uncertain(error) ? 'Chưa thể xác nhận kết quả. Kiểm tra lại danh sách trước khi thao tác tiếp.' : isApiError(error) ? error.message : 'Chưa thể xử lý lời mời.')
+        setFailure(uncertain(error) ? 'Chưa thể xác nhận kết quả. Kiểm tra lại danh sách trước khi thao tác tiếp.' : isApiError(error) ? error.message : 'Chưa thể xử lý lời mời.')
         if (lostScope(error)) props.onDenied(error)
-        else if (uncertain(error) || (isApiError(error) && error.status === 409)) props.onChanged(action === 'resend')
+        else if (uncertain(error) || (isApiError(error) && error.status === 409)) props.onChanged()
       }
     } finally {
       if (!controller.signal.aborted) { request.current = null; setPending(null) }
     }
     if (saved) {
       setConfirm(false)
-      props.onNotice(action === 'revoke' ? 'Đã hủy lời mời.' : 'Đã tạo lời mời thay thế. Mã cũ không còn dùng được; xem trạng thái email mới trong danh sách.')
-      props.onChanged(action === 'resend')
+      props.onNotice(action === 'revoke' ? 'Đã hủy lời mời.'
+        : 'Đã xử lý lần thử gửi email. Lời mời, vai trò và thời hạn trên Web được giữ nguyên; xem trạng thái email trong danh sách.')
+      props.onChanged()
     }
   }
 
   return <>
     {failure && !confirm && <div ref={errorSummary} className="form-summary" tabIndex={-1}><Alert kind="error">{failure}</Alert></div>}
-    {allowed && <div className="work-actions">{canResend && <Button variant="secondary" busy={pending === 'resend'} disabled={pending !== null} onClick={() => void mutate('resend')}>Gửi lại lời mời</Button>}
+    {allowed && <div className="work-actions">{canResend && <Button variant="secondary" busy={pending === 'resend'} disabled={pending !== null} onClick={() => void mutate('resend')}>Thử gửi lại email</Button>}
       {canRevoke && <Button variant="danger" disabled={pending !== null} onClick={() => { setFailure(null); setConfirm(true) }}>Hủy lời mời</Button>}</div>}
     {confirm && canRevoke && <Dialog open busy={pending !== null} title="Hủy lời mời" onClose={() => { if (!pending) setConfirm(false) }}>
       <p>Người nhận sẽ không thể dùng lời mời này để tham gia tổ chức. Bạn có chắc muốn hủy?</p>
@@ -214,7 +245,7 @@ function ScopedOrganizationMembers({ profileId, currentUserId }: { profileId: st
   if (scopeError) return <>{header}<ErrorState error={scopeError} onRetry={retry} /><p className="read-note">Chỉ Chủ sở hữu hoặc Quản trị viên tổ chức được xem danh sách này. Quyền trong Workspace không tự cấp quyền quản trị tổ chức.</p></>
   if (!profile.isSuccess || !members.isSuccess) return <>{header}<PageSkeleton label="Đang tải thành viên tổ chức…" /></>
   const capabilities = members.data.capabilities
-  const mutation = { profileId, onChanged: changed, onDenied: deny, onNotice: (message: string, kind: 'success' | 'error' = 'success') => setNotice(message ? { message, kind } : null) }
+  const mutation = { profileId, currentUserId, onChanged: changed, onDenied: deny, onNotice: (message: string, kind: 'success' | 'error' = 'success') => setNotice(message ? { message, kind } : null) }
   return <>
     <PageHeader title="Thành viên tổ chức" eyebrow={profile.data.name} description="Mời đúng người, cấp đúng phạm vi truy cập." back={{ to: `/profiles/${profileId}`, label: 'Thông tin tổ chức' }}
       action={<InviteCreate {...mutation} capabilities={capabilities} />} />
@@ -230,10 +261,10 @@ function ScopedOrganizationMembers({ profileId, currentUserId }: { profileId: st
       <p className="read-note">Bao gồm lời mời đang chờ và đã xử lý trong phạm vi quản lý của bạn. Hệ thống email tiếp nhận không xác nhận email đã đến hộp thư người nhận.</p>
       {invitations.isPending ? <PageSkeleton label="Đang tải lời mời…" /> : invitations.isError ? <ErrorState error={invitations.error} onRetry={() => void invitations.refetch()} /> : <>
         {invitations.data.results.length ? <ul className="collaboration-list" aria-label="Lời mời tổ chức">{invitations.data.results.map((invitation) => <li className="card collaboration-item" key={invitation.id}>
-          <h3 className="preserve-text">{invitation.recipient_email}</h3><p>{roleLabels[invitation.requested_role]} · {invitationLabels[invitation.status]}</p>
+          <h3 className="preserve-text">{invitation.recipient_display_label || invitation.recipient_email || 'Tài khoản được mời'}</h3><p>{roleLabels[invitation.requested_role]} · {invitationLabels[invitation.status]}</p>
           <p>{deliveryLabels[invitation.delivery_status]}</p><p className="read-note">Tạo {dateLabel(invitation.created_at)} · Hạn {dateLabel(invitation.expires_at)}</p>
           <InvitationActions {...mutation} invitation={invitation} capabilities={capabilities} />
-        </li>)}</ul> : <EmptyState title="Chưa có lời mời" description="Tạo lời mời bằng email để người nhận chủ động tham gia tổ chức." />}
+        </li>)}</ul> : <EmptyState title="Chưa có lời mời" description="Chọn tài khoản đã đăng ký để gửi lời mời trên Web." />}
         <Pagination page={invitationPage} count={invitations.data.count} onPageChange={setInvitationPage} label="Phân trang lời mời" />
       </>}
     </section>

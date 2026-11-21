@@ -2,8 +2,10 @@
 
 EVENT_CONTENT = {
     "TASK_ASSIGNED": ("Task assigned", "A task has been assigned to you."),
+    "TASK_UNASSIGNED": ("Task assignment removed", "You are no longer assigned to a task."),
     "REVIEW_SUBMITTED": ("Review requested", "A task deliverable is ready for internal review."),
     "REVIEW_APPROVED": ("Review approved", "A task deliverable has been approved."),
     "REVIEW_CHANGES_REQUESTED": ("Changes requested", "A task deliverable needs changes."),
     "TASK_COMMENTED": ("Task comment", "A new comment was added to a task you participate in."),
+    "PROFILE_INVITED": ("Organization invitation", "You have been invited to join an organization."),
 }

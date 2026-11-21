@@ -119,6 +119,7 @@ ENVIRONMENT = _env_choice(
 )
 IS_PRODUCTION = ENVIRONMENT == "production"
 AI_FIXTURE_ENABLED = _env_bool("DJANGO_AI_FIXTURE_ENABLED", default=False)
+TRASH_PURGE_ENABLED = _env_bool("DJANGO_TRASH_PURGE_ENABLED", default=False)
 
 SECRET_KEY = _env_secret("DJANGO_SECRET_KEY")
 DEBUG = _env_bool("DJANGO_DEBUG")
@@ -154,6 +155,7 @@ INSTALLED_APPS = [
     'apps.finance',
     'apps.notifications',
     'apps.audit',
+    'apps.trash.apps.TrashConfig',
     'apps.ai.apps.AIConfig',
     'rest_framework',
 ]

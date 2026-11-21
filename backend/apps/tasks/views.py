@@ -31,6 +31,7 @@ from .serializers import (
     TaskListQuerySerializer,
     TaskReadSerializer,
     TaskUpdateSerializer,
+    TaskUnassignSerializer,
 )
 from .services import (
     TaskWorkflowConflict,
@@ -41,6 +42,7 @@ from .services import (
     start_task,
     submit_deliverable,
     update_task,
+    unassign_task,
 )
 
 
@@ -287,6 +289,24 @@ class TaskAssignView(TaskActionView):
         return Response(TaskReadSerializer(
             assignment.task, context=self.get_serializer_context(),
         ).data)
+
+
+@method_decorator(never_cache, name="dispatch")
+class TaskUnassignView(TaskActionView):
+    serializer_class = TaskUnassignSerializer
+    permission_classes = (CanManageWorkspaceTasks,)
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        task = unassign_task(
+            actor=request.user,
+            profile_id=self.workspace_access_context.profile_id,
+            workspace_id=self.workspace_access_context.workspace_id,
+            task_id=self.task.id,
+            **serializer.validated_data,
+        )
+        return Response(TaskReadSerializer(task, context=self.get_serializer_context()).data)
 
 
 @method_decorator(never_cache, name="dispatch")

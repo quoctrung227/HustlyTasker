@@ -9,6 +9,7 @@ from .views import (
     TaskDetailView,
     TaskListView,
     TaskStartView,
+    TaskUnassignView,
     TaskSubtaskListView,
 )
 
@@ -44,6 +45,11 @@ urlpatterns = [
         f"{_workspace_prefix}<str:task_id>/assign/",
         TaskAssignView.as_view(),
         name="task-assign",
+    ),
+    path(
+        f"{_workspace_prefix}<str:task_id>/unassign/",
+        TaskUnassignView.as_view(),
+        name="task-unassign",
     ),
     path(
         f"{_workspace_prefix}<str:task_id>/subtasks/",

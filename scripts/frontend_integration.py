@@ -30,7 +30,7 @@ def private_test_mailbox(run_id):
     return directory
 
 
-def install_test_mailbox(run_id, *, fail_first_invitation=False):
+def install_test_mailbox(run_id, *, fail_first_invitation=False, invitation_v2=False):
     """Copy only locmem-accepted credential mail into this disposable container.
 
     No HTTP endpoint, deployment setting, mail provider or application email
@@ -59,10 +59,21 @@ def install_test_mailbox(run_id, *, fail_first_invitation=False):
     original = EmailBackend.send_messages
     failure_lock = Lock()
     failure_pending = fail_first_invitation
+    # V2 delivery probes are synthetic, container-local failures; no SMTP or
+    # development configuration is read. Fail only the first attempt per target.
+    v2_failure_targets = {
+        f"invitation_v2_{label}.{run_id}@example.test"
+        for label in ("failed", "retry")
+    } if invitation_v2 else set()
 
     def send_messages(backend, messages):
         nonlocal failure_pending
         messages = list(messages)
+        with failure_lock:
+            for message in messages:
+                if message.subject == "Your HustlyTasker Profile invitation" and len(message.to) == 1 and message.to[0] in v2_failure_targets:
+                    v2_failure_targets.remove(message.to[0])
+                    raise RuntimeError("Deliberate isolated account-invitation transport failure.")
         if fail_first_invitation:
             invitations = [message for message in messages if message.subject == "Your HustlyTasker Profile invitation"]
             if invitations:
@@ -556,6 +567,181 @@ def seed_fixtures(run_id):
             revision=1, status=Deliverable.Status.SUBMITTED,
             file_url="https://example.test/negative-self-review-fixture",
         )
+        seed_reassignment_analytics_fixtures(run_id, password)
+
+
+def seed_reassignment_analytics_fixtures(run_id, password):
+    """Independent synthetic tenant; never called before owned DB selection.
+
+    Setup is deliberately distinguished from UI actions in the browser spec.
+    Legacy unknown compensation is represented explicitly, never guessed.
+    """
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from django.contrib.auth import get_user_model
+    from django.utils import timezone
+    from apps.workspace.models import Profile, ProfileMembership, Workspace, WorkspaceMember
+    from apps.tasks.models import Task, TaskAssignment
+    from apps.reviews.models import Deliverable, Review
+    from apps.tasks.services import assign_task, start_task, submit_deliverable, approve_deliverable
+
+    current = timezone.now().astimezone(ZoneInfo("Asia/Ho_Chi_Minh"))
+    month_start = current.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    actors = {}
+    for label, first, last in (
+        ("owner", "Chủ", "Thống kê"), ("manager", "Quản lý", "Thống kê"),
+        ("editor_a", "Nguyễn", "Editor A"), ("editor_b", "", ""),
+        ("viewer", "Người xem", "Thống kê"),
+    ):
+        actors[label] = get_user_model().objects.create_user(
+            username=f"analytics_{label}", email=f"analytics_{label}.{run_id}@example.test",
+            password=password, first_name=first, last_name=last,
+        )
+    profile = Profile.objects.create(id=fixture_id(run_id, "analytics_profile"), name="Analytics Workspace Studio")
+    memberships = {}
+    for label, actor in actors.items():
+        memberships[label] = ProfileMembership.objects.create(
+            id=fixture_id(run_id, f"analytics_{label}_membership"), profile=profile,
+            user=actor, role="OWNER" if label == "owner" else "MEMBER",
+        )
+    main = Workspace.objects.create(
+        id=fixture_id(run_id, "analytics_workspace"), profile=profile, owner=actors["owner"],
+        name="Analytics Main Workspace", period=current.date().replace(day=1),
+    )
+    sibling = Workspace.objects.create(
+        id=fixture_id(run_id, "analytics_sibling_workspace"), profile=profile, owner=actors["owner"],
+        name="Analytics Other Workspace", period=(month_start.date() - timedelta(days=1)).replace(day=1),
+    )
+    for workspace in (main, sibling):
+        for label in ("manager", "editor_a", "editor_b", "viewer"):
+            WorkspaceMember.objects.create(
+                workspace=workspace, user=actors[label],
+                role="VIEWER" if label == "viewer" else ("ADMIN" if label == "manager" and workspace == main else "MEMBER"),
+            )
+    def task(label, title, amount, workspace=main):
+        return Task.objects.create(
+            id=fixture_id(run_id, "analytics_" + label), workspace=workspace, created_by=actors["owner"],
+            title=title, estimated_compensation_vnd=amount,
+            description="Synthetic analytics fixture; no customer data.",
+        )
+    scope = {"profile_id": profile.pk, "workspace_id": main.pk}
+    transfer = task("transfer_task", "Chuyển giao an toàn", "500000")
+    working = task("working_task", "Công việc đang dựng", "100000")
+    task("unassigned_task", "Chưa phân công và chưa định giá", None)
+    task("large_task", "Giá trị nguyên lớn", "999999999999999999")
+    for item in (transfer, working):
+        assign_task(actor=actors["manager"], **scope, task_id=item.pk, target_profile_membership_id=memberships["editor_a"].pk)
+    start_task(actor=actors["editor_a"], **scope, task_id=working.pk)
+    completed = task("completed_task", "Đã nghiệm thu trong kỳ", "700000")
+    # Created in a previous cohort; accepted now. These two date bases differ.
+    Task.objects.filter(pk=completed.pk).update(created_at=month_start - timedelta(days=2))
+    assign_task(actor=actors["manager"], **scope, task_id=completed.pk, target_profile_membership_id=memberships["editor_b"].pk)
+    start_task(actor=actors["editor_b"], **scope, task_id=completed.pk)
+    product = submit_deliverable(actor=actors["editor_b"], **scope, task_id=completed.pk, file_url="https://example.test/analytics-completed")
+    approved = approve_deliverable(actor=actors["manager"], **scope, task_id=completed.pk, deliverable_id=product.pk)
+    if not approved.compensation_snapshot_recorded or str(approved.compensation_snapshot_vnd) != "700000":
+        raise RuntimeError("Isolated approval snapshot fixture was not captured.")
+    # Current estimate is deliberately different; the historical value is700000.
+    Task.objects.filter(pk=completed.pk).update(estimated_compensation_vnd="999000")
+    legacy = task("legacy_task", "Lịch sử chưa có snapshot giá", "9000000")
+    Task.objects.filter(pk=legacy.pk).update(status=Task.Status.COMPLETED)
+    TaskAssignment.objects.create(task=legacy, user=actors["editor_a"])
+    old_product = Deliverable.objects.create(
+        task=legacy, uploaded_by=actors["editor_a"], revision=1,
+        status=Deliverable.Status.APPROVED, file_url="https://example.test/analytics-legacy",
+    )
+    Review.objects.create(deliverable=old_product, reviewer=actors["manager"], status=Review.Status.APPROVED)
+    task("sibling_task", "Workspace khác không được quản lý", "123000", workspace=sibling)
+
+
+def seed_invitation_v2_fixtures(run_id):
+    """Synthetic actors only, after owned isolated schema/mailbox gates.
+
+    Account creation/roles are API-driven setup, not claimed as UI E2E. The
+    invitation sends and decisions under test are performed through React.
+    """
+    from datetime import timedelta
+    from django.contrib.auth import get_user_model
+    from django.db import transaction
+    from django.utils import timezone
+    from apps.workspace.models import Profile, ProfileMembership, Workspace, WorkspaceMember
+    from apps.workspace.invitation_services import create_profile_invitation
+
+    password = os.environ["HT_FRONTEND_TEST_PASSWORD"]
+    User = get_user_model()
+    with transaction.atomic():
+        actors = {}
+        for label, first, last in (
+            ("owner", "V2", "Chủ tổ chức"), ("admin", "V2", "Quản trị viên"),
+            ("member", "V2", "Thành viên"), ("recipient", "V2", "Người nhận"),
+            ("decliner", "V2", "Từ chối"), ("failed", "V2", "Email lỗi"),
+            ("retry", "V2", "Thử lại email"), ("switcher", "V2", "Nhiều tổ chức"),
+            ("foreign", "V2", "Chủ tổ chức khác"),
+        ):
+            actors[label] = User.objects.create_user(
+                id=fixture_id(run_id, f"invitation_v2_{label}"),
+                username=f"fixture_v2_{label}", email=f"invitation_v2_{label}.{run_id}@example.test",
+                password=password, first_name=first, last_name=last,
+            )
+        profile = Profile.objects.create(id=fixture_id(run_id, "invitation_v2_profile"), name="V2 Invitation Studio")
+        foreign = Profile.objects.create(id=fixture_id(run_id, "invitation_v2_foreign_profile"), name="V2 Other Studio")
+        ProfileMembership.objects.create(profile=profile, user=actors["owner"], role="OWNER")
+        ProfileMembership.objects.create(profile=profile, user=actors["admin"], role="ADMIN")
+        ProfileMembership.objects.create(profile=profile, user=actors["member"], role="MEMBER")
+        ProfileMembership.objects.create(profile=foreign, user=actors["foreign"], role="OWNER")
+        ProfileMembership.objects.create(profile=foreign, user=actors["switcher"], role="MEMBER")
+        month = timezone.localdate(timezone.now(), timezone.get_default_timezone()).replace(day=1)
+        for label, period in (("current", month), ("previous", (month - timedelta(days=1)).replace(day=1))):
+            workspace = Workspace.objects.create(
+                id=fixture_id(run_id, f"invitation_v2_workspace_{label}"), profile=profile,
+                owner=actors["owner"], name=f"V2 Workspace {label}", period=period,
+            )
+            WorkspaceMember.objects.create(workspace=workspace, user=actors["member"], role="VIEWER")
+        for index in range(25):
+            User.objects.create_user(
+                id=fixture_id(run_id, f"invitation_v2_candidate_{index}"),
+                username=f"v2_candidate_{index:02d}", email=f"v2candidate{index}.{run_id}@example.test",
+                password=None, first_name="V2 Candidate", last_name=f"{index:02d}",
+            )
+        # This fixture represents an invitation already issued before cutover.
+        # The private legacy service remains test-only here; public email-create
+        # is explicitly denied by the V2 API and exercised by browser negatives.
+        legacy = User.objects.create_user(
+            id=fixture_id(run_id, "invitation_v2_legacy"), username="fixture_v2_legacy",
+            email=f"acceptance.{run_id}@example.test", password=password,
+            first_name="V2", last_name="Legacy recipient",
+        )
+        create_profile_invitation(
+            actor=actors["owner"], profile_id=profile.pk,
+            recipient_email=legacy.email, requested_role="MEMBER",
+        )
+
+
+def seed_legacy_inheritance_invitation(run_id):
+    """Pre-cutover invitation for the existing legacy-registration browser case."""
+    from django.contrib.auth import get_user_model
+    from apps.workspace.invitation_services import create_profile_invitation
+    owner = get_user_model().objects.get(username="fixture_inheritance_owner")
+    create_profile_invitation(
+        actor=owner, profile_id=fixture_id(run_id, "inheritance_profile"),
+        recipient_email=f"acceptance.{run_id}@example.test", requested_role="MEMBER",
+    )
+
+
+def seed_legacy_workspace_member_invitation(run_id):
+    """Issued pre-cutover token fixture; never recreate the removed invite UI.
+
+    This preserves the legacy consent/no-Workspace case while the browser tests
+    Workspace grants and later role mutations through the current React UI.
+    Only called after the owned disposable database and locmem gates below.
+    """
+    from django.contrib.auth import get_user_model
+    from apps.workspace.invitation_services import create_profile_invitation
+    create_profile_invitation(
+        actor=get_user_model().objects.get(username="fixture_owner"),
+        profile_id=fixture_id(run_id, "management_profile"),
+        recipient_email=f"acceptance.{run_id}@example.test", requested_role="MEMBER",
+    )
 
 
 class QuietRequestHandler(WSGIRequestHandler):
@@ -568,8 +754,77 @@ class ThreadedServer(ThreadingMixIn, WSGIServer):
     daemon_threads = True
 
 
+def seed_trash_fixtures(run_id):
+    """Synthetic Trash-only data, after fresh cluster/database ownership gates."""
+    from datetime import date, timedelta
+    from django.contrib.auth import get_user_model
+    from django.db import transaction
+    from django.utils import timezone
+    from apps.workspace.models import Profile, ProfileMembership, Workspace, WorkspaceMember
+    from apps.tasks.models import Task
+    from apps.reviews.models import Deliverable, Review
+
+    password = os.environ["HT_FRONTEND_TEST_PASSWORD"]
+    User = get_user_model()
+    now = timezone.now()
+    recent = now - timedelta(days=2)
+    expired = now - timedelta(days=31)
+    with transaction.atomic():
+        actors = {label: User.objects.create_user(
+            username=f"fixture_trash_{label}", email=f"trash_{label}.{run_id}@example.test",
+            password=password, first_name="Thùng rác", last_name=label,
+        ) for label in ("owner", "manager", "viewer", "foreign_owner", "solo_owner")}
+        owner = actors["owner"]
+
+        def profile(label, title, *, deleted=None, actor=owner):
+            item = Profile.objects.create(id=fixture_id(run_id,label), name=title)
+            ProfileMembership.objects.create(profile=item, user=actor, role="OWNER")
+            if deleted is not None:
+                Profile.objects.filter(pk=item.pk).update(created_at=deleted-timedelta(days=1), deleted_at=deleted, deleted_by=actor, purge_after=deleted+timedelta(days=30))
+            return item
+
+        organization = profile("trash_profile", "Trash Organization Integration")
+        profile("trash_solo_profile", "Trash Solo Profile Integration", actor=actors["solo_owner"])
+        profile("trash_deleted_profile", "Trash Deleted Profile Integration", deleted=recent)
+        profile("trash_expired_profile", "Trash Expired Profile Integration", deleted=expired)
+        foreign = profile("trash_foreign_profile", "Trash Foreign Organization Integration", actor=actors["foreign_owner"])
+        for label, role in (("manager", "ADMIN"), ("viewer", "MEMBER")):
+            ProfileMembership.objects.create(profile=organization, user=actors[label], role=role)
+
+        def workspace(label, title, month, *, parent=organization, deleted=None, actor=owner):
+            item = Workspace.objects.create(id=fixture_id(run_id,label), profile=parent, owner=actor,
+                name=title, period=date(2025, month, 1))
+            if deleted is not None:
+                Workspace.objects.filter(pk=item.pk).update(created_at=deleted-timedelta(days=1), deleted_at=deleted, deleted_by=actor, purge_after=deleted+timedelta(days=30))
+            return item
+
+        child = workspace("trash_workspace", "Trash Workspace Integration", 1)
+        deleted_child = workspace("trash_deleted_workspace", "Trash Deleted Workspace Integration", 2, deleted=recent)
+        workspace("trash_expired_workspace", "Trash Expired Workspace Integration", 3, deleted=expired)
+        foreign_child = workspace("trash_foreign_workspace", "Trash Foreign Workspace Integration", 1, parent=foreign, actor=actors["foreign_owner"])
+        WorkspaceMember.objects.create(workspace=child,user=actors["viewer"],role="VIEWER")
+
+        def task(label, title, *, parent=child, deleted=None, status="PENDING", actor=owner):
+            item = Task.objects.create(id=fixture_id(run_id,label), workspace=parent, created_by=actor, title=title,status=status)
+            if deleted is not None:
+                Task.objects.filter(pk=item.pk).update(created_at=deleted-timedelta(days=1),deleted_at=deleted,deleted_by=actor,purge_after=deleted+timedelta(days=30))
+            return item
+
+        task("trash_live_task", "Trash live task Integration")
+        task("trash_recent_task", "Trash recent task Integration", deleted=recent)
+        task("trash_expired_task", "Trash expired task Integration", deleted=expired)
+        history = task("trash_history_task", "Trash protected history Integration", deleted=expired, status="COMPLETED")
+        submitted = Deliverable.objects.create(task=history,uploaded_by=actors["manager"],file_url="https://example.test/trash-approved",revision=1,status="APPROVED")
+        Review.objects.create(deliverable=submitted,reviewer=owner,status="APPROVED",compensation_snapshot_recorded=True,compensation_snapshot_vnd=500000)
+        task("trash_inherited_task", "Trash inherited task Integration", parent=deleted_child)
+        task("trash_independent_task", "Trash independent task Integration", parent=deleted_child,deleted=recent)
+        task("trash_foreign_task", "Trash Foreign task Integration", parent=foreign_child,actor=actors["foreign_owner"])
+        for index in range(21):
+            task(f"trash_paged_{index:02}", f"Trash pagination task {index:02}", deleted=recent)
+
+
 def run(mode, arguments=()):
-    if mode not in ("serve", "serve-ai", "serve-invitation-delivery-failure", "expire-sessions", "consume-test-mail", "feedback-state"):
+    if mode not in ("serve", "serve-ai", "serve-invitation-delivery-failure", "serve-invitation-v2", "serve-invitation-regression", "serve-workspace-members", "serve-trash", "expire-sessions", "consume-test-mail", "feedback-state"):
         raise ValueError("Unknown integration operation.")
     if mode != "consume-test-mail" and arguments:
         raise ValueError("Unexpected integration arguments.")
@@ -641,8 +896,25 @@ def run(mode, arguments=()):
                 sql.Identifier(config["name"]), sql.Literal(config["marker"]),
             ))
         select_owned_database(config, maintenance)
-        call_command("migrate", interactive=False, verbosity=0)
-        call_command("migrate", check=True, interactive=False)
+        if mode in ("serve-invitation-v2", "serve-invitation-regression", "serve-workspace-members", "serve-trash"):
+            # Only full backend regression needs AI governance. This scoped
+            # browser suite applies every other leaf while retaining ai.0001,
+            # keeping the AI0002 exception confined to its approved full suite.
+            from django.db.migrations.executor import MigrationExecutor
+            executor = MigrationExecutor(connections["default"])
+            targets = [target if target[0] != "ai" else ("ai", "0001_initial") for target in executor.loader.graph.leaf_nodes()]
+            for app, name in targets:
+                plan = MigrationExecutor(connections["default"]).migration_plan([(app, name)])
+                if any(item.app_label == "ai" and item.name == "0002_dispatch_governance" for item, _ in plan):
+                    raise RuntimeError("AI governance is outside this browser suite.")
+                call_command("migrate", app, name, interactive=False, verbosity=0)
+            executor = MigrationExecutor(connections["default"])
+            if ("ai", "0002_dispatch_governance") in executor.loader.applied_migrations or executor.migration_plan(targets):
+                raise RuntimeError("Scoped invitation browser migration history mismatch.")
+            print("INVITATION_V2_SCOPED_MIGRATIONS_READY; AI0002_UNAPPLIED", flush=True)
+        else:
+            call_command("migrate", interactive=False, verbosity=0)
+            call_command("migrate", check=True, interactive=False)
         if mode == "serve-ai":
             # Only after exact isolated cluster/database ownership checks.
             # config.test_settings ignores deployment env; no persistent flag.
@@ -654,7 +926,20 @@ def run(mode, arguments=()):
         mailbox_cleanup = install_test_mailbox(
             os.environ["HT_TEST_RUN_ID"],
             fail_first_invitation=mode == "serve-invitation-delivery-failure",
+            invitation_v2=mode == "serve-invitation-v2",
         )
+        if mode == "serve-invitation-v2":
+            seed_invitation_v2_fixtures(os.environ["HT_TEST_RUN_ID"])
+        elif mode == "serve-invitation-regression":
+            seed_legacy_inheritance_invitation(os.environ["HT_TEST_RUN_ID"])
+        elif mode == "serve-workspace-members":
+            seed_legacy_workspace_member_invitation(os.environ["HT_TEST_RUN_ID"])
+        elif mode == "serve-trash":
+            from django.conf import settings
+            if settings.SETTINGS_MODULE != "config.test_settings":
+                raise RuntimeError("Trash fixtures require owned test settings.")
+            settings.TRASH_PURGE_ENABLED = True
+            seed_trash_fixtures(os.environ["HT_TEST_RUN_ID"])
         connections.close_all()
         from django.core.wsgi import get_wsgi_application
 

@@ -118,7 +118,8 @@ async function updateRole(page: Page, membershipId: string, role: 'MEMBER' | 'VI
 test.describe('Workspace access and members — real isolated Django/PostgreSQL', () => {
   test.describe.configure({ mode: 'serial' })
   // Three UI logins across this serial journey stay below the existing shared
-  // login throttle. Only the launcher seeds baseline synthetic actors/Workspaces.
+  // login throttle. The launcher seeds synthetic actors/Workspaces and the
+  // already-issued pre-cutover invitation used for registration/acceptance.
   const contexts: BrowserContext[] = []
   const failures: string[] = []
   let owner: Page
@@ -143,19 +144,12 @@ test.describe('Workspace access and members — real isolated Django/PostgreSQL'
   test.afterEach(() => { expect(failures).toEqual([]) })
   test.afterAll(async () => { for (const context of contexts) await context.close() })
 
-  test('Profile invitation acceptance grants no Workspace; Owner then grants Editor access and assigns a Task through React', async () => {
+  test('seeded pre-cutover recipient registers/accepts through React; Owner grants future Workspace access and assigns a Task', async () => {
     test.setTimeout(90_000)
     await login(owner, 'owner')
-    await owner.goto(`/profiles/${profileId}`)
-    await owner.getByRole('link', { name: 'Thành viên tổ chức', exact: true }).click()
-    await owner.getByRole('button', { name: 'Mời thành viên', exact: true }).click()
-    let dialog = owner.getByRole('dialog', { name: 'Mời thành viên', exact: true })
-    await dialog.getByLabel('Email người nhận', { exact: true }).fill(recipientEmail)
-    await dialog.getByLabel('Vai trò tổ chức', { exact: true }).selectOption('MEMBER')
-    const invited = owner.waitForResponse((result) => new URL(result.url()).pathname === `${apiProfile}invitations/` && result.request().method() === 'POST')
-    await dialog.getByRole('button', { name: 'Gửi lời mời', exact: true }).click()
-    expect((await invited).status()).toBe(201)
-    await expect(dialog).not.toBeVisible()
+    // Test-only setup represents an invitation issued before V2 cutover.
+    // Public email-only creation is intentionally unavailable; its current
+    // account-picker UI is verified by the dedicated Invitation V2 suite.
     const secret = consumeInvitation()
 
     // This recipient has no seeded account or membership: registration and
@@ -190,7 +184,7 @@ test.describe('Workspace access and members — real isolated Django/PostgreSQL'
 
     await openWorkspace(owner)
     await owner.getByRole('button', { name: 'Thêm thành viên', exact: true }).click()
-    dialog = owner.getByRole('dialog', { name: 'Thêm thành viên Workspace', exact: true })
+    let dialog = owner.getByRole('dialog', { name: 'Thêm thành viên Workspace', exact: true })
     await expect(dialog.getByLabel('Chọn thành viên tổ chức', { exact: true }).getByRole('option', { name: new RegExp(recipientName) })).toHaveCount(1)
     await dialog.getByLabel('Chọn thành viên tổ chức', { exact: true }).selectOption(recipientMembershipId)
     await dialog.getByLabel('Vai trò trong Workspace', { exact: true }).selectOption('MEMBER')
@@ -220,7 +214,7 @@ test.describe('Workspace access and members — real isolated Django/PostgreSQL'
     expect(createdResponse.status()).toBe(201)
     taskId = (await createdResponse.json() as TaskSnapshot).id
     await owner.goto(`${taskList}/${taskId}`)
-    await owner.getByRole('button', { name: 'Phân công', exact: true }).click()
+    await owner.getByRole('button', { name: 'Phân công nhân viên', exact: true }).click()
     dialog = owner.getByRole('dialog', { name: 'Phân công công việc', exact: true })
     await expect(dialog.getByLabel('Thành viên', { exact: true }).getByRole('option', { name: new RegExp(recipientName) })).toHaveCount(1)
     await dialog.getByLabel('Thành viên', { exact: true }).selectOption(recipientMembershipId)

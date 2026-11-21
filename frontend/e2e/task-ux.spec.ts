@@ -236,11 +236,13 @@ test.describe('Task UX refinement — real React mutations and isolated PostgreS
       { id: 'editor_profile_membership', name: 'Nhân viên Kiểm thử' },
     ]) {
       await manager.goto(`${taskPath}/${taskId}`)
-      await manager.getByRole('button', { name: 'Phân công', exact: true }).click()
-      const dialog = manager.getByRole('dialog', { name: 'Phân công công việc', exact: true })
+      const alreadyAssigned = (await readTask(manager, taskId)).active_assignment !== null
+      await manager.getByRole('button', { name: alreadyAssigned ? 'Thay đổi phân công' : 'Phân công nhân viên', exact: true }).click()
+      const dialog = manager.getByRole('dialog', { name: alreadyAssigned ? 'Thay đổi phân công' : 'Phân công công việc', exact: true })
       await dialog.getByLabel('Thành viên', { exact: true }).selectOption(fixtureId(actor.id))
       const assigned = manager.waitForResponse((response) => new URL(response.url()).pathname === `${apiTasks}${taskId}/assign/` && response.request().method() === 'POST')
-      await dialog.getByRole('button', { name: 'Xác nhận phân công', exact: true }).click()
+      if (alreadyAssigned) await dialog.getByRole('button', { name: 'Kiểm tra thay đổi', exact: true }).click()
+      await dialog.getByRole('button', { name: alreadyAssigned ? 'Xác nhận chuyển giao' : 'Xác nhận phân công', exact: true }).click()
       const response = await assigned
       expect(response.status()).toBe(200)
       expect((await response.json() as Task).active_assignment?.display_name).toBe(actor.name)

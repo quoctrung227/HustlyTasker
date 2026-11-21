@@ -1,5 +1,394 @@
 # HustlyTasker frontend guide
 
+## Trash V1 development rollout — Owner manual acceptance pending
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+The approved workspace0006/tasks0006 migrations are now APPLIED on development;
+all original data is preserved. The official backend and Vite were started on
+loopback 8000/5173 after the post-migration gate. Open
+`http://127.0.0.1:5173`, refresh and reuse those servers at this checkpoint.
+The expected generic warning about pending AI0002 is not permission to run
+`migrate`; AI0002 remains forbidden on development.
+
+If the recorded servers have since stopped, use two terminals from the repository
+without creating a new environment or running migrations:
+
+```powershell
+# Terminal 1: D:\da\HustlyTasker
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-backend-dev.ps1
+```
+
+```powershell
+# Terminal 2: D:\da\HustlyTasker\frontend
+npm.cmd run dev -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+Do not start duplicates on occupied ports. The existing backend launcher safely
+loads the local configuration; no secret values or manual repeated environment
+entry are needed. This rollout did not edit `.env` or change credentials.
+
+For manual acceptance, log in with current legitimate management authority,
+soft-delete a non-critical Task through **Xóa**, inspect **Thùng rác**, then restore
+within 30 days and verify state/history/access. Optionally repeat on a Workspace
+or Profile while checking descendants and independently deleted children. These
+are real development mutations made deliberately by the Owner. Use the full
+[acceptance checklist](TRASH_V1_ROLLOUT.md#owner-manual-acceptance-and-next-gate).
+Do not test permanent deletion first: actual purge flag is false, no scheduler
+is registered/enabled, and permanent purge requires separate approval.
+
+Fresh rollout verification: isolated 59/59 (11.389 seconds), 46 existing-identity
+READ ONLY handler GETs and 27 real HTTP GET direct/proxy checks passed, exits 0.
+No authenticated development browser login/session or UI mutation was automated.
+Earlier full frontend/backend/browser results below are implementation evidence,
+not fresh rollout runs. Schema/data/backup details: [TRASH_V1_ROLLOUT](TRASH_V1_ROLLOUT.md).
+
+## Historical Trash V1 isolated UI verification before development rollout
+
+The following implementation-only boundary and startup warning describe the
+earlier checkpoint. The current development activation and startup guidance are
+above; purge/scheduler approval remains outstanding.
+
+**HT-TRASH-V1 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION AND PURGE APPROVAL.**
+
+The source has a protected global `/trash` page and **Thùng rác** navigation near
+the sidebar end. It does not require a currently selectable Profile, so deleting
+the last organization does not remove the recovery destination. Existing teal/
+neutral tokens, typography and native dialog primitives remain; no new framework
+or UI dependency is introduced. Trash is not yet rolled out on development.
+
+Task detail, Workspace controls and Profile detail use the server's `can_delete`
+hint; the API revalidates the actual action. Ordinary delete opens a confirmation
+and sends an authenticated/CSRF-protected soft-delete request. After confirmed
+mutation, private query data is reset and the user returns to the global Trash
+flow. No status change, automatic assignment or permission grant is simulated.
+
+Trash provides All/Task/Workspace/Organization filters, server search, pagination,
+safe deleter label, deletion/deadline/countdown and child-impact counts. Restore
+requires the server capability and an available parent within30days. Independent
+child deletion and revoked access stay unchanged. Permanent deletion requires
+Profile Owner, elapsed30days, enabled purge and no blocker; Workspace/Profile
+also require typing the exact name. Blocked Review/financial/Invitation/FK data
+remains retained with a reason. Never present the deadline as unconditional purge.
+
+Source reuses pending/error/confirmation/focus patterns and clears stale private
+data after mutation. Current full frontend1295/1295, focusedTrash59/59 and
+typecheck/lint/build pass. Real isolated Trash browser7/7 PASS55.9s, with actual
+UI delete/restore/purge, role/CSRF boundaries, keyboard/focus and four sizes:
+375×812,768×1024,1440×900,812×375. No overflow and axe0 were verified, with
+Git-ignored screenshots. Current work/collaboration browser regressions pass 7/7
+each, Members/Stability 4/4 each and Invitation V2 7/7, all exit 0 with cleanup.
+Reassignment passes 4/4 in 51 seconds and corrected Workspace-members passes 4/4
+in 44.5 seconds, with Playwright/launcher/backend 0 and owned cleanup. The eight
+browser suites contain 44 unique passing tests. Final post-spec typecheck/lint
+and direct build pass (build 11.75 seconds, exit 0). Final Trash rerun 7/7 passes
+in 51.1 seconds with Playwright/launcher/backend 0 and owned cleanup; it is not
+double-counted in the 44 unique browser tests. Final source audit retains all
+834 baseline files and all 33 prior migration hashes.
+The initial Workspace fixture expected an obsolete pre-V2 email-create control;
+its isolated fixture/spec adaptation preserves actual UI acceptance and access
+management rather than changing the Invitation V2 business contract.
+These are automated isolated browser results, not manual development acceptance.
+Prior Invitation browser counts are historical, not reused as Trash evidence.
+
+Future operations, **only after separate Owner migration/purge approval**:
+`scripts/purge-trash.ps1` previews due entries, `-Execute` requests enabled purge;
+`scripts/export-trash-purge-schedule.ps1` exports disabled XML only. No job is
+registered or enabled by export. A powered-off/logged-out development workstation
+cannot promise continuous scheduling; later approved operations must account for
+missed runs and inspect command results. Do not run purge against development
+during this implementation task, including using current real records as fixtures.
+
+The Python setting is `TRASH_PURGE_ENABLED`; the local environment name is
+`DJANGO_TRASH_PURGE_ENABLED`, defaultfalse. The existing loader accepts the explicit
+flag and clears inherited values; this task does not edit the local file or
+enable it. Export defaults to Git-ignored disabled Task Scheduler XML: daily03:00
+machine-local time, StartWhenAvailable and IgnoreNew overlap policy. Export is
+not registration; the management command is not a durable scheduler.
+Inspect its sanitized JSON summary and blocker_counts; a blocked item is retained,
+an already-gone concurrent target is a no-op, and an unexpected error exits nonzero
+without reporting the failed item as purged. Do not treat a due date or a dry-run
+eligible count as proof that deletion committed.
+
+See [design/FK retention](TRASH_V1_DESIGN.md) and [HANDOVER](HANDOVER.md). Do not
+restart the persistent backend against unapplied Trash columns. Existing `.env`
+and backups remain untouched; use isolated tests for mutation verification.
+
+## Historical Invitation V2 rollout — Owner manual acceptance checkpoint
+
+Owner separately approved the controlled workspace0005/notifications0004 rollout,
+which remains applied on development. At that rollout checkpoint, the official
+backend and Vite were running on loopback 8000/5173; the recorded acceptance URL
+was `http://127.0.0.1:5173`. History 41/table 31 and original business fingerprints
+were verified, ai.0002 remained UNAPPLIED, and no real email was sent. This does
+not authorize starting current Trash-aware code before its pending migrations. See
+[rollout record](ORG_INVITATION_V2_ROLLOUT.md) for backup, startup commands and
+Owner acceptance checklist. Do not start duplicate servers or follow Django's
+generic migrate suggestion for the deliberately pending AI target.
+
+Current rollout verification is19isolated synthetic API/service checks with
+locmem,5read-only existing-Owner handler projections and25HTTP GET direct/proxy
+checks, exits0 and final preservation0. Positive directory GET was isolated
+because it records a quota event. No authenticated development browser login or
+business mutation was automated. Genuine email and Owner UI acceptance remain
+unverified; the manual create/decision journey below creates real development
+records and may invoke configured mail only when Owner chooses to perform it.
+
+Owner's manual Web acceptance journey is:
+
+1. Owner/Admin opens **Tổ chức → Thành viên tổ chức → Thêm thành viên**.
+2. In **Mời thành viên**, use **Tìm tài khoản**. Search runs on the server with
+   approximately300ms debounce and20accounts/page, not a full directory download.
+   Rows show safe name/username or necessary masked email and current-organization
+   availability. Ambiguous/ineligible accounts cannot be selected.
+3. Select an account and a role offered by the server; Owner can grant ADMIN or
+   MEMBER,Admin only MEMBER. **Gửi lời mời** remains pending until the server
+   responds. Email failure can still mean Web invitation creation succeeded;
+   inspect the separate delivery state rather than repeatedly creating one.
+4. The invited account signs in and opens **Thông báo** or **Lời mời tổ chức**.
+   This works before it belongs to any Profile. Accept/decline act on its exact
+   Invitation ID; reading/marking notification read is not a decision.
+5. Accept grants the approved Profile role and eligible current-month MEMBER
+   Workspace access, preserving inherited ADMIN and safe rejoin cleanup. It never
+   assigns Tasks or restores revoked Workspace rows. The UI waits for backend
+   confirmation and offers **Đến tổ chức** instead of silently switching tenant.
+6. **Thử gửi lại email** is for a pending ACCOUNT invitation only; it retains ID,
+   role,expiry and notification read state, with3attempts/24h including initial.
+   A terminal/legacy row does not offer new-token resend. Legacy accept/decline
+   remains available by direct `/invitations/respond` only for users already
+   holding a valid pre-cutover token; new V2 UI does not advertise code entry.
+
+SessionAuthentication/browser cookies/CSRF and backend role/tenant validation
+remain. Logout/session expiry clear private cache; User/Profile/search/page keys
+and abort guards prevent stale search/recipient data crossing identities. An
+uncertain POST result requires refreshing real server state, not auto-replay.
+Directory full email, phone,staff flags and unrelated-tenant membership data are
+not exposed. New ACCOUNT manager metadata redacts recipient_email to null.
+
+Historical implementation verification on isolated fixtures: corrected focused backend
+62/62 and full 1108/1108 PASS, 0 failures/errors/skips; final frontend 1236 tests /
+36 files in 39.54s / npm exit 0, TypeScript/build exit 0 and Biome 119 files / exit 0.
+Corrected real V2 browser 7/7 PASS in 52.8s / launcher+Playwright exit 0 covers React
+actions, four viewport sizes, keyboard and axe with owned cleanup. Final Members
+4/4, Delivery 2/2, Inheritance 4/4, Reassign 4/4 and Stability 4/4 bring the six
+final suites to 25/25 PASS with actual process exits 0 / owned cleanup.
+Exact outcomes are owned by [PROGRESS](PROGRESS.md)/[HANDOVER](HANDOVER.md).
+Do not claim real SMTP delivery, manual Owner acceptance or public readiness.
+No `.env`/SMTP provider change or genuine send was performed. Startup reused the
+existing local loader with values hidden; no credential is needed in chat.
+
+The shared isolated runner supports `-Suite invitation-v2`, plus updated members
+and invitation-delivery-failure suites; synthetic actors/API-driven setup are
+separate from the business actions performed through React. Screenshot evidence
+is Git-ignored under the current task's run-specific screenshot directories.
+Keyboard/focus/reflow/axe evidence is from the real isolated browser, not mocks.
+
+## Historical verified local startup — before Invitation V2 schema changes
+
+## Historical HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01 — Owner manual acceptance
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+Development now has39migration records: the exact Review/Notification0003
+targets APPLIED, tasks.0005 APPLIED and ai.0002 UNAPPLIED. Official Django6.1.2
+launcher (--noreload) and Vite6.4.5 run on loopback8000/5173;19HTTP GET checks
+(direct/proxy health/CSRF, auth boundaries and HTML) and native read-only Owner
+API smoke PASS0. This is automated connectivity/API verification, not manual
+Owner login or business UI acceptance. The expected pending-ai.0002 startup
+warning must not be followed with general migrate.
+
+Open http://127.0.0.1:5173 and Ctrl+F5; reuse the existing servers. If stopped,
+run two PowerShell terminals only after verifying those ports are free:
+
+```powershell
+Set-Location D:\da\HustlyTasker
+.\scripts\start-backend-dev.ps1
+```
+
+```powershell
+Set-Location D:\da\HustlyTasker\frontend
+npm run dev
+```
+
+The existing local loader supplies stable private configuration; do not print
+.env, install dependencies again, run migrations/fixtures or start duplicates.
+
+Owner manual acceptance, using legitimate existing accounts and chosen records:
+
+1. Login through React as an eligible manager, open an existing ASSIGNED Task,
+   remove its assignee and confirm PENDING with history retained.
+2. For a WORKING Task, remove→PENDING; separately transfer to another eligible
+   member→ASSIGNED. Check immediate/reloaded Task Detail, list and assignee name.
+3. Confirm ordinary REVIEW/COMPLETED transfer/removal is unavailable/rejected;
+   keep existing Deliverable/Review/assignment history intact.
+4. Open Thống kê for the chosen Profile/Workspace/date range; verify no duplicate
+   counts or compensation, preserved unknown legacy amounts and completed-work
+   uploader attribution/snapshots.
+5. Check old/new Notifications and manager/MEMBER/VIEWER money/access boundaries,
+   then logout/login another account and confirm no stale private content.
+
+These manual mutations are real development data selected by the Owner; the
+rollout inserted none. Fresh backend1056/frontend1182/quality and restored-archive
+rehearsal PASS; no browser suite was rerun during rollout. Backup retained;
+[PROGRESS](PROGRESS.md) and [HANDOVER](HANDOVER.md) own detailed receipts.
+Stop at Owner manual acceptance; no deployment, AI migration or next task.
+
+
+## Historical local-activation stop before test-isolation approval
+
+2026-11-13. Owner conditionally authorizes the exact Review/Notification0003
+development rollout after fresh regression, new real backup/isolated restore,
+exact plans and old-writer shutdown. **WAITING OWNER CLARIFICATION ON ISOLATED
+FULL-TEST SCOPE; startup, development availability and manual UI acceptance are
+not verified.** Fresh frontend1182/1182 PASS46.46s/npm0, typecheck/build0
+(Vite15.99s, chunk639.43kB advisory) and Biome112files0. Full backend has not run
+because AI governance tests need ai.0002 on disposable test PostgreSQL and the
+AI-migration ban needs that narrow scope clarification. No backup/restore or
+development migration has executed. Read-only06:03:20Z observed no server on
+8000/5173 and0app connections; do not infer a started website from the previous
+task's history. Current source already contains
+the corrected ASSIGNED/WORKING→PENDING removal and WORKING→ASSIGNED transfer.
+No UI/business redesign is part of this database task.
+
+The rollout operator must use `.\scripts\start-backend-dev.ps1` only after both
+authorized migrations and preservation checks pass, with no old writer left.
+Do not start a second Vite/backend, run npm ci for ordinary startup or keep old
+Review code on the new schema. Reuse the existing Vite if present and refresh the
+browser; any new startup must first verify the corresponding port is free.
+No automatic fixtures, real emails or AI calls are part of smoke verification.
+
+After successful rollout the Owner checks: ASSIGNED removal→PENDING, WORKING
+removal→PENDING, transfer A→B→ASSIGNED, immediate/reloaded assignee and Task list,
+analytics without duplicated counts/value, old/new notifications, MEMBER/VIEWER/
+manager boundaries and completed-work history/snapshots. Manual changes are real
+development data chosen by the Owner; automated tests use isolated PostgreSQL.
+Until actual results are recorded in [HANDOVER](HANDOVER.md), no success is
+claimed. Final successful status remains PENDING OWNER MANUAL ACCEPTANCE;
+failure stops with preserved state and no automatic rollback/restore.
+Current task is stopped before full backend regression pending that test-scope
+answer. Read-only06:05:25Z verifies unchanged29-table/37migration development
+state; candidates/ai.0002 remain UNAPPLIED. No process was stopped or backend
+started, no backup/restored rehearsal/apply occurred, and no new browser/manual
+development acceptance is claimed. Do not start schema-dependent code just to
+work around this blocked rollout; preserve the current database.
+
+## Historical Owner preflight — SRS unassign correction
+
+2026-11-13. HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT corrects the prior
+implementation to the Owner-supplied SRS V3 section4.2.1. Removal confirmation
+must explain ASSIGNED/WORKING→PENDING while history remains intact; transfer from
+WORKING remains ASSIGNED. Fresh full frontend1182/1182 PASS46.81s/npm0 and
+guarded backend/migration158/158 PASS60.885s, actual launcher/Python0; lint112files0.
+Guarded real browser4/4 PASS47.7s with actual UI removal asserting PENDING;
+launcher/Playwright/backend0 and owned cleanup. Typecheck/build0, Vite10.33s,
+chunk639.43kB advisory. Final read-only preservation05:43:43Z PASS: exact29-table
+fingerprint/37migrations retained, both candidates and ai.0002 UNAPPLIED,
+tasks.0005 APPLIED,0owned resources; receipts are in [HANDOVER](HANDOVER.md),
+and the earlier1051/1181/41 results below describe the prior version. Do not
+apply either candidate migration to development or restart schema-dependent code
+before the separately approved rollout. Old Review writers and old Notification
+clients are not compatible with newly activated writes/events; coordinated
+schema/backend/frontend activation and refresh are required. This preflight ends
+at OWNER APPROVAL GATE.
+
+## Historical implementation checkpoint — HT-TASK-REASSIGN-ANALYTICS-V1
+
+2026-11-13. Current source adds confirmed Task assignment transfer/removal and
+the real **Thống kê** page. **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT
+MIGRATION APPROVAL — OWNER REVIEW GATE**. Isolated automated verification passes;
+this is not completed manual development website testing or schema rollout.
+Two backend migration candidates are **not applied development**: Review approval
+compensation snapshot and Notification TASK_UNASSIGNED event CHECK. Do not restart
+the persistent backend onto the new Review model before a separately approved
+backup/isolated restore/rehearsal and targeted rollout. tasks.0005 stays APPLIED;
+ai.0002 stays UNAPPLIED. Do not run general migrate, startup fixtures or demo writes.
+
+### Task controls
+
+An eligible manager sees **Phân công nhân viên** when unassigned, otherwise
+**Thay đổi phân công** in Task Detail. Use the existing native dialog and
+same-Workspace current eligible paginated roster. Choose **Chuyển người phụ
+trách** or **Gỡ phân công**, optionally add a reason, then **Kiểm tra thay đổi**
+and the explicit confirmation. The shown current/new names and consequences
+remain visible before submission. Roster search is explicitly limited to the
+current page and actual display label; it is not a new username/email directory.
+
+The form retains the displayed assignment ID/timestamp and prevents double
+submission. Stale assignment or changed rights blocks replay and asks for a
+refresh; an unknown network outcome is never treated as success or automatically
+resent. Only a confirmed server DTO updates current name/state, followed by
+Task, analytics and related Notification invalidation. There is no optimistic
+transfer or client-side completion. Removal resets ASSIGNED/WORKING to PENDING
+while retaining all history; transfer keeps the existing ASSIGNED transition. Pending-review/completed/cancelled Tasks do
+not offer these mutations. Old submissions/reviews/comments remain intact.
+
+### Analytics route and semantics
+
+Sidebar order is Tổ chức → **Thống kê** → Thông báo. Protected route `/analytics`
+uses existing Profile selection and query parameters profile_id, optional
+workspace_id and inclusive HCM calendar dates from/to. Pick **Theo tháng** or
+**Khoảng ngày**, then **Áp dụng thời gian**. Invalid/inverted/>366-inclusive-day
+ranges show validation without issuing a request. This is separate from the
+existing Task list's UTC deadline filters; analytics labels Asia/Ho_Chi_Minh.
+
+Layout retains the existing teal/neutral tokens: filters, six KPI, financial
+surface, status donut/monthly approval line and searchable/sortable paginated
+employee table/detail. Stored subtasks are included in backend counts even though
+ordinary Task UI hides them. KPI/status distribution use Tasks created in the
+period; approval trend/value use approvals occurring in the period, including
+older Tasks. Overdue and unassigned are overlapping indicators, not donut slices.
+Empty/future periods show real zero counts rather than sample data.
+
+All VND values are exact backend integer strings, including totals larger than
+one Task's18-digit value. Unknown and unpriced coverage is shown separately;
+null does not become zero. Amounts are estimates/snapshots, never paid wages,
+money received, revenue or profit. Current employee responsibility changes after
+transfer, but accepted credit/value stays with the approved uploader. Concurrent
+writes can briefly differ between independently queried widgets; refresh to
+revalidate, without a financial-ledger consistency claim.
+
+Profile managers see management scope; an ordinary member must select the
+Workspace they manage for its breakdown. All-Workspace defaults to **Thống kê
+của tôi** for ordinary members. Viewer gets no finance or coworkers' private
+payload. Employee/detail cache authority keys and denial cleanup prevent reuse
+of the earlier manager view after current role/scope revalidation. No realtime
+permission push or blanket historical-pay entitlement is introduced.
+
+### Isolated verification and later Owner acceptance
+
+The existing runner now supports:
+
+```powershell
+.\scripts\test-frontend-integration.ps1 -Suite reassign-analytics
+```
+
+This suite uses owned isolated PostgreSQL fixtures and real React actions, not
+the persistent development database. Fresh suite4/4 plus8affected browser
+regressions37/37 yield41/41 across9passing suites,0failed/0skipped, actual
+launcher/Playwright/backend exits0. Full frontend1181/1181, focused279/279,
+typecheck/Biome112/build PASS/exit0; full isolated backend1051/1051 PASS.
+Four widths375/768/1440/812×375, keyboard/focus/axe0 and dashboard/dialog PNG
+inspection verified. Build639.38kB chunk advisory remains. Exact run IDs, failed
+attempt history, cleanup and resume development preservation are in
+[HANDOVER](HANDOVER.md); these are executed tests, not a claim based on a listed command.
+Screenshots/logs remain in ignored local artifact directories. Existing UI UX
+Pro Max/master research is reused for chart alternatives, native confirmation,
+current permissions, async errors and React cleanup; no new dependency/theme.
+
+After separate candidate rollout approval and successful verification, Owner may
+manually log in as manager, open an existing eligible Task, transfer A→B with a
+reason, check immediate name/reload and current counts, remove B, then reassign.
+Check old/new users' Notifications, protected REVIEW/COMPLETED behavior and
+unchanged historical uploader credit. Open Thống kê, compare Workspace/month/
+custom periods and money coverage, search/sort an employee and open related Tasks.
+Finally log in as ordinary member/Viewer and confirm self-only/no-money Network
+payloads, profile switching and logout cache cleanup. Manual writes are real
+development data under Owner control; agents do not create those records here.
+
+Stop at **HT-TASK-REASSIGN-ANALYTICS-V1 — OWNER REVIEW GATE**. Existing local
+startup instructions below still apply after the schema gate; historical server
+availability statements are not proof a server is currently running. No automatic
+AI feature, Project, live email/provider or production rollout follows.
+
 ## HT-FE-TASK-ASSIGNEE-NAME-FIX-01 — Reload the current local backend
 
 2026-11-10. Exact legacy fallback **Thành viên được phân công** was traced to an

@@ -1,5 +1,157 @@
 # HustlyTasker Project Context
 
+## Trash V1 development context — 2026-11-20
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+The Owner separately authorized only workspace0006 then tasks0006 on existing
+development. Protected backup, actual isolated restore/rehearsal, exact-target
+gates and final preservation passed. Development now has 43 migration records,
+31 tables and unchanged original business data; the nine new Trash fields are
+NULL on legacy rows. AI0002 remains unapplied. The official backend/Vite are
+available on loopback; automated read-only smoke does not claim manual acceptance.
+
+This activates ordinary soft-delete/restore for Owner review. It does not approve
+permanent purge, scheduler registration/enablement, live AI/email or production.
+Purge is still false. Conditional retention, Review/history protection and current
+tenant/RBAC policies remain unchanged. [Rollout evidence](TRASH_V1_ROLLOUT.md)
+contains the backup, fresh 59-test verification and manual acceptance checklist.
+
+## Historical Trash V1 implementation context before development rollout
+
+The current scoped task adds separate soft-deletion metadata to existing
+Profile→Workspace→Task, a management Trash UI/API and conditional30-day purge.
+ARCHIVED is not DELETED and Task status is unchanged. Explicit parent deletion
+temporarily hides descendants; restoring a parent never clears a child's own
+deletion flag or reactivates revoked membership/assignment.
+
+Owner chose conservative retention with no financial ledger. Every Review,
+completed/financial history, terminal Invitation retention of at least12calendar
+months and unresolved FK/AI obligations block physical purge. AuditLogs and global
+Users remain. Operational analytics hide Trash; retained approval finance follows
+current tenant/money RBAC. The command re-evaluates blocked due entries on later
+runs; it does not promise all data disappears on day30.
+
+**HT-TRASH-V1 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION AND PURGE APPROVAL.**
+Migrations workspace0006/tasks0006 and runtime are verified on isolated PostgreSQL
+but not rolled out to development. Purge defaults disabled; no scheduler is
+enabled. The latest Owner permits AI0002 only in disposable regression if needed,
+never development. See [design](TRASH_V1_DESIGN.md)/[HANDOVER](HANDOVER.md).
+
+## Invitation V2 development context — 2026-11-13
+
+**HT-ORG-INVITATION-V2 — DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+Owner approved account-based organization invitations with authenticated Web
+decisions and notification-only email. Existing ProfileInvitation,Notification,
+membership/RBAC and mail services are extended, not replaced. New public issuance
+accepts an existing active account ID; legacy token records retain their actual
+expiry and compatibility decisions but cannot be resent into new token records.
+Directory disclosure is manager-only/minimal; exact recipient identity is never
+derived by React from a name,email or guessed ID.
+
+Web invitation/audit/recipient notification are atomic; email is independent,
+after commit and explicitly bounded. PostgreSQL quota records and consistent
+identity locks provide shared rolling limits without Redis. They are not a
+durable outbox or automatic retention system. Membership is granted only after
+accept, with existing current-month MEMBER Workspace grant, inherited ADMIN and
+rejoin cleanup; historical replay cannot restore revoked authority.
+
+The separately approved workspace0005/notifications0004 rollout is complete:
+development history39→41/tables29→31, protected backup/actual isolated restore,
+all original business row hashes preserved and only expected framework metadata
+added. Existing legacy2rows retain identity/expiry/status; there were0real PENDING
+rows, so pending-token behavior used a synthetic isolated fixture. AI2 remains
+UNAPPLIED/no governance tables. Official loopback backend/Vite startup,
+19isolated synthetic API/service checks,5read-only Owner-handler projections and
+25HTTP GET direct/proxy checks pass, exits0; no real authenticated development
+browser/manual acceptance is claimed. Startup reused the safe existing local
+environment loader without editing `.env` or exposing values. No genuine email,
+paid AI, commit/push or deploy. Prior implementation1108backend/1236frontend/
+25browser counts are historical, not rerun by this rollout. No Project,AI runtime,
+Task workflow or authentication architecture expansion is included. See
+[rollout evidence](ORG_INVITATION_V2_ROLLOUT.md).
+
+## Verified previous local schema activation — 2026-11-13
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+The existing local development database now has39migration records after only
+reviews.0003_review_compensation_snapshot and notifications.0003_task_unassigned
+applied on2026-11-13. tasks.0005 remains APPLIED; ai.0002 remains UNAPPLIED with
+no AI governance tables. Existing business data and architecture are preserved.
+
+A separate disposable full-regression database alone used the Owner-approved
+ai.0002 exception; neither development nor the actual-backup restored rehearsal
+was that test target. Fresh full backend1056/1056, frontend1182/1182/quality,
+real restored rehearsal, service smoke, official loopback startup/read-only API
+and final preservation checks PASS. The protected backup remains retained.
+No manual Owner UI acceptance or new browser run is claimed. Detailed receipts
+are in [PROGRESS](PROGRESS.md) and [HANDOVER](HANDOVER.md).
+
+SRS unassign ASSIGNED/WORKING→PENDING and transfer WORKING→ASSIGNED remain;
+normal protected-state mutations are denied. No runtime/migration/.env changes
+or new feature were introduced by rollout. Rollback/restore requires separate
+approval; do not follow the expected ai.0002 pending warning with general migrate.
+Owner must review React reassignment, analytics, notifications, RBAC and history
+before deciding any further task. No production/public deployment is authorized.
+
+
+## Historical local-activation stop before test-isolation approval — 2026-11-13
+
+HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01 authorizes exactly the Review snapshot
+and Notification TASK_UNASSIGNED0003 migrations on existing local development
+after all safety gates pass. The operation is blocked pending clarification of
+AI migration solely on disposable full-backend-test PostgreSQL; its governance
+tests need ai.0002 while the current prompt also prohibits AI migration. This
+does not reopen authorization for the two development candidates. No applied/startup
+claim replaces actual inventory and [HANDOVER](HANDOVER.md) evidence. Full
+isolated regression, a new real development backup restored into isolated
+PostgreSQL, exact plans and old-writer shutdown precede any persistent apply.
+Old Review writers cannot run on the new schema. Recovery is separately reviewed,
+never automatic rollback/restore. ai.0002 remains outside development/rehearsal
+scope. Production, public deployment and new functionality are not authorized;
+successful rollout still requires later Owner manual UI acceptance.
+Fresh frontend regression/quality and read-only scoped plans pass; full backend,
+new backup, actual restored rehearsal and persistent execution remain unperformed.
+No historical full-suite count is a substitute for the current required gate.
+Final read-only06:05:25Z preserves the fresh29-table/37migration development
+baseline with5Tasks/3Deliverables/0Reviews/9Notifications/42Audits; no process
+was stopped or backend started. The two candidate migrations and ai.0002 remain
+UNAPPLIED, and new backup/actual restored rehearsal/full backend/execution are
+NOT EXECUTED. Current outcome is ROLLOUT BLOCKED — DEVELOPMENT STATE PRESERVED.
+
+## Historical implementation checkpoint — responsibility and approval analytics — 2026-11-13
+
+HT-TASK-REASSIGN-ANALYTICS-V1 preserves Profile→Workspace→Task, Session/CSRF and
+existing Task/Review services. Managers can confirm transfer or removal against
+the assignment ID and assigned_at snapshot; current authorization is rechecked
+under locks. The Owner preflight clarified SRS V3 section4.2.1: removal resets
+ASSIGNED/WORKING to PENDING; reassignment retains ASSIGNED. This supersedes the
+earlier preserve-status interpretation, without rewriting that decision's history.
+REVIEW/COMPLETED/CANCELLED are protected, and old submissions, authors,
+review decisions, comments and audit history are not transferred or deleted.
+Old/new worker notifications participate in the same database transaction.
+
+Analytics explicitly separates Tasks created in a selected HCM date cohort from
+approval events in that period. Current responsibility belongs to the active
+assignment; completed-work credit belongs to the canonical approved Deliverable's
+uploader at Review.created_at. Whole-Task compensation is an estimate, not an
+actual payment. Future approvals snapshot it; legacy historical amounts remain
+unknown because the current Task price is editable. Decimal aggregates travel
+as exact integer strings. No guessed history, double counting, payroll or finance
+module is introduced.
+
+Read-only analytics remains tenant/current-role scoped. Profile managers receive
+management scope; an ordinary member must select a Workspace they currently
+manage for that scope. Other views are SELF and money still requires the existing
+Task-level eligibility. Revoked identities are not a name directory, and a
+Notification is never access authority. Implementation/tests and development
+preservation evidence are in [HANDOVER](HANDOVER.md). The two candidate migrations
+require separate Owner-approved development rollout; ai.0002 remains unrelated
+and unapplied. Current status is **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT
+MIGRATION APPROVAL — OWNER REVIEW GATE**, with isolated automated verification
+complete; no public rollout, manual Owner acceptance or next AI task is implied.
+
 ## Task description and linked product review — 2026-11-10
 
 HT-FE-TASK-UX-REFINEMENT-01 retains the existing Task/Deliverable/internal Review

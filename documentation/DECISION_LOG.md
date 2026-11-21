@@ -1,5 +1,274 @@
 ---
 
+# HT-TRASH-V1 — conditional purge Owner decision and resume boundary
+
+## Subsequent Owner authorization — controlled development schema only
+
+Date: 2026-11-20.
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+Owner separately authorized only workspace.0006_soft_delete then
+tasks.0006_soft_delete after fresh protected backup, actual restore/rehearsal,
+exact-target checks and preservation gates. Both are now APPLIED development;
+history is 43, AI0002 remains UNAPPLIED and original data is preserved. This
+supersedes only the earlier development-migration pending label. No permission,
+retention or workflow policy changes; purge/scheduler enablement, live AI/email
+and deployment are not approved. See [rollout evidence](TRASH_V1_ROLLOUT.md).
+
+## Historical implementation authorization and retention decision
+
+Date:2026-11-20. **OWNER APPROVED — scoped implementation; isolated verification complete.**
+
+**HT-TRASH-V1 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION AND PURGE APPROVAL.**
+The Owner selected conditional V1 purge and explicitly rejected adding a financial
+ledger in this task. The resume attachment `7a79508c-1f5c-4201-8dfa-4d67d967a85b`
+confirms that30days is evaluation eligibility, not unconditional physical deletion.
+Restore is within30days with current authority and an available parent. Separate
+child deletion and revoked membership/assignment are not revived.
+
+Any remaining Review, completed/financial history, Invitation within existing
+12-calendar-month terminal retention and unresolved references must block purge.
+Do not remove important history to satisfy FK constraints. Existing AuditLogs can
+survive because their resource IDs are scalar; keep them and append metadata-only
+purge proof. Audit/FK links that cannot be handled safely remain blockers. Global
+User/accounts, other tenants and unscoped Client/Finance data are not purge targets.
+
+Implementation decisions: separate deleted_at/deleted_by/purge_after metadata;
+exact720-hour deadline; no default-manager filtering; explicit effective-deletion
+access checks; Owner-only manual purge; default-false purge flag; conditional
+command and disabled scheduler export. These do not grant migration, real-data
+purge, schedule enable, `.env`/backup changes or deployment.
+
+The latest resume additionally permits AI0002 only in disposable PostgreSQL
+regression if needed. This replaces the earlier test-only prohibition while
+keeping development AI migration forbidden. No live AI provider is authorized.
+See [design and full model-impact matrix](TRASH_V1_DESIGN.md) and
+[HANDOVER](HANDOVER.md). Tests verify the scoped implementation; development
+migration, real-data purge and scheduler enablement still require separate Owner
+approval. No SRS/HLD Word document is silently changed.
+
+# HT-ORG-INVITATION-V2 — D01–D07 OWNER APPROVED — implementation authorized
+
+Date:2026-11-13. The Owner explicitly approved the seven decisions in
+[ORG_INVITATION_V2.md](ORG_INVITATION_V2.md), including current-month MEMBER
+Workspace grant after acceptance (not the prior no-grant proposal), existing
+ADMIN inheritance/rejoin cleanup, account-only new invitations, legacy handling
+until actual expiry, safe directory/masked email, replay without regrant, typed
+recipient notifications and Web success independent of SMTP. Approved numerical
+limits are TTL7days/page20/debounce~300ms,30invites/inviter/24h,5/recipient/24h,
+3mail attempts/invitation/24h including initial and30searches/user/minute, with
+multiworker-safe enforcement. Outbox/worker is not authorized merely by design.
+
+Scoped runtime/new migration implementation and isolated tests are authorized;
+development migration/data/env change, live email/AI, commit/push/deploy are not.
+Earlier pending package below is historical. This approval does not approve
+unrelated RBAC/Task/AI changes or production rollout.
+
+Implementation choices within that approval: reuse ProfileInvitation with an
+EMAIL_TOKEN/ACCOUNT discriminator, conditional credential/SENT checks and
+recipient-user pending uniqueness. Email-only pending uniqueness now applies
+only to legacy records, so account email snapshot reuse does not change recipient
+identity. Extend the existing Notification with PROFILE_INVITED/Invitation FK and
+a separate own-recipient projection, not fake Task data or a second permission
+system. InvitationDirectoryAccess and InvitationEmailAttempt are durable rolling
+quota records; no outbox, automatic worker or retention purge was introduced.
+Sorted User locks and explicit select_for_update row scopes avoid reciprocal
+cross-Profile joined-User lock reversals. Current isolated backend 1108/1108,
+frontend 1236, quality and final browser 25/25 verification pass with actual
+exits 0 / owned cleanup. Status is **HT-ORG-INVITATION-V2 — IMPLEMENTATION COMPLETE —
+PENDING DEVELOPMENT MIGRATION APPROVAL**; this does not authorize persistent
+development migration, mail/provider activation or deployment.
+
+---
+
+# Historical HT-ORG-INVITATION-V2 — specification received; design choices then pending
+
+Date: 2026-11-13. Owner supplied confirmed business requirements for active
+registered-account selection, multi-Profile membership, role selection within
+existing ceilings, authenticated Web accept/decline, notification-only email and
+membership creation only after acceptance. This authorizes specification/source
+review, not runtime or migrations. Full original text and audit:
+[ORG_INVITATION_V2.md](ORG_INVITATION_V2.md).
+
+INV2-D01–D07 in that document are **RECOMMENDED / PENDING OWNER DECISION**, not
+accepted architecture. They cover Workspace auto-grant supersession/cutover,
+legacy credentials, safe account identification, inactive rejoin/replay, typed
+Notification/schema, email recovery/destination and durable quotas/visibility.
+The existing approved current-month inheritance decision below remains current
+runtime behavior until a specifically approved V2 implementation changes it.
+Do not erase history or silently weaken token/email/role/tenant checks.
+
+No applied migration, source, `.env`, database, email or AI change was made.
+Stop at OWNER REVIEW GATE before implementation or preparing schema changes.
+
+---
+
+# Decision: Disposable full-regression AI migration exception
+
+Date:2026-11-13. **OWNER-APPROVED TEST-ONLY EXCEPTION; AUTHORIZED TWO-TARGET
+DEVELOPMENT EXECUTION VERIFIED — OWNER MANUAL ACCEPTANCE PENDING.**
+
+HT-DB-ROLLOUT-TEST-ISOLATION-APPROVAL permits ai.0002_dispatch_governance ONLY
+inside a separate disposable PostgreSQL full-backend-regression database after
+Django configuration/isolation verification. That scope was used for fresh
+1056/1056 PASS,0failure/error/skip,323.323s, actual launcher/Python0; observed40
+test migration records include ai.0002. Owned test resources were removed.
+Development and the actual-backup restored rehearsal were never the full-test
+target and retain the ai.0002 prohibition. No .env change or repeated permission
+question was required.
+
+The earlier conditional approval for exactly reviews.0003_review_compensation_snapshot
+and notifications.0003_task_unassigned was exercised only after the gates passed:
+fresh full/frontend tests, restricted real custom backup/archive checks,
+actual isolated restore/two-target rehearsal, exact plans and old-writer exclusion.
+The two candidates APPLIED06:27:28Z/06:27:29Z; development history39, ai.0002
+UNAPPLIED, business data preserved. Official startup/19HTTP GET/native read-only
+Owner smoke and final preservation checks PASS. Protected backup retained;
+[PROGRESS](PROGRESS.md) and [HANDOVER](HANDOVER.md) own actual receipts, including
+the first private comparator stop and successful strict-verifier-only repeat.
+
+This records fulfilled local execution authority, not manual Owner UI acceptance,
+production/public rollout or a new architecture/business decision. No general
+migrate, migration-file change, business fixture, automatic rollback/restore,
+credential change or next feature is approved. Stop at DEVELOPMENT ROLLOUT
+COMPLETE — PENDING OWNER MANUAL ACCEPTANCE; retain all historical checkpoints below.
+
+
+# Historical decision checkpoint: Conditional local Review/Notification schema rollout
+
+Date:2026-11-13. **OWNER-AUTHORIZED CONDITIONAL DEVELOPMENT EXECUTION —
+HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01; WAITING ISOLATED FULL-TEST SCOPE CLARIFICATION**.
+
+Owner authorizes only reviews.0003_review_compensation_snapshot and
+notifications.0003_task_unassigned on the verified existing local development
+database after all prompt gates pass: fresh full isolated regression and
+frontend checks, new real full custom-format backup, restore of that archive
+into isolated PostgreSQL, exact candidate plans, preservation evidence and
+shutdown of every positively identified old HustlyTasker writer. No actual apply,
+backup/restore or startup success is inferred from this authorization.
+
+This supersedes the earlier need to request approval for those exact development
+targets once all gates pass; approval is not requested again merely because the
+prior preflight required it. It grants no ai.0002 development/rehearsal execution,
+general migrate, migration-file change, data deletion, automatic rollback/restore,
+production, deployment or new feature. Old Review writers remain incompatible;
+legacy unknown amounts and snapshot/reversal risks remain explicit. Any failed
+gate stops rollout with state/evidence preserved. Final successful status is
+DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE, which requires
+actual post-rollout proof in [HANDOVER](HANDOVER.md), not a new architecture claim.
+
+The prompt also prohibits AI migration, whereas the existing full backend suite
+has explicit governance migration tests requiring ai.0002 on disposable test
+PostgreSQL. One clarification is pending for that disposable test target only;
+no answer is inferred and no AI migration/full backend run has started. This is
+not a request to reapprove the two conditional development candidates. Fresh
+frontend and read-only scoped plans pass; no new backup/restore or persistent
+apply occurred. Until the full-regression gate can be satisfied within clarified
+scope, state remains ROLLOUT BLOCKED — DEVELOPMENT STATE PRESERVED.
+Final read-only06:05:25Z verifies the fresh29-table/37migration state unchanged,
+fingerprint886193d95cb05c6cbc54ffed2e481ac97d9652452b78463b5f46d7d21bb81937
+before=after. Both candidates/ai.0002 remain UNAPPLIED, and no process stopped,
+new backup, actual restored rehearsal, full backend run, apply or startup occurred.
+The pending answer may allow only disposable test scope; it can never be read as
+approval for ai.0002 on development/rehearsal or for changing either candidate.
+
+---
+
+# Historical decision checkpoint: SRS V3 unassign state correction
+
+Date:2026-11-13. **OWNER-APPROVED BUSINESS RULE —
+HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT; DEVELOPMENT APPLY NOT APPROVED**.
+
+The Owner explicitly supplied SRS V3 section4.2.1: unassign ASSIGNED→PENDING and
+WORKING→PENDING; transfer WORKING→ASSIGNED; ordinary REVIEW/COMPLETED removal or
+transfer is denied. Preserve Deliverable, Review and assignment history. Existing
+PENDING compatibility and CANCELLED denial remain, with no permission broadening.
+
+Source audit confirms the earlier unassign implementation really preserved its
+status. The prior report matched that code but the code did not meet the supplied
+rule. The preserve-status choice in the historical V1 entry below is **SUPERSEDED**,
+not retroactively treated as approved SRS behavior. No repository SRS V3 file was
+located; this records the Owner's exact excerpt, not independent document approval.
+The correction needs no new schema. Fresh guarded business/security/migration
+tests158/158 PASS, frontend1182 and guarded real browser4/4 PASS, typecheck/lint/
+build0 with actual process exits and owned cleanup. Final read-only preservation
+05:43:43Z PASS:29-table fingerprint/history/data unchanged,37migrations, both
+candidates and ai.0002 still UNAPPLIED/tasks.0005 APPLIED,0owned test resources.
+Migration candidates pass isolated exact-plan checks against a
+schema-equivalent37-record baseline, ending39 without ai.0002. This is not a
+backup/restore rehearsal. Old Review INSERT fails23502 after apply; rollback
+can lose snapshots or fail on new events. Passing preflight therefore recommends
+coordinated activation with old writers stopped, not mixed-version writing or
+automatic rollback. It does not create an Owner rollout approval.
+
+The same Owner task authorizes isolated-only review/rehearsal of the two existing
+0003 candidates. It does not approve development migration, ai.0002, automatic
+rollback/restore, data deletion, production or deployment. Stop at OWNER APPROVAL
+GATE after actual evidence in [HANDOVER](HANDOVER.md).
+
+---
+
+# Historical decision checkpoint: Task responsibility and analytics V1 boundaries
+
+Date:2026-11-13. **OWNER-APPROVED IMPLEMENTATION SCOPE —
+HT-TASK-REASSIGN-ANALYTICS-V1; DEVELOPMENT ROLLOUT PENDING SEPARATE APPROVAL**.
+
+The Owner authorizes finishing Task transfer/removal and a real tenant-scoped
+analytics page, including minimal migration candidates tested only in isolated
+PostgreSQL. This is not permission to apply migrations, mutate development
+fixtures, expand AI, publish or change the existing authentication architecture.
+
+Source-aligned implementation choices within that scope:
+
+Historical interpretation below. Its unassign-preserves-status bullet is
+superseded by the later Owner-approved SRS V3 correction above; other boundaries
+and old test evidence retain their dated scope.
+
+- Reuse the existing locked assignment service and one ACTIVE row invariant.
+  Add soft unassign, optional reason/audit and atomic old/new eligible-recipient
+  Notifications. New UI confirms assignment ID plus assigned_at to detect stale
+  A→B→A row reuse; old assign clients may omit the additive pair for compatibility.
+- Preserve existing reassign→ASSIGNED behavior. Unassign is removal of current
+  responsibility, not an invented reset transition, so it preserves Task state.
+  REVIEW/COMPLETED/CANCELLED remain protected; an awaiting decision uses the
+  existing authorized Request Changes flow. No history/author/accepted credit
+  is moved, deleted or automatically recalculated from new responsibility.
+- Separate creation-cohort KPI/status/current estimates from approval-event
+  monthly counts/values. Inclusive HCM calendar days become a UTC half-open
+  range;366-day input bound and existing bounded pagination are technical V1
+  limits, not financial policies. Stored subtasks remain included in analytics.
+- Credit proven accepted work to the latest approved Deliverable uploader at
+  Review.created_at. Current Task estimate is editable and cannot prove its
+  old approval amount. A minimal additive Review snapshot candidate captures
+  future approval, while legacy amount stays explicitly unknown without guessed
+  backfill. Recorded-but-unpriced and exact0 remain different from unknown.
+- Keep current Task compensation eligibility. Managers get only legitimate
+  management scope; ordinary all-Workspace defaults SELF. A Workspace manager
+  explicitly selects their managed Workspace. Viewer receives no money, and
+  legacy authorship alone does not grant historical pay access. Staff or known
+  UUIDs cannot override tenant scope; unavailable identity labels stay null.
+- Use exact Decimal sums/integer strings and disclose coverage. Estimates are
+  not money received, paid wages, revenue or profit. Current employee counts move
+  after transfer without double-counting or moving approved-work credit.
+- Preserve existing teal/neutral/master UI and native confirmation. Add the
+  Thống kê sidebar position and real API-backed KPI/finance/charts/employee views;
+  no chart dependency, fake statistics, CSS-only money hiding or realtime system.
+
+These choices do not change historical architecture decisions or assert Owner
+acceptance of a finished development website. Final test evidence/status belongs
+in [HANDOVER](HANDOVER.md), with [metric definitions](TASK_REASSIGN_ANALYTICS_V1.md).
+Current implementation verification is complete on isolated PostgreSQL and React:
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL — OWNER
+REVIEW GATE**. This records test completion, not a new Owner rollout approval.
+Separate approval is still required for reviews.0003 and notifications.0003
+development rollout after fresh backup and isolated restore/migration rehearsal.
+No general migrate, ai.0002 application, automatic rollback/restore or public
+deployment is authorized. Candidate reversal may destroy snapshots or fail the
+older Notification CHECK once new event rows exist; recovery needs explicit review.
+
+---
+
 # Decision: Task description usability, finished-product URLs and assignee labels
 
 Date:2026-11-10. **OWNER-APPROVED SCOPE — HT-FE-TASK-UX-REFINEMENT-01**.

@@ -34,6 +34,11 @@ export interface Task extends TaskBrief {
   can_start: boolean
   /** Current-user submission hint; the submission service revalidates every POST. */
   can_submit: boolean
+  /** Additive manager hints; mutations still revalidate state and authority. */
+  can_assign?: boolean
+  can_unassign?: boolean
+  /** Trash capability is supplied by the server, independently of Task status. */
+  can_delete?: boolean
   created_at: string
   updated_at: string
 }
@@ -64,6 +69,16 @@ export interface TaskCreateInput extends TaskBrief {
   readonly parent_id?: string | null
 }
 export type TaskUpdateInput = Partial<TaskCreateInput>
+export interface AssignmentExpectation {
+  readonly expected_assignment_id: string | null
+  readonly expected_assigned_at: string | null
+}
+export type TaskAssignInput = { readonly target_profile_membership_id: string; readonly reason?: string } & Partial<AssignmentExpectation>
+export interface TaskUnassignInput {
+  readonly expected_assignment_id: string
+  readonly expected_assigned_at: string
+  readonly reason?: string
+}
 export interface WorkspaceCreateInput extends WorkspaceMembershipInput {
   readonly name: string
   readonly description?: string | null
@@ -99,6 +114,8 @@ function pageNumber(page: number): number {
 function isTask(value: unknown): value is Task {
   return record(value) && isTaskBrief(value) && uuid(value.id) && uuid(value.workspace_id) && nullableUuid(value.parent_id) &&
     text(value.title) && nullableText(value.description) && contains(taskStatuses, value.status) &&
+    (value.can_assign === undefined || typeof value.can_assign === 'boolean') && (value.can_unassign === undefined || typeof value.can_unassign === 'boolean') &&
+    (value.can_delete === undefined || typeof value.can_delete === 'boolean') &&
     contains(taskPriorities, value.priority) && typeof value.can_start === 'boolean' && typeof value.can_submit === 'boolean' && (value.deadline === null || dateTime(value.deadline)) &&
     dateTime(value.created_at) && dateTime(value.updated_at) && (value.active_assignment === null ||
       (record(value.active_assignment) && uuid(value.active_assignment.id) && nullableUuid(value.active_assignment.profile_membership_id) && dateTime(value.active_assignment.assigned_at) &&
@@ -132,6 +149,15 @@ function workspacePath(profileId: string, workspaceId?: string): string {
 }
 function taskPath(profileId: string, workspaceId: string, taskId?: string): string {
   return `${workspacePath(profileId, workspaceId)}tasks/${taskId ? `${entityId(taskId)}/` : ''}`
+}
+
+function assignmentBody(input: Partial<AssignmentExpectation> & { readonly reason?: string }, required = false): Partial<AssignmentExpectation> & { reason?: string } {
+  const hasId = Object.hasOwn(input, 'expected_assignment_id'), hasTime = Object.hasOwn(input, 'expected_assigned_at')
+  if (hasId !== hasTime || (required && !hasId)) throw new TypeError('Assignment expectation must contain both fields.')
+  if (hasId && !((input.expected_assignment_id === null && input.expected_assigned_at === null && !required) ||
+    (uuid(input.expected_assignment_id) && text(input.expected_assigned_at) && dateTime(input.expected_assigned_at)))) throw new TypeError('Invalid assignment expectation.')
+  if (input.reason !== undefined && (!text(input.reason) || Array.from(input.reason).length > 4000 || input.reason.includes(String.fromCharCode(0)) || /[\uD800-\uDFFF]/u.test(input.reason))) throw new TypeError('Invalid assignment reason.')
+  return { ...(hasId ? { expected_assignment_id: input.expected_assignment_id ?? null, expected_assigned_at: input.expected_assigned_at ?? null } : {}), ...(input.reason !== undefined ? { reason: input.reason } : {}) }
 }
 
 export function taskQuery(filters: TaskFilters = {}, page = 1): string {
@@ -207,8 +233,12 @@ export const workApi = {
   async updateTask(profileId: string, workspaceId: string, taskId: string, input: TaskUpdateInput, signal?: AbortSignal): Promise<Task> {
     return taskResult(await apiClient.request<unknown>(taskPath(profileId, workspaceId, taskId), { method: 'PATCH', body: input, signal, protected: true }), workspaceId, taskId)
   },
-  async assignTask(profileId: string, workspaceId: string, taskId: string, input: { target_profile_membership_id: string }, signal?: AbortSignal): Promise<Task> {
-    return taskResult(await apiClient.request<unknown>(`${taskPath(profileId, workspaceId, taskId)}assign/`, { method: 'POST', body: input, signal, protected: true }), workspaceId, taskId)
+  async assignTask(profileId: string, workspaceId: string, taskId: string, input: TaskAssignInput, signal?: AbortSignal): Promise<Task> {
+    const body = { target_profile_membership_id: entityId(input.target_profile_membership_id), ...assignmentBody(input) }
+    return taskResult(await apiClient.request<unknown>(`${taskPath(profileId, workspaceId, taskId)}assign/`, { method: 'POST', body, signal, protected: true }), workspaceId, taskId)
+  },
+  async unassignTask(profileId: string, workspaceId: string, taskId: string, input: TaskUnassignInput, signal?: AbortSignal): Promise<Task> {
+    return taskResult(await apiClient.request<unknown>(`${taskPath(profileId, workspaceId, taskId)}unassign/`, { method: 'POST', body: assignmentBody(input, true), signal, protected: true }), workspaceId, taskId)
   },
   async startTask(profileId: string, workspaceId: string, taskId: string, signal?: AbortSignal): Promise<Task> {
     // Eligibility comes from can_start, never a guessed User/ProfileMembership match.

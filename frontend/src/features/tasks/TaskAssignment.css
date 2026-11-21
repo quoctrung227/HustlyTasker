@@ -1,0 +1,5 @@
+.assignment-actions { border: 1px solid var(--color-border); border-radius: var(--radius-control); display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 0; padding: 12px 16px; }
+.assignment-actions legend { color: var(--color-muted); font-size: 13px; padding-inline: 4px; }
+.assignment-actions label { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+.assignment-actions input { accent-color: var(--color-primary); width: 18px; height: 18px; }
+.work-form textarea { font: inherit; resize: vertical; min-height: 90px; }

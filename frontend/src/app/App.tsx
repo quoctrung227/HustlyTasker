@@ -14,6 +14,9 @@ import { AccountPage, ForgotPasswordPage, RegisterPage, ResetPasswordPage } from
 import { CreateProfilePage } from '../pages/profile-create'
 import { TaskGeneratorPage } from '../pages/task-generator'
 import { InvitationRespondPage, ProfileMembersPage } from '../pages/members'
+import { AnalyticsPage } from '../pages/analytics'
+import { InvitationsPage, InvitationDetailPage } from '../pages/invitations'
+import { TrashPage } from '../pages/trash'
 
 function ProtectedRoute() {
   const auth = useAuth()
@@ -48,11 +51,15 @@ export function AppRoutes() {
     <Route element={<ProtectedRoute />}><Route element={<AppLayout />}>
       <Route index element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/analytics" element={<AnalyticsPage />} />
       <Route path="/account" element={<AccountPage />} />
+      <Route path="/trash" element={<TrashPage />} />
       <Route path="/notifications" element={<NotificationsPage />} />
       <Route path="/profiles" element={<ProfilesPage />} />
       <Route path="/profiles/new" element={<CreateProfilePage />} />
       <Route path="/invitations/respond" element={<InvitationRespondPage />} />
+      <Route path="/invitations" element={<InvitationsPage />} />
+      <Route path="/invitations/:invitationId" element={<InvitationDetailPage />} />
       <Route path="/profiles/:profileId" element={<ProfileDetailPage />} />
       <Route path="/profiles/:profileId/members" element={<ProfileMembersPage />} />
       <Route path="/profiles/:profileId/workspaces" element={<WorkspacesPage />} />

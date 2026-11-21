@@ -53,4 +53,4 @@ class NotificationMarkReadView(TenantApiViewMixin, generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         notification = mark_notification_read(actor=request.user, notification_id=kwargs["notification_id"])
-        return Response(NotificationReadSerializer(notification).data)
+        return Response(NotificationReadSerializer(notification, context={"request": request}).data)

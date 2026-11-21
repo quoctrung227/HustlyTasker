@@ -2,6 +2,8 @@
 param(
     [Parameter(ParameterSetName = 'Run', Position = 0)]
     [string[]]$TestLabel = @(),
+    [Parameter(ParameterSetName = 'Run')]
+    [switch]$ExcludeAiGovernance,
     [Parameter(Mandatory = $true, ParameterSetName = 'Cleanup')]
     [ValidatePattern('^[a-f0-9]{32}$')]
     [string]$CleanupRunId
@@ -87,7 +89,9 @@ try {
     } else {
         Invoke-CheckedDocker ($htCompose + @('build', 'backend-tests'))
         Invoke-CheckedDocker ($htCompose + @('up', '--detach', '--wait', 'postgres'))
-        & docker @htCompose run --name "$htProject-backend-tests" --no-deps backend-tests python /workspace/scripts/test_backend.py @TestLabel
+        [string[]]$htPolicyArguments = @()
+        if ($ExcludeAiGovernance) { $htPolicyArguments += '--exclude-ai-governance' }
+        & docker @htCompose run --name "$htProject-backend-tests" --no-deps backend-tests python /workspace/scripts/test_backend.py @htPolicyArguments @TestLabel
         $htExitCode = $LASTEXITCODE
     }
 } catch {

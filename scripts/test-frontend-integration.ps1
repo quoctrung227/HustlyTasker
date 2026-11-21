@@ -2,7 +2,7 @@
 param(
     [ValidateRange(1024,65535)]
     [int]$BackendPort = 8001,
-    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members','workspace-members','invitation-delivery-failure','workspace-inheritance','task-brief','task-ux')]
+    [ValidateSet('foundation','work-management','collaboration','acceptance','account-security','onboarding','ai-generator','ai-disabled','feedback-analyzer','feedback-disabled','task-stability','members','workspace-members','invitation-delivery-failure','workspace-inheritance','task-brief','task-ux','reassign-analytics','invitation-v2','trash')]
     [string]$Suite = 'foundation'
 )
 
@@ -29,6 +29,9 @@ $htCreatedPg = $false
 $htCreatedServer = $false
 $htServerReady = $false
 $htSpec = switch ($Suite) {
+    'trash' {'e2e/trash.spec.ts'}
+    'invitation-v2' {'e2e/invitation-v2.spec.ts'}
+    'reassign-analytics' {'e2e/reassign-analytics.spec.ts'}
     'task-ux' {'e2e/task-ux.spec.ts'}
     'task-brief' {'e2e/task-brief.spec.ts'}
     'workspace-inheritance' {'e2e/workspace-inheritance.spec.ts'}
@@ -48,12 +51,15 @@ $htSpec = switch ($Suite) {
     default {'e2e/real-api.spec.ts'}
 }
 $htArtifactTask = switch ($Suite) {
+    'trash' {'HT-TRASH-V1'}
+    'invitation-v2' {'HT-ORG-INVITATION-V2-IMPLEMENTATION'}
+    'reassign-analytics' {'HT-TASK-REASSIGN-ANALYTICS-V1'}
     'task-ux' {'HT-FE-TASK-UX-REFINEMENT-01'}
     'task-brief' {'HT-FE-TASK-BRIEF-24H-VI-01'}
     'workspace-inheritance' {'HT-FE-WORKSPACE-INHERITANCE-01'}
-    'invitation-delivery-failure' {'HT-FE-INVITATION-DELIVERY-FIX-01'}
+    'invitation-delivery-failure' {'HT-ORG-INVITATION-V2-IMPLEMENTATION'}
     'workspace-members' {'HT-FE-WORKSPACE-MEMBERS-01'}
-    'members' {'HT-FE-MEMBERS-01'}
+    'members' {'HT-ORG-INVITATION-V2-IMPLEMENTATION'}
     'task-stability' {'HT-FE-STABILITY-01'}
     'feedback-analyzer' {'HT-AI-P4-03C'}
     'feedback-disabled' {'HT-AI-P4-03C'}
@@ -252,7 +258,7 @@ try {
     if (-not $htReady) {throw 'Isolated PostgreSQL readiness timeout.'}
     # Fixture enablement exists only in the ownership-checked isolated server.
     # No deployment flag or local environment file is consumed or changed.
-    $htServeMode = if ($Suite -eq 'invitation-delivery-failure') {'serve-invitation-delivery-failure'} elseif ($Suite -in @('ai-generator','feedback-analyzer')) {'serve-ai'} else {'serve'}
+    $htServeMode = if ($Suite -eq 'trash') {'serve-trash'} elseif ($Suite -eq 'workspace-members') {'serve-workspace-members'} elseif ($Suite -in @('invitation-v2','members','invitation-delivery-failure')) {'serve-invitation-v2'} elseif ($Suite -in @('workspace-inheritance','reassign-analytics','task-stability','collaboration','work-management','foundation')) {'serve-invitation-regression'} elseif ($Suite -in @('ai-generator','feedback-analyzer')) {'serve-ai'} else {'serve'}
     Invoke-CheckedDocker @('create','--name',$htServer,'--network',$htHttpNetwork,
         '--publish',"127.0.0.1:${BackendPort}:8000",'--workdir','/workspace/backend',
         '--mount',"type=bind,source=$htRepository,target=/workspace,readonly",

@@ -2,6 +2,11 @@ from django.urls import path
 
 from .views import (
     ProfileInvitationAcceptView,
+    ProfileInvitationAccountAcceptView,
+    ProfileInvitationAccountDeclineView,
+    ProfileInvitationCandidateListView,
+    ProfileInvitationRecipientListView,
+    ProfileInvitationRecipientDetailView,
     ProfileInvitationDeclineView,
     ProfileInvitationDetailView,
     ProfileInvitationListView,
@@ -26,6 +31,10 @@ from .views import (
 app_name = "workspace"
 
 urlpatterns = [
+    path("invitations/", ProfileInvitationRecipientListView.as_view(), name="profile-invitation-recipient-list"),
+    path("invitations/<uuid:invitation_id>/", ProfileInvitationRecipientDetailView.as_view(), name="profile-invitation-recipient-detail"),
+    path("invitations/<uuid:invitation_id>/accept/", ProfileInvitationAccountAcceptView.as_view(), name="profile-invitation-account-accept"),
+    path("invitations/<uuid:invitation_id>/decline/", ProfileInvitationAccountDeclineView.as_view(), name="profile-invitation-account-decline"),
     path(
         "invitations/accept/",
         ProfileInvitationAcceptView.as_view(),
@@ -66,6 +75,7 @@ urlpatterns = [
         ProfileInvitationListView.as_view(),
         name="profile-invitation-list",
     ),
+    path("profiles/<str:profile_id>/invitation-candidates/", ProfileInvitationCandidateListView.as_view(), name="profile-invitation-candidate-list"),
     path(
         "profiles/<str:profile_id>/invitations/<str:invitation_id>/",
         ProfileInvitationDetailView.as_view(),

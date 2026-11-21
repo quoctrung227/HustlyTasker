@@ -38,6 +38,9 @@ class TaskApiTests(APITestCase):
         "active_assignment",
         "can_start",
         "can_submit",
+        "can_assign",
+        "can_unassign",
+        "can_delete",
         "created_at",
         "updated_at",
     }
@@ -331,6 +334,7 @@ class TaskApiTests(APITestCase):
         self.assertEqual(create_response.data["title"], "API-created Task")
         self.assertEqual(create_response.data["status"], Task.Status.PENDING)
         self.assertIsNone(create_response.data["active_assignment"])
+        self.assertIs(create_response.data["can_delete"], True)
 
         created_id = create_response.data["id"]
         for actor in (self.owner, self.editor, self.viewer):
@@ -350,6 +354,10 @@ class TaskApiTests(APITestCase):
                     detail_response,
                     status.HTTP_200_OK,
                 )
+                expected_delete = actor == self.owner
+                self.assertIs(detail_response.data["can_delete"], expected_delete)
+                created_row = next(row for row in list_response.data["results"] if row["id"] == str(created_id))
+                self.assertIs(created_row["can_delete"], expected_delete)
 
     def test_profile_and_workspace_managers_can_create_and_patch(self):
         actors = (self.owner, self.profile_admin, self.workspace_admin)
@@ -364,12 +372,14 @@ class TaskApiTests(APITestCase):
                     format="json",
                 )
                 self.assert_task_response(created, status.HTTP_201_CREATED)
+                self.assertIs(created.data["can_delete"], True)
                 patched = client.patch(
                     self.task_detail_url(created.data["id"]),
                     {"description": f"Updated by {actor.username}"},
                     format="json",
                 )
                 self.assert_task_response(patched, status.HTTP_200_OK)
+                self.assertIs(patched.data["can_delete"], True)
                 self.assertEqual(
                     patched.data["description"],
                     f"Updated by {actor.username}",
@@ -502,6 +512,7 @@ class TaskApiTests(APITestCase):
         )
         self.assert_task_response(response, status.HTTP_200_OK)
         self.assertEqual(response.data["status"], Task.Status.WORKING)
+        self.assertIs(response.data["can_delete"], False)
 
         repeated = self.client.post(
             self.task_action_url("start"),

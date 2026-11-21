@@ -1,6 +1,378 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-Last updated: 2026-11-10
+## Trash V1 current contract — development migrations APPLIED
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+`workspace.0006_soft_delete` then `tasks.0006_soft_delete` are APPLIED development
+after controlled backup/restore and exact-target gates; the existing contract
+below is unchanged. Official local startup and non-mutating HTTP/handler smoke
+passed; authenticated manual UI acceptance is still pending. Actual purge flag
+is false and no scheduler is active. [Rollout evidence](TRASH_V1_ROLLOUT.md) and
+[HANDOVER](HANDOVER.md) record current receipts.
+SessionAuthentication, active identity, CSRF on POST and current tenant authority
+remain mandatory; staff status alone grants no access.
+
+| Method / route | Behavior |
+|---|---|
+| `GET /api/v1/trash/` | Authorized explicit deletion entries; fixed20/page, `object_type=TASK|WORKSPACE|PROFILE`, search≤100characters, positive `page`, optional authorized `profile_id` |
+| `POST /api/v1/trash/{task|workspace|profile}/{id}/delete/` | Strict `{}`; soft-delete only, return200Trash item; repeat retains initial deadline |
+| `POST /api/v1/trash/{task|workspace|profile}/{id}/restore/` | Strict `{}`; current authority, live parent and `now < purge_after`; clear own metadata only, return204 |
+| `POST /api/v1/trash/{task|workspace|profile}/{id}/purge/` | Strict `confirm:true`; Workspace/Profile also exact `confirmation_name`; current Profile Owner, enabled purge, elapsed720hours and all retention/FK checks; return204 only after successful mutation |
+
+Item fields: `id`, `object_type`, `title`, authorized `profile_id`, nullable
+`workspace_id`/`parent_id`, safe `deleted_by.display_name`, `deleted_at`,
+`purge_after`, `days_remaining`, `parent_deleted`, `affected_counts`,
+`can_restore`, `can_purge`, `restore_blocker`, `purge_blockers[{code,message}]`.
+No compensation amount, private feedback body, credential or contact directory
+is added. Normal Profile/Workspace/Task read DTOs add read-only `can_delete`;
+services recheck authority/state and never trust the hint as a permanent grant.
+Authenticated context is supplied consistently to read and manual mutation
+responses, so the same current role receives the same `can_delete` decision.
+
+Hidden/wrong scope is404; invalid/unknown input400; unauthorized identity or
+Owner-only action may be403; stale parent/expiry, disabled purge, protected
+Review/financial/Invitation history and unresolved references return409. Blocked
+data remains retained. Thirty days is evaluation eligibility, not guaranteed
+physical deletion. Restore cannot revive independent child deletion or revoked
+rights. Parent purge also respects each independently deleted child's unexpired
+retention deadline. ACTIVE/ARCHIVED and Task workflow statuses stay separate from
+deletion.
+
+All original AuditLogs are retained. Every Review state blocks physical purge in
+V1, as do completed Task history, Invitation retention and unresolved AI/FKs.
+The command is not an HTTP scheduler. The two approved schema migrations are
+complete; development purge and scheduler activation remain unapproved.
+See [design and impact matrix](TRASH_V1_DESIGN.md).
+
+## HT-ORG-INVITATION-V2 — verified contract and controlled development activation
+
+Owner D01–D07 are APPROVED; see [current specification](ORG_INVITATION_V2.md).
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+workspace.0005_account_invitations and notifications.0004_invitation_context
+are APPLIED after protected backup/actual isolated restore/exact-target gates;
+development has41migration records and no ai.0002/governance tables. New backend/
+Vite loopback startup,19isolated synthetic API/service checks,5read-only existing-
+Owner projections and25HTTP GET direct/proxy smoke checks pass with exits0 and
+preserved original business fingerprints. Positive directory GET was isolated
+because it writes a quota record. No actual authenticated development browser/
+session or mutation acceptance is claimed. See [rollout record](ORG_INVITATION_V2_ROLLOUT.md).
+Prior implementation focused62/fullbackend1108/frontend1236/browser25 counts are
+historical here, not rerun by this rollout; see [PROGRESS](PROGRESS.md).
+
+| Method | Canonical route | Contract and current permission |
+|---|---|---|
+| GET | `/api/v1/profiles/{profile_id}/invitation-candidates/` | Active Profile Owner/Admin with invitation authority; fixed20/page, optional search≤100characters and positive page; strict unknown-field rejection |
+| GET,POST | `/api/v1/profiles/{profile_id}/invitations/` | Existing manager metadata list; new create accepts only recipient_user_id and requested_role |
+| GET | `/api/v1/profiles/{profile_id}/invitations/{invitation_id}/` | Same manager tenant/role ceiling; never raw token/digest |
+| POST | `/api/v1/profiles/{profile_id}/invitations/{invitation_id}/revoke/` | Strict empty body; pending lifecycle and manager ceiling revalidated |
+| POST | `/api/v1/profiles/{profile_id}/invitations/{invitation_id}/resend/` | Strict empty body; ACCOUNT pending email retry only, same ID/role/expiry; legacy resend is rejected without replacement/expiry extension |
+| GET | `/api/v1/invitations/` | Own ACCOUNT inbox for active authenticated User, including zero-Profile accounts; no tenant membership required to read this minimal record |
+| GET | `/api/v1/invitations/{invitation_id}/` | Own ACCOUNT detail and current action capabilities; wrong account/legacy record is tenant-safe404 |
+| POST | `/api/v1/invitations/{invitation_id}/accept/` | Strict empty body; current recipient/inviter/Profile/role/state validated under locks; membership and audits atomic |
+| POST | `/api/v1/invitations/{invitation_id}/decline/` | Strict empty body; own pending record terminalized without membership |
+| POST | `/api/v1/invitations/accept/`, `/api/v1/invitations/decline/` | Existing token contract only for pre-existing EMAIL_TOKEN records until actual expiry; no new token flow is promoted |
+
+Directory response has standard count/next/previous/results and current manager
+capabilities. Each candidate contains only id,display_label,username|null,
+masked_email|null,relation and can_invite. Relation is AVAILABLE,ACTIVE_MEMBER,
+PENDING_INVITATION or UNAVAILABLE; pending records above an Admin's role ceiling
+stay generic UNAVAILABLE without disclosing role/record identity. Search uses
+safe display/username/masked fields, not raw hidden email. Mask fallback is
+coarse (for example `s***@e***`) and ambiguous visible identities are disabled.
+The UUID is an API target reference, never a displayed name or authorization.
+
+Create example (synthetic account reference only):
+
+```json
+{"recipient_user_id":"00000000-0000-4000-8000-000000000001","requested_role":"MEMBER"}
+```
+
+Manager metadata retains lifecycle/delivery timestamps and adds acceptance_kind,
+recipient_display_label,recipient_username and recipient_masked_email. ACCOUNT
+recipient_email is null; legacy metadata retains its prior manager-visible email
+contract. Recipient DTO contains id,profile_id,profile_name,inviter_display_label,
+requested_role,status,expires_at,can_accept,can_decline and can_open_profile;
+no email, delivery diagnostics, digest or token is exposed. Successful ID actions
+return that fresh DTO. Same-result replay returns canonical status without extra
+membership/audit; can_open_profile is checked from current membership, so an
+ACCEPTED historical record cannot restore revoked authority.
+
+Existing Notification feed/count/read routes now return additive target_type,
+invitation_id and invitation fields. TASK keeps its previous Profile/Workspace/
+Task fields and live access scope, with invitation fields null. PROFILE_INVITATION
+has null Workspace/Task, a canonical Invitation target and nested recipient DTO.
+Own-recipient visibility/read does not grant broader tenant access. Target URLs
+are server-generated API routes; React constructs approved internal UI routes.
+
+- Manager-only `GET /api/v1/profiles/{profile_id}/invitation-candidates/`:
+  active registered accounts, server search,20/page; safe name/username and only
+  necessary masked email. No full email/phone/staff/verification/other-tenant data.
+- Existing `POST /api/v1/profiles/{profile_id}/invitations/` becomes strict
+  ACCOUNT input `{recipient_user_id,requested_role}`. New email/token create is
+  rejected. Owner may grant ADMIN/MEMBER; Admin only MEMBER. Invitation + audit +
+  recipient Web notification commit atomically; SMTP failure does not undo Web
+  success or turn a committed create into misleading503.
+- Authenticated recipient `GET /api/v1/invitations/` and `GET .../{id}/` work
+  before any Profile membership. `POST .../{id}/accept/` and `.../decline/` use
+  strict empty body and exact request.user recipient identity. ID is not authority.
+- Legacy token accept/decline routes remain for pre-existing legacy records until
+  their actual expiry. No guessed recipient binding, expiry extension or new
+  token invitation creation. The new UI does not promote manual token entry.
+- Typed invitation Notification extends the existing feed/count/read API.
+  Its recipient-specific branch grants no general tenant access; Task branch
+  keeps current live membership/Workspace policy. Read is independent of decision.
+- ACCOUNT resend retries mail on the same Invitation, preserving role/expiry/
+  notification read state. Limits:30invites/inviter/24h,5/recipient-account/24h,
+  3mail attempts/Invitation/24h including initial,30directory searches/user/min.
+  These are enforced with PostgreSQL locks and rolling records, independently of
+  cache process locality. Normal transport failure returns the committed201/200
+  metadata with delivery_status FAILED rather than misleading post-commit503.
+- Accept keeps current-month MEMBER Workspace grant, inherited ADMIN and stale
+  Workspace cleanup on rejoin, without reactivating revoked rows or assigning Task.
+  Replay does not duplicate membership/audit or restore revoked rights.
+
+SessionAuthentication, CSRF, tenant-safe404, strict input, private cache cleanup,
+current-role revalidation and atomic concurrency remain mandatory. This section
+supersedes email-create/current-UI descriptions only when the V2 implementation
+and migration are installed; historical legacy contract remains labeled below.
+
+Expected errors:400 invalid input/query/control or malformed Unicode,403 known
+scope action denied/CSRF,404 inaccessible target,409 duplicate/state conflict and
+429 durable quota exhausted. Frontend does not automatically replay mutations
+after uncertain network outcomes. An on_commit callback is not a durable queue:
+process crash may leave QUEUED/PENDING attempt state for bounded explicit retry.
+SENT means transport acceptance, not verified mailbox delivery. Real email is
+NOT VERIFIED IN THIS ROLLOUT; no SMTP configuration was changed or genuine send
+automated. Existing local configuration was loaded only through the safe launcher
+for connectivity, with secret values hidden and `.env` unchanged.
+
+Last updated: 2026-11-13
+
+## Historical HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01 — Verified local activation
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+Only reviews.0003_review_compensation_snapshot and
+notifications.0003_task_unassigned applied; development history39, tasks.0005
+APPLIED, ai.0002 UNAPPLIED. The operation changes no route/request/response,
+SessionAuthentication/CSRF, permission or Task/Review business rule. Existing
+candidate APIs below now have the expected development schema/current backend.
+
+Official new loopback Django/Vite startup verified;19HTTP GET checks PASS0:
+direct/proxy health and CSRF200 (cookie presence only), private me/profiles/
+notifications/unread/analytics/Task anonymous403, login GET405, frontend HTML200.
+A unique health marker in the new backend log and a single8000listener verify
+the intended process. Native forced-authenticated existing-Owner read-only GET
+checks cover2Profiles,2analytics summaries/employee lists,1employee detail,
+3Workspaces,5Task details,5Deliverable lists and2Notification feed/unread checks.
+They create no session/business rows and expose no PII in evidence; they are not
+an actual browser Owner login or UI mutation acceptance.
+
+Django/model/schema/constraint/index and final preservation checks0. Fresh full
+backend1056/1056 PASS, actual launcher/Python0; ai.0002 used only on its separate
+disposable test cluster, never development or actual-backup rehearsal.
+[PROGRESS](PROGRESS.md) and [HANDOVER](HANDOVER.md) own detailed receipts. No new
+browser run, real email/AI call, automatic rollback/restore or deployment.
+Expected startup pending-ai.0002 advice must not trigger general migrate.
+Owner manual UI verification remains mandatory; earlier stop snapshots are historical.
+
+
+## Historical activation stop before test-isolation approval
+
+This database task changes no request/response contract, route, permission or
+Task/Review business rule. Owner conditionally authorizes exactly the Review and
+Notification0003 schema targets after fresh full regression, new real backup/
+isolated restore, exact plans and old-writer shutdown. **WAITING OWNER
+CLARIFICATION ON ISOLATED FULL-TEST SCOPE / ROLLOUT BLOCKED: development API
+availability/startup and post-rollout GET smoke are not verified.** Fresh
+frontend1182/1182 and quality pass; read-only06:03:20Z confirms exact scoped/noAI
+plans and37records. Full backend is unrun pending clarification of ai.0002 solely
+on disposable full-test PostgreSQL; no backup/restore or persistent apply yet.
+Current unassign ASSIGNED/WORKING→PENDING remains authoritative. No unsafe
+development smoke mutation, real email/AI request, general migrate or ai.0002
+application is authorized. [HANDOVER](HANDOVER.md) owns actual applied state,
+read-only API/analytics checks and final Owner manual acceptance status. Earlier
+approval-pending statements below belong to their dated preflight/implementation
+tasks and do not describe an already-executed rollout.
+Final read-only06:05:25Z preserves the fresh29-table/37migration baseline; both
+candidates and ai.0002 remain UNAPPLIED. No full backend, archive, restored
+rehearsal, persistent migration or new backend startup has occurred. Existing
+API contracts are unchanged; current outcome is ROLLOUT BLOCKED — DEVELOPMENT
+STATE PRESERVED, not verified development availability or manual acceptance.
+
+## Historical Owner preflight — HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT
+
+Fresh guarded business/security/migration regression158/158 PASS, launcher/Python0;
+full frontend1182 and guarded real browser4/4 PASS; typecheck/lint112/build0,
+all test/launcher/backend exits0 and owned cleanup. Business PASS and migration
+preflight PASS require coordinated activation with old writers stopped. Final
+read-only preservation05:43:43Z PASS: development29-table fingerprint and37
+migrations unchanged, both candidates/ai.0002 UNAPPLIED/tasks.0005 APPLIED.
+Development approval is not granted; stop at OWNER APPROVAL GATE.
+The Owner-supplied SRS V3 section4.2.1
+supersedes the previous preserve-status unassign contract: successful removal
+changes ASSIGNED/WORKING to PENDING and returns that current Task DTO. Existing
+PENDING handling remains PENDING. Transfer from WORKING remains ASSIGNED;
+REVIEW/COMPLETED/CANCELLED ordinary actions remain409. No request/response field,
+membership grant, history deletion or migration change is required for this fix.
+The service still revalidates the same CAS, current manager/lifecycle and tenant
+boundaries under locks. [HANDOVER](HANDOVER.md) owns fresh test/preflight results;
+prior1051/1181/41 counts below are historical, not passing evidence for this
+correction. New schema/backend/frontend activation must be coordinated with old
+writers stopped; old Review INSERT and old Notification clients are not compatible.
+Development apply is forbidden.
+
+## Historical implementation checkpoint — HT-TASK-REASSIGN-ANALYTICS-V1 API contracts
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.** Final
+isolated PostgreSQL1051/frontend1181/browser41 checks PASS; [HANDOVER](HANDOVER.md)
+records actual exit and preservation evidence. These contracts require the two candidate leaves described in
+[DATABASE_SCHEMA](DATABASE_SCHEMA.md). They are not a claim that the persistent
+development backend has already been restarted or migrated. SessionAuthentication,
+CSRF, current tenant/RBAC and never-cache responses remain in force.
+
+### Confirmed assign, transfer and unassign
+
+Canonical Task prefix:
+`/api/v1/profiles/{profile_id}/workspaces/{workspace_id}/tasks/{task_id}/`.
+
+| Endpoint | Allowed input | Success |
+|---|---|---|
+| Existing `POST assign/` | Required `target_profile_membership_id`; optional `reason`; optional paired `expected_assignment_id` and `expected_assigned_at` |200, existing Task DTO |
+| New `POST unassign/` | Required nonnull `expected_assignment_id` and aware `expected_assigned_at`; optional `reason` |200, existing Task DTO with active_assignment=null |
+
+Both expectation fields must be supplied together. For initial assignment,
+`null/null` means no active assignment is expected. For transfer they are copied
+from the last Task DTO's active_assignment.id/assigned_at. The new React UI always
+sends the pair; older assign clients may omit both for compatibility. An ID alone
+does not protect against A→B→A reuse of an existing (Task,User) row. The service
+compares both under the existing tenant/Task locks; stale expectations, repeated
+removal and assignment conflicts return409. No automatic retry/idempotency key
+or permanent authorization grant is added.
+
+`reason` is optional, nullable, trimmed text, at most4000 Unicode code points;
+blank becomes null. NUL, unpaired surrogates, nonstrings and unknown fields are
+400. Reasons are handover notes in the existing scoped audit metadata, not
+Notification text or new sensitive-value projections.
+
+Only a current Task manager in active Profile/Workspace lifecycle may mutate.
+Target membership must be ACTIVE in that Profile with ordinary MEMBER role, an
+active User and an effective Workspace MEMBER(Editor) row. Cross-scope IDs do
+not grant authority. PENDING/ASSIGNED/WORKING are eligible states; assign retains
+the existing transition to ASSIGNED. Unassign moves ASSIGNED/WORKING to PENDING
+(an existing PENDING row stays PENDING), soft-deactivates responsibility and leaves Task content/submissions/review
+history intact. REVIEW/COMPLETED/CANCELLED return409; a pending review must use
+the existing Request Changes flow before a transfer. Current assignment alone
+never grants manager rights or changes who completed prior work.
+
+Task read/list/mutation DTOs gain boolean `can_assign` and `can_unassign` hints.
+The latter also requires an active assignment. They reflect current context,
+lifecycle and allowed Task state; the mutation service revalidates every request.
+No arbitrary User ID, role, author, status or compensation input is accepted by
+these action serializers. Invalid input400, authenticated capability denial403,
+tenant-safe unavailable target404, state/concurrency409 and existing anonymous/
+CSRF denial behavior are retained.
+
+Assignment state, audit event and eligible recipients' Notifications commit or
+roll back atomically. New worker: TASK_ASSIGNED. Prior worker on transfer/removal:
+new TASK_UNASSIGNED. Actor-self, revoked/unreadable recipients and duplicate
+event-recipient delivery remain excluded. A replay of an old assignment event
+cannot become a new delivery just because that assignment row was reactivated.
+No email, external provider, signal or best-effort after-commit delivery is added.
+
+### Read-only analytics endpoints
+
+| Method/path | Result |
+|---|---|
+| `GET /api/v1/profiles/{profile_id}/analytics/` | Scope, capabilities, KPI, finance, distribution and approval_trend |
+| `GET /api/v1/profiles/{profile_id}/analytics/employees/` | Standard paginated employee rows |
+| `GET /api/v1/profiles/{profile_id}/analytics/employees/{profile_membership_id}/` | Standard paginated related Task rows plus employee |
+
+GET/HEAD/OPTIONS only; no analytics mutation endpoint. Existing pagination uses
+count/next/previous/results, page1 by default,20 rows and page_size maximum100.
+Employee IDs are same-tenant ProfileMembership IDs, not a global User directory.
+Foreign/unavailable membership IDs use the existing tenant-safe404 boundary.
+
+Query parameters: optional workspace_id, `from=YYYY-MM-DD`, `to=YYYY-MM-DD`;
+search (max100 characters) and ordering are available for employee results.
+Allowed ordering: active_tasks, -active_tasks (default), approved_tasks,
+-approved_tasks, approved_value, -approved_value; stable membership-ID tie break,
+null monetary values last. Money ordering without financial capability returns
+400. Pagination/format parameters retain existing handling; other unknown fields
+are rejected by strict validation. Search covers only safe disclosable names,
+never email/private identity inference; unavailable names are not searchable.
+
+Date defaults are the current month in Asia/Ho_Chi_Minh. Inclusive local calendar
+dates become a half-open UTC range `[start_at,end_before)`, capped at366 inclusive
+days. Invalid/inverted/overflowing dates return400 instead of500. This is separate
+from the existing Task list's UTC deadline filters. Responses return snapshot_at,
+but aggregates use separate SQL statements, not a repeatable-read dashboard
+snapshot; simultaneous writes can temporarily produce different widget totals.
+Revalidation converges; no financial-ledger consistency is claimed.
+
+`scope` includes mode (`management`/`self`), profile_id, workspace_id|null,
+timezone, from, to, start_at, end_before, snapshot_at,
+cohort_basis=`task_created_at`, approvals_basis=`review_created_at`,
+include_subtasks=true. Stored child Tasks count even though ordinary Task UI
+hides hierarchy. `capabilities` includes can_view_employee_breakdown and
+can_view_financial_totals; these are presentation hints, not reusable authority.
+
+Metric definitions:
+
+- C is the current-readable Tasks **created** in the chosen period and Workspace
+  scope. total_tasks counts C. approved_tasks counts C with canonical completion
+  evidence; working_tasks/review_tasks count actual statuses. overdue_tasks is
+  nonterminal C with deadline before snapshot_at. unassigned_tasks is nonterminal
+  C without an ACTIVE assignment. Corrected unassign resets it to PENDING; the
+  query still checks actual assignment rows rather than inferring them from status.
+- distribution contains all six real Task statuses with exclusive counts summing
+  to C. Overdue/unassigned overlap status groups and are not extra donut slices.
+  unverified_completed_tasks separately reports COMPLETED rows lacking canonical
+  evidence; status alone does not prove acceptance.
+- Canonical acceptance requires COMPLETED Task, APPROVED Review and APPROVED
+  Deliverable, and that Deliverable must be latest by (created_at,id) descending.
+  Credit belongs to Deliverable.uploaded_by and time to Review.created_at, never
+  today's assignee. approval_trend counts those events in the chosen period,
+  including Tasks created earlier; zero months are explicitly included.
+- Current employee active/overdue counts and current estimates use nonterminal
+  C responsibilities. Employee accepted counts/value use canonical approval
+  events. A zero-task active ordinary member can appear in management results.
+  Rows for historical/unavailable workers have is_available=false and
+  display_name=null; missing membership attribution is exposed only as aggregate
+  unattributed_approved_tasks, without inventing a new identity.
+
+All VND sums are exact integer **strings** or null; the frontend must not sum via
+floating-point Number. Summary finance contains estimated_total_vnd,
+estimated_known_tasks, estimated_unpriced_tasks, approved_total_vnd,
+approved_priced_tasks, approved_unpriced_tasks and approved_unknown_tasks.
+Employee finance uses active_total_vnd/active_known_tasks/active_unpriced_tasks
+plus the same approved fields. A known0 is `"0"`; no known values sums to null.
+Unknown legacy approval amount is not the same as an approval with no price.
+
+Future approved Reviews snapshot the Task estimate in the business transaction:
+recorded=true + amount/null. Legacy Reviews stay recorded=false + null; there is
+no guessed backfill. Coverage counts accompany known totals. Estimates/snapshots
+are neither paid wages, money received, actual revenue nor profit. Totals may
+exceed one Task's18-digit bound and remain exact strings.
+
+Employee rows: id, display_name|null, is_available, active_tasks, approved_tasks,
+overdue_tasks, finance|null. Detail results: id, workspace_id, title, status,
+deadline|null and relation (`current`, `approved`, `current_and_approved`). They
+link to the existing scoped Task route and do not expose extra pay fields.
+
+Authorization: active Profile OWNER/ADMIN gets management scope only over current
+readable Workspaces. Ordinary Profile MEMBER gets management scope only after
+explicitly choosing a Workspace where currently ADMIN; all-Workspace defaults
+to SELF. SELF limits Tasks to current responsibility or own canonical completion,
+and approval events to the actor's uploader identity. Existing current Task
+compensation eligibility additionally limits money: VIEWER receives finance=null;
+MEMBER sees only entitled own amounts. Employee endpoints likewise remain self
+scoped, not a coworker directory. No cross-tenant rows or hidden financial payload
+are shipped for CSS-only filtering. Staff does not override tenant roles.
+
+Candidate application and current evidence are in [HANDOVER](HANDOVER.md) and
+[task design](TASK_REASSIGN_ANALYTICS_V1.md). Earlier no-schema statements below
+belong to those dated tasks and do not describe these new unapplied candidates.
 
 ## HT-FE-TASK-UX-REFINEMENT-01 — Product links and assignee labels
 
@@ -510,7 +882,7 @@ UI hints; POST services revalidate. No Profile role/removal/Owner-write API is a
 
 ### React contract and privacy boundaries
 
-The existing [Invitation contract](#profile-invitation-and-membership-onboarding-api)
+The existing [Invitation contract](#historical-legacy-profile-invitation-and-membership-onboarding-api)
 is reused: create sends only recipient_email/requested_role; resend/revoke send
 empty objects. Resend creates a NEW identity/credential; refresh the whole list.
 Owner sees ADMIN/MEMBER invitations, Admin only MEMBER. Existing API client,
@@ -1853,7 +2225,12 @@ revoke/reactivate. Development has no business fixtures and no account
 credential was requested or changed; the isolated results above are the
 evidence for those scenarios.
 
-## Profile Invitation and membership onboarding API
+## Historical legacy Profile Invitation and membership onboarding API
+
+The issuance/email-create/resend-rotation/UI descriptions in this historical
+section describe the pre-V2 contract. New issuance now uses the ACCOUNT contract
+above; legacy accept/decline alone remains compatible until actual expiry.
+Do not use this section to create new token invitations or extend their lifetime.
 
 Source/development status: `HT-INV-P2-04 IMPLEMENTATION COMPLETE;
 HT-DB-P1-08 COMPLETE — DEVELOPMENT ROLLOUT VERIFIED`

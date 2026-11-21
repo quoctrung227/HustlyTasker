@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useOutletContext, useParams, useSearchParams } from 'react-router'
 import { ArrowRightIcon, ListChecksIcon } from '@phosphor-icons/react'
 import { Alert, Button, Card, EmptyState, ErrorState, PageSkeleton, Pagination } from '../components/ui'
@@ -10,6 +10,7 @@ import { formatVietnameseDeadline, isCanonicalTaskDate } from '../features/tasks
 import { formatEstimatedCompensation, taskDocumentFields, validTaskDocumentUrl } from '../features/tasks/task-brief'
 import { useWorkContext } from '../features/workspaces/useWorkContext'
 import { TaskCollaboration } from '../features/collaboration/TaskCollaboration'
+import { TrashDeleteAction } from '../features/trash/TrashActions'
 import { GeneratorEntry } from '../features/ai/GeneratorEntry'
 import { FeedbackAnalyzer } from '../features/ai/FeedbackAnalyzer'
 import { workApi, workKeys, taskStatuses, taskPriorities, taskOrderings } from '../services/api/work-management'
@@ -115,20 +116,30 @@ export function TaskDetailPage() {
   return <ScopedTaskDetail key={`${profileId}:${workspaceId}:${taskId}`} profileId={profileId} workspaceId={workspaceId} taskId={taskId} currentUserId={session?.currentUserId || ''} />
 }
 function ScopedTaskDetail({ profileId, workspaceId, taskId, currentUserId }: { profileId: string; workspaceId: string; taskId: string; currentUserId: string }) {
+  const client = useQueryClient()
   const context = useWorkContext(profileId, workspaceId)
   const [memberPage, setMemberPage] = useState(1), [notice, setNotice] = useState(''), [membersOpened, setMembersOpened] = useState(false)
   const task = useQuery({ queryKey: workKeys.task(profileId, workspaceId, taskId), queryFn: ({ signal }) => workApi.task(profileId, workspaceId, taskId, signal), enabled: context.workspace.isSuccess })
   const canManage = context.active && context.capabilities.data?.manageTasks === true
   const members = useQuery({ queryKey: workKeys.members(profileId, workspaceId, memberPage), queryFn: ({ signal }) => workApi.members(profileId, workspaceId, memberPage, signal), enabled: task.isSuccess && canManage && membersOpened })
   const base = `/profiles/${profileId}/workspaces/${workspaceId}/tasks`
-  function saved() { context.invalidate(); setNotice('Đã lưu thay đổi công việc.'); }
+  function saved(savedTask?: Task) {
+    if (savedTask && savedTask.id === taskId && savedTask.workspace_id === workspaceId) {
+      // This is the server-confirmed response, never an optimistic assignment.
+      // Cancel older reads so they cannot restore a previous assignee/name/pay.
+      void client.cancelQueries({ queryKey: workKeys.task(profileId, workspaceId, taskId), exact: true })
+      client.setQueryData(workKeys.task(profileId, workspaceId, taskId), savedTask)
+    }
+    context.invalidate(); setNotice('Đã lưu thay đổi công việc.')
+  }
   if (context.profile.isError || context.workspace.isError || task.isError) return <><PageHeader title="Nội dung không khả dụng" back={{ to: base, label: 'Công việc' }} /><ErrorState error={context.profile.error || context.workspace.error || task.error} /></>
   if (!task.data || !context.workspace.data) return <PageSkeleton />
   const value = task.data
   return <><PageHeader eyebrow={context.workspace.data.name} title={value.title} back={{ to: base, label: 'Công việc' }} action={<TaskPills task={value} />} />
     {notice && <Alert kind="success">{notice}</Alert>}
     {!context.active && <Alert>Không gian hoặc tổ chức đã lưu trữ. Chỉ có thể xem công việc.</Alert>}
-    <div className="work-actions"><TaskStart key={`${taskId}:${task.dataUpdatedAt}`} profileId={profileId} workspaceId={workspaceId} task={value} active={context.active && task.isSuccess} onStart={(signal) => workApi.startTask(profileId, workspaceId, taskId, signal)} onSaved={() => { context.invalidate(); setNotice('Đã bắt đầu công việc.'); }} onDenied={context.denied} /><TaskEdit profileId={profileId} workspaceId={workspaceId} task={value} canEdit={canManage} onUpdate={(input, signal) => workApi.updateTask(profileId, workspaceId, taskId, input, signal)} onSaved={saved} onDenied={context.denied} /><TaskAssign profileId={profileId} workspaceId={workspaceId} task={value} canAssign={canManage && ['PENDING', 'ASSIGNED', 'WORKING'].includes(value.status)} onOpen={() => setMembersOpened(true)} members={members.data} membersPage={memberPage} membersLoading={members.isPending} membersError={members.error} onMembersPageChange={setMemberPage} onRetryMembers={() => void members.refetch()} onAssign={(input, signal) => workApi.assignTask(profileId, workspaceId, taskId, input, signal)} onSaved={saved} onDenied={context.denied} /></div>
+    <div className="work-actions"><TaskStart key={`${taskId}:${task.dataUpdatedAt}`} profileId={profileId} workspaceId={workspaceId} task={value} active={context.active && task.isSuccess} onStart={(signal) => workApi.startTask(profileId, workspaceId, taskId, signal)} onSaved={() => { context.invalidate(); setNotice('Đã bắt đầu công việc.'); }} onDenied={context.denied} /><TaskEdit profileId={profileId} workspaceId={workspaceId} task={value} canEdit={canManage} onUpdate={(input, signal) => workApi.updateTask(profileId, workspaceId, taskId, input, signal)} onSaved={saved} onDenied={context.denied} /></div>
+    {value.can_delete === true && <div className="work-actions"><TrashDeleteAction objectType="TASK" objectId={value.id} title={value.title} canDelete onDenied={context.denied} /></div>}
     <div className="workspace-detail-grid task-detail-grid">
       <Card className="workspace-about task-description-card">
         <h2>Thông tin công việc</h2>
@@ -137,7 +148,7 @@ function ScopedTaskDetail({ profileId, workspaceId, taskId, currentUserId }: { p
           <p className="preserve-text task-description-text">{value.description || 'Công việc chưa có mô tả.'}</p>
         </section>
       </Card>
-      <Card className="workspace-facts"><h2>Thời hạn và phân công</h2><dl><div><dt>Thời hạn · {Intl.DateTimeFormat().resolvedOptions().timeZone}</dt><dd><Deadline task={value} /></dd></div><div><dt>Phân công</dt><dd className="break-code">{assigneeLabel(value)}</dd></div><div><dt>Ngày tạo</dt><dd>{dateLabel(value.created_at)}</dd></div><div><dt>Cập nhật gần nhất</dt><dd>{dateLabel(value.updated_at)}</dd></div><div><dt>Kỳ làm việc</dt><dd>{periodLabel(context.workspace.data.period)}</dd></div></dl></Card>
+      <Card className="workspace-facts"><h2>Thời hạn và phân công</h2><dl><div><dt>Thời hạn · {Intl.DateTimeFormat().resolvedOptions().timeZone}</dt><dd><Deadline task={value} /></dd></div><div><dt>Phân công</dt><dd className="break-code">{assigneeLabel(value)}</dd></div><div><dt>Ngày tạo</dt><dd>{dateLabel(value.created_at)}</dd></div><div><dt>Cập nhật gần nhất</dt><dd>{dateLabel(value.updated_at)}</dd></div><div><dt>Kỳ làm việc</dt><dd>{periodLabel(context.workspace.data.period)}</dd></div></dl><div className="work-actions"><TaskAssign profileId={profileId} workspaceId={workspaceId} task={value} canAssign={canManage && ['PENDING', 'ASSIGNED', 'WORKING'].includes(value.status)} onOpen={() => setMembersOpened(true)} members={members.data} membersPage={memberPage} membersLoading={members.isPending} membersError={members.error} onMembersPageChange={setMemberPage} onRetryMembers={() => void members.refetch()} onAssign={(input, signal) => workApi.assignTask(profileId, workspaceId, taskId, input, signal)} onUnassign={(input, signal) => workApi.unassignTask(profileId, workspaceId, taskId, input, signal)} onSaved={saved} onDenied={context.denied} /></div></Card>
     </div>
     {taskDocumentFields.some(({ key }) => validTaskDocumentUrl(value[key])) && <Card className="task-brief-documents"><h2>Tài liệu và nguyên liệu</h2><ul>{taskDocumentFields.map(({ key, label, action }) => {
       const url = value[key]

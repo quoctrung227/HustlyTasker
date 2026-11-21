@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator
 
 from apps.common.models import BaseModel
 from apps.accounts.models import User
@@ -124,6 +125,14 @@ class Review(BaseModel):
         null=True
     )
 
+    # New approvals capture the estimate once. False preserves the explicit
+    # unknown state of historical decisions; no amount is inferred/backfilled.
+    compensation_snapshot_recorded = models.BooleanField(default=False, editable=False)
+    compensation_snapshot_vnd = models.DecimalField(
+        max_digits=18, decimal_places=0, null=True, blank=True, editable=False,
+        validators=[MinValueValidator(0)],
+    )
+
 
     class Meta:
         constraints = [
@@ -140,6 +149,20 @@ class Review(BaseModel):
             models.UniqueConstraint(
                 fields=("deliverable",),
                 name="uniq_deliverable_review",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(compensation_snapshot_vnd__isnull=True)
+                    | models.Q(compensation_snapshot_vnd__gte=0)
+                ),
+                name="review_snapshot_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(compensation_snapshot_recorded=True)
+                    | models.Q(compensation_snapshot_vnd__isnull=True)
+                ),
+                name="review_snapshot_recorded_pair",
             ),
         ]
 

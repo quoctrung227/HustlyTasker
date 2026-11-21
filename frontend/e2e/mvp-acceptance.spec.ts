@@ -126,7 +126,7 @@ test('MVP acceptance: one UI-created Task passes assignment, execution, revision
   await page.goto(`${taskBase}/${task.id}`)
   expect((await getTask(page, task.id)).status).toBe('PENDING')
 
-  await page.getByRole('button', { name: 'Phân công', exact: true }).click()
+  await page.getByRole('button', { name: 'Phân công nhân viên', exact: true }).click()
   dialog = page.getByRole('dialog', { name: 'Phân công công việc', exact: true })
   await dialog.getByLabel('Thành viên', { exact: true }).selectOption(fixtureId('editor_profile_membership'))
   await dialog.getByRole('button', { name: 'Xác nhận phân công', exact: true }).click()
@@ -259,7 +259,7 @@ test('MVP acceptance: one UI-created Task passes assignment, execution, revision
   await rejectedPost(page.request, `/api/v1/notifications/${notification.id}/read/`, {}, 404)
   await page.goto(`${taskBase}/${task.id}`)
   await expect(page.getByRole('heading', { name: taskTitle, exact: true })).toBeVisible()
-  for (const label of ['Chỉnh sửa công việc', 'Phân công', 'Bắt đầu công việc', 'Nộp sản phẩm', 'Phê duyệt sản phẩm', 'Yêu cầu chỉnh sửa', 'Gửi bình luận', 'Chỉnh sửa bình luận', 'Xóa bình luận']) {
+  for (const label of ['Chỉnh sửa công việc', 'Phân công nhân viên', 'Thay đổi phân công', 'Bắt đầu công việc', 'Nộp sản phẩm', 'Phê duyệt sản phẩm', 'Yêu cầu chỉnh sửa', 'Gửi bình luận', 'Chỉnh sửa bình luận', 'Xóa bình luận']) {
     await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0)
   }
   await rejectedPost(page.request, `${apiTasks}${task.id}/comments/`, { content: 'Rejected Viewer acceptance write' }, 403)

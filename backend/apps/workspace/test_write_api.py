@@ -30,6 +30,7 @@ class WorkspaceWriteApiTests(APITestCase):
         "description",
         "period",
         "status",
+        "can_delete",
         "created_at",
         "updated_at",
     }
@@ -302,6 +303,7 @@ class WorkspaceWriteApiTests(APITestCase):
                     response,
                     status_code=status.HTTP_201_CREATED,
                 )
+                self.assertIs(response.data["can_delete"], True)
                 workspace = Workspace.objects.get(id=response.data["id"])
                 self.assertEqual(workspace.profile, self.profile)
                 self.assertEqual(workspace.owner, actor)
@@ -432,6 +434,7 @@ class WorkspaceWriteApiTests(APITestCase):
                     response,
                     status_code=status.HTTP_200_OK,
                 )
+                self.assertIs(response.data["can_delete"], actor != self.workspace_admin)
                 self.workspace.refresh_from_db()
                 self.assertEqual(self.workspace.description, description)
 
@@ -487,6 +490,7 @@ class WorkspaceWriteApiTests(APITestCase):
         )
 
         self.assertEqual(archive_response.status_code, status.HTTP_200_OK)
+        self.assertIs(archive_response.data["can_delete"], True)
         self.assertEqual(
             archive_response.data["status"],
             self.profile.Status.ARCHIVED,
@@ -519,6 +523,7 @@ class WorkspaceWriteApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(restore_response.status_code, status.HTTP_200_OK)
+        self.assertIs(restore_response.data["can_delete"], True)
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.status, self.profile.Status.ACTIVE)
 
@@ -593,6 +598,7 @@ class WorkspaceWriteApiTests(APITestCase):
                     format="json",
                 )
                 self.assertEqual(archived.status_code, status.HTTP_200_OK)
+                self.assertIs(archived.data["can_delete"], True)
                 self.assertEqual(
                     archived.data["status"],
                     Workspace.Status.ARCHIVED,
@@ -604,6 +610,7 @@ class WorkspaceWriteApiTests(APITestCase):
                     format="json",
                 )
                 self.assertEqual(restored.status_code, status.HTTP_200_OK)
+                self.assertIs(restored.data["can_delete"], True)
                 self.assertEqual(
                     restored.data["status"],
                     Workspace.Status.ACTIVE,

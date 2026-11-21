@@ -183,16 +183,14 @@ test.describe('Workspace membership inheritance — real isolated Django/Postgre
     expect((await roster(owner, createdId)).count).toBe(3)
   })
 
-  test('new recipient accepts through React and joins only the exact current-month Workspace without replay duplicates', async ({ browser }) => {
+  test('pre-cutover legacy recipient registers and accepts through React with only current-month access and no replay duplicates', async ({ browser }) => {
     test.setTimeout(90_000)
     await owner.goto(`/profiles/${profileId}/members`)
-    await owner.getByRole('button', { name: 'Mời thành viên', exact: true }).click()
-    const invitation = owner.getByRole('dialog', { name: 'Mời thành viên', exact: true })
-    await invitation.getByLabel('Email người nhận', { exact: true }).fill(recipientEmail)
-    await invitation.getByLabel('Vai trò tổ chức', { exact: true }).selectOption('MEMBER')
-    const issued = owner.waitForResponse((response) => new URL(response.url()).pathname === `${apiProfile}invitations/` && response.request().method() === 'POST')
-    await invitation.getByRole('button', { name: 'Gửi lời mời', exact: true }).click()
-    expect((await issued).status()).toBe(201)
+    // API-driven fixture setup represents an already-issued legacy invitation.
+    // New email-only creation is intentionally forbidden after V2 cutover.
+    const issued = await owner.request.get(`${apiProfile}invitations/`)
+    expect(issued.status()).toBe(200)
+    expect((await issued.json() as { results: { recipient_email: string | null; status: string }[] }).results.some((row) => row.recipient_email === recipientEmail && row.status === 'PENDING')).toBe(true)
     expect((await roster(owner, createdId)).count).toBe(3)
     const secret = consumeInvitation()
     const context = await browser.newContext({ baseURL: test.info().project.use.baseURL })

@@ -127,15 +127,15 @@ describe('actual invitation manager contracts', () => {
   it('creates only the two allowed input fields, never owner/user/membership flags', async () => {
     const request = vi.spyOn(apiClient, 'request').mockResolvedValue(invitation)
     const signal = new AbortController().signal
-    const input = { recipient_email: invitation.recipient_email, requested_role: 'MEMBER' as const, user_id: otherId, role: 'OWNER', is_active: true }
+    const input = { recipient_user_id: userId, requested_role: 'MEMBER' as const, user_id: otherId, role: 'OWNER', is_active: true }
     expect(await membersApi.createInvitation(profileId, input, signal)).toEqual(invitation)
     expect(request).toHaveBeenCalledExactlyOnceWith(`${base}invitations/`, { method: 'POST',
-      body: { recipient_email: invitation.recipient_email, requested_role: 'MEMBER' }, signal, protected: true })
+      body: { recipient_user_id: userId, requested_role: 'MEMBER' }, signal, protected: true })
   })
 
   it('cannot send an invented OWNER invitation role', async () => {
     const request = vi.spyOn(apiClient, 'request')
-    await expect(membersApi.createInvitation(profileId, { recipient_email: 'recipient@example.test', requested_role: 'OWNER' } as unknown as InvitationCreateInput)).rejects.toMatchObject({ status: 400 })
+    await expect(membersApi.createInvitation(profileId, { recipient_user_id: userId, requested_role: 'OWNER' } as unknown as InvitationCreateInput)).rejects.toMatchObject({ status: 400 })
     expect(request).not.toHaveBeenCalled()
   })
 
@@ -146,15 +146,15 @@ describe('actual invitation manager contracts', () => {
     expect(request).toHaveBeenCalledExactlyOnceWith(`${base}invitations/${invitationId}/revoke/`, { method: 'POST', body: {}, signal: undefined, protected: true })
   })
 
-  it('resend rotates to a replacement identity instead of reusing a consumed credential', async () => {
-    const value = { ...invitation, id: replacementId }
+  it('email retry preserves an account invitation identity instead of issuing a replacement', async () => {
+    const value = { ...invitation, acceptance_kind: 'ACCOUNT', recipient_email: null, recipient_display_label: 'Người nhận', recipient_username: 'recipient', recipient_masked_email: null }
     const request = vi.spyOn(apiClient, 'request').mockResolvedValue(value)
     expect(await membersApi.resendInvitation(profileId, invitationId)).toEqual(value)
     expect(request).toHaveBeenCalledExactlyOnceWith(`${base}invitations/${invitationId}/resend/`, { method: 'POST', body: {}, signal: undefined, protected: true })
   })
 
-  it('rejects a resend response that does not contain a new pending identity', async () => {
-    vi.spyOn(apiClient, 'request').mockResolvedValue(invitation)
+  it('rejects a legacy resend or replacement response after the account cutover', async () => {
+    vi.spyOn(apiClient, 'request').mockResolvedValue({ ...invitation, id: replacementId })
     await expect(membersApi.resendInvitation(profileId, invitationId)).rejects.toMatchObject({ kind: 'invalid-response' })
   })
 
@@ -167,7 +167,7 @@ describe('actual invitation manager contracts', () => {
   it('does not retry or claim a delivery outcome when creation returns503', async () => {
     const failure = new ApiError(503, 'server', 'Không thể xử lý yêu cầu lúc này.')
     const request = vi.spyOn(apiClient, 'request').mockRejectedValue(failure)
-    await expect(membersApi.createInvitation(profileId, { recipient_email: invitation.recipient_email, requested_role: 'MEMBER' })).rejects.toBe(failure)
+    await expect(membersApi.createInvitation(profileId, { recipient_user_id: userId, requested_role: 'MEMBER' })).rejects.toBe(failure)
     expect(request).toHaveBeenCalledOnce()
   })
 
@@ -175,7 +175,7 @@ describe('actual invitation manager contracts', () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(json({ csrf_token: 'a'.repeat(64) }))
       .mockResolvedValueOnce(json({ recipient_email: ['private-recipient-diagnostic'], requested_role: ['private-role-diagnostic'], user_id: ['private-identity-diagnostic'] }, 400))
     vi.stubGlobal('fetch', fetchMock)
-    const error = await membersApi.createInvitation(profileId, { recipient_email: invitation.recipient_email, requested_role: 'MEMBER' }).catch((value: unknown) => value)
+    const error = await membersApi.createInvitation(profileId, { recipient_user_id: userId, requested_role: 'MEMBER' }).catch((value: unknown) => value)
     expect(error).toMatchObject({ status: 400, kind: 'validation', fieldErrors: { recipient_email: expect.any(String), requested_role: expect.any(String) } })
     expect(JSON.stringify(error)).not.toContain('private-')
     expect(JSON.stringify(error)).not.toContain('user_id')

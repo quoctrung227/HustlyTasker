@@ -1,6 +1,29 @@
 # Frontend MVP completeness and acceptance — HT-FE-P3-04
 
-## Current bounded follow-up — HT-FE-WORKSPACE-MEMBERS-01,2026-11-09
+## Current bounded follow-up — HT-ORG-INVITATION-V2,2026-11-13
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.** Account-based
+invitation selection, personal recipient inbox/decisions before membership,
+typed Web notifications and independent bounded email retry supersede the
+historical token-create/resend and missing-inbox limitations below. Current-month
+Workspace grant/rejoin cleanup and inherited ADMIN remain as approved. Existing
+Task/Workspace workflows and the historical FE04 scope are preserved; general
+Profile role/removal governance is not added.
+
+Prior implementation backend1108/1108,frontend1236,quality and six browser suites
+25/25 PASS are historical here, not rerun by this rollout. The approved
+workspace0005/notifications0004 targets are now APPLIED development; history41,
+original business fingerprints preserved and ai.0002 UNAPPLIED. Current
+19isolated synthetic API/service checks,5read-only existing-Owner projections
+and25HTTP GET direct/proxy checks pass, exits0, with official backend/Vite ready.
+Positive directory GET was isolated because it persists quota metadata; no real
+authenticated development browser or manual Owner UI acceptance is claimed.
+No live mail/provider call, `.env` edit or development business fixture. See
+[rollout record](ORG_INVITATION_V2_ROLLOUT.md),[HANDOVER](HANDOVER.md) and
+[V2 specification](ORG_INVITATION_V2.md). Owner's next step is manual acceptance;
+earlier sections retain checkpoint-specific evidence.
+
+## Historical bounded follow-up — HT-FE-WORKSPACE-MEMBERS-01,2026-11-09
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** Owner separately
 approved the previously deferred Workspace member candidate/management surface.

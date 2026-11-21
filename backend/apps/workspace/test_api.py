@@ -22,6 +22,7 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         "id",
         "name",
         "status",
+        "can_delete",
         "created_at",
         "updated_at",
     }
@@ -32,6 +33,7 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         "description",
         "period",
         "status",
+        "can_delete",
         "created_at",
         "updated_at",
     }
@@ -274,8 +276,34 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         self.assertEqual(set(response.data), self.profile_fields)
         self.assertEqual(response.data["id"], str(self.profile.id))
         self.assertEqual(response.data["name"], self.profile.name)
+        self.assertIs(response.data["can_delete"], False)
         self.assertIsInstance(response.data["created_at"], str)
         self.assertIsInstance(response.data["updated_at"], str)
+
+    def test_delete_capabilities_match_current_profile_and_workspace_roles(self):
+        # A local Workspace manager can manage Tasks but cannot delete the
+        # Workspace or Profile. Profile ADMIN also cannot delete the Profile.
+        cases = (
+            (self.owner, True, True),
+            (self.admin, False, True),
+            (self.member, False, False),
+        )
+        for actor, can_delete_profile, can_delete_workspace in cases:
+            with self.subTest(actor=actor.username):
+                client = APIClient()
+                client.force_login(actor)
+                profile = client.get(self.profile_detail_url(self.profile.id))
+                self.assertEqual(profile.status_code, status.HTTP_200_OK)
+                self.assertIs(profile.data["can_delete"], can_delete_profile)
+                listing = client.get(self.profile_list_url())
+                profile_row = next(row for row in listing.data["results"] if row["id"] == str(self.profile.id))
+                self.assertIs(profile_row["can_delete"], can_delete_profile)
+                workspace = client.get(self.workspace_detail_url(self.profile.id, self.admin_workspace.id))
+                self.assertEqual(workspace.status_code, status.HTTP_200_OK)
+                self.assertIs(workspace.data["can_delete"], can_delete_workspace)
+                workspaces = client.get(self.workspace_list_url(self.profile.id))
+                workspace_row = next(row for row in workspaces.data["results"] if row["id"] == str(self.admin_workspace.id))
+                self.assertIs(workspace_row["can_delete"], can_delete_workspace)
 
     def test_profile_detail_does_not_disclose_cross_tenant_or_unknown_ids(self):
         self.client.force_login(self.admin)
@@ -471,6 +499,7 @@ class ProfileWorkspaceReadApiTests(APITestCase):
         )
         self.assertNotIn("owner", response.data)
         self.assertNotIn("members", response.data)
+        self.assertIs(response.data["can_delete"], False)
 
     def test_inactive_workspace_membership_revokes_read_immediately(self):
         self.client.force_login(self.member)

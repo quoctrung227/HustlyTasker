@@ -538,42 +538,18 @@ class ProfileInvitationModelAndServiceTests(TestCase):
         with self.assertRaises(InvitationConflict):
             accept_profile_invitation(actor=accepted_target, token=accepted_token)
 
-    def test_resend_rotates_credential_and_invalidates_old_token(self):
+    def test_legacy_resend_cannot_rotate_or_extend_but_existing_token_remains_usable(self):
         invitation, old_token = self.issue(recipient=self.recipient)
         self.mark_sent(invitation)
-        captured = {}
-
-        def capture_delivery(*, invitation, raw_token):
-            captured["id"] = invitation.id
-            captured["token"] = raw_token
-
-        with patch(
-            "apps.workspace.invitation_services.schedule_invitation_delivery",
-            side_effect=capture_delivery,
-        ):
-            replacement = resend_profile_invitation(
-                actor=self.owner,
-                profile_id=self.profile.id,
-                invitation_id=invitation.id,
-            )
-
-        invitation.refresh_from_db()
-        self.assertEqual(invitation.status, ProfileInvitation.Status.REVOKED)
-        self.assertEqual(replacement.replaces_id, invitation.id)
-        self.assertNotEqual(replacement.token_digest, invitation.token_digest)
-        self.assertNotEqual(captured["token"], old_token)
-
+        original_expiry, original_digest = invitation.expires_at, invitation.token_digest
         with self.assertRaises(InvitationConflict):
-            accept_profile_invitation(
-                actor=self.recipient,
-                token=old_token,
-            )
-        self.mark_sent(replacement)
-        membership = accept_profile_invitation(
-            actor=self.recipient,
-            token=captured["token"],
-        )
-        self.assertTrue(membership.is_active)
+            resend_profile_invitation(actor=self.owner, profile_id=self.profile.pk, invitation_id=invitation.pk)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.status, "PENDING")
+        self.assertEqual(invitation.expires_at, original_expiry)
+        self.assertEqual(invitation.token_digest, original_digest)
+        self.assertFalse(ProfileInvitation.objects.filter(replaces=invitation).exists())
+        self.assertTrue(accept_profile_invitation(actor=self.recipient, token=old_token).is_active)
 
     def test_archived_profile_blocks_accept_and_invitation_mutations(self):
         invitation, raw_token = self.issue(recipient=self.recipient)
@@ -671,44 +647,20 @@ class ProfileInvitationModelAndServiceTests(TestCase):
             ).exists()
         )
 
-    def test_failed_delivery_recovers_only_through_rotated_resend(self):
+    def test_failed_legacy_delivery_cannot_create_new_or_extended_credential_after_cutover(self):
         failed_token = "F" * 43
-        with patch(
-            "apps.workspace.invitation_services.secrets.token_urlsafe",
-            return_value=failed_token,
-        ), patch(
-            "apps.common.email_delivery.EmailMessage.send",
-            side_effect=RuntimeError("test-only delivery failure"),
-        ):
+        with patch("apps.workspace.invitation_services.secrets.token_urlsafe", return_value=failed_token), patch("apps.common.email_delivery.EmailMessage.send", side_effect=RuntimeError("test-only delivery failure")):
             with self.assertRaises(InvitationDeliveryUnavailable):
                 with self.captureOnCommitCallbacks(execute=True):
-                    failed = create_profile_invitation(
-                        actor=self.owner,
-                        profile_id=self.profile.id,
-                        recipient_email=self.recipient.email,
-                    )
-
-        replacement_token = "R" * 43
-        with patch(
-            "apps.workspace.invitation_services.secrets.token_urlsafe",
-            return_value=replacement_token,
-        ), patch(
-            "apps.workspace.invitation_services.schedule_invitation_delivery"
-        ):
-            replacement = resend_profile_invitation(
-                actor=self.owner,
-                profile_id=self.profile.id,
-                invitation_id=failed.id,
-            )
-
+                    failed = create_profile_invitation(actor=self.owner, profile_id=self.profile.pk, recipient_email=self.recipient.email)
+        original = (failed.pk, failed.token_digest, failed.expires_at)
+        with self.assertRaises(InvitationConflict):
+            resend_profile_invitation(actor=self.owner, profile_id=self.profile.pk, invitation_id=failed.pk)
         failed.refresh_from_db()
-        self.assertEqual(failed.status, ProfileInvitation.Status.REVOKED)
-        self.assertEqual(replacement.replaces_id, failed.id)
-        self.assertEqual(
-            replacement.token_digest,
-            hashlib.sha256(replacement_token.encode("utf-8")).hexdigest(),
-        )
-        self.assertNotEqual(replacement.token_digest, failed.token_digest)
+        self.assertEqual((failed.pk, failed.token_digest, failed.expires_at), original)
+        self.assertEqual(failed.status, "PENDING")
+        self.assertEqual(failed.delivery_status, "FAILED")
+        self.assertFalse(ProfileInvitation.objects.filter(replaces=failed).exists())
 
     def test_outer_transaction_rollback_discards_delivery_callback(self):
         mail.outbox.clear()

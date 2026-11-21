@@ -1,4 +1,4 @@
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator, MinValueValidator, URLValidator
@@ -17,6 +17,10 @@ from .brief import (
 
 
 class Task(BaseModel):
+
+    deleted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+", editable=False)
+    purge_after = models.DateTimeField(null=True, blank=True, editable=False)
 
     # Root depth is zero: at most three parent edges (four visible levels).
     MAX_HIERARCHY_DEPTH = 3
@@ -114,6 +118,12 @@ class Task(BaseModel):
     class Meta:
         constraints = [
             models.CheckConstraint(
+                condition=(models.Q(deleted_at__isnull=True, purge_after__isnull=True, deleted_by__isnull=True)
+                           | models.Q(deleted_at__isnull=False, purge_after__isnull=False,
+                                      purge_after=models.F("deleted_at") + timedelta(days=30))),
+                name="task_trash_metadata_valid",
+            ),
+            models.CheckConstraint(
                 condition=~models.Q(id=models.F("parent_id")),
                 name="task_not_own_parent",
             ),
@@ -150,6 +160,7 @@ class Task(BaseModel):
             ),
         ]
         indexes = [
+            models.Index(fields=("purge_after", "id"), condition=models.Q(deleted_at__isnull=False), name="task_trash_due_idx"),
             models.Index(
                 fields=("workspace", "parent", "created_at"),
                 name="task_ws_parent_created_idx",

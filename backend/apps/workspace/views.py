@@ -39,6 +39,8 @@ from .serializers import (
     ProfileCreateSerializer,
     ProfileInvitationActionSerializer,
     ProfileInvitationCreateSerializer,
+    ProfileInvitationCandidateQuerySerializer,
+    ProfileInvitationRecipientSerializer,
     ProfileInvitationReadSerializer,
     ProfileInvitationTokenSerializer,
     ProfileLifecycleSerializer,
@@ -67,6 +69,10 @@ from .invitation_throttles import (
     InvitationRecipientThrottle,
     InvitationSendThrottle,
     InvitationTokenActionThrottle,
+)
+from .account_invitations import (
+    candidate_data, create_account_invitation, invitation_candidates,
+    recipient_invitations_visible_to, respond_account_invitation,
 )
 from .services import (
     WorkspaceMembershipConflict,
@@ -173,7 +179,7 @@ class ProfileListView(TenantApiViewMixin, generics.ListAPIView):
             owner=request.user,
         )
         return Response(
-            ProfileReadSerializer(profile).data,
+            ProfileReadSerializer(profile, context=self.get_serializer_context()).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -227,7 +233,7 @@ class ProfileLifecycleView(TenantApiViewMixin, generics.GenericAPIView):
             actor=request.user,
             profile_id=self.profile_access_context.profile_id,
         )
-        return Response(ProfileReadSerializer(profile).data)
+        return Response(ProfileReadSerializer(profile, context=self.get_serializer_context()).data)
 
 
 class ProfileArchiveView(ProfileLifecycleView):
@@ -245,19 +251,18 @@ class ProfileInvitationListView(TenantApiViewMixin, generics.ListAPIView):
     http_method_names = ("get", "post", "head", "options")
 
     def get_throttles(self):
-        if self.request.method == "POST":
-            return [InvitationSendThrottle(), InvitationRecipientThrottle()]
+        # ACCOUNT issuance has durable User-row-serialized rolling quotas.
         return []
 
     def get_queryset(self):
         return profile_invitations_visible_to_managers(
             self.profile_access_context
-        ).order_by("-created_at", "-id")
+        ).select_related("recipient_user").order_by("-created_at", "-id")
 
     def post(self, request, *args, **kwargs):
         serializer = ProfileInvitationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        invitation = create_profile_invitation(
+        invitation = create_account_invitation(
             actor=request.user,
             profile_id=self.profile_access_context.profile_id,
             **serializer.validated_data,
@@ -324,7 +329,75 @@ class ProfileInvitationRevokeView(ProfileInvitationManagerActionView):
 
 class ProfileInvitationResendView(ProfileInvitationManagerActionView):
     invitation_service = staticmethod(resend_profile_invitation)
-    throttle_classes = (InvitationSendThrottle,)
+    throttle_classes = ()  # Durable per-invitation rolling attempt quota.
+
+
+class InvitationCandidatePagination(StandardResultsSetPagination):
+    page_size = 20
+    page_size_query_param = None
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProfileInvitationCandidateListView(TenantApiViewMixin, generics.GenericAPIView):
+    serializer_class = ProfileInvitationCandidateQuerySerializer
+    permission_classes = (CanManageProfileInvitations,)
+    pagination_class = InvitationCandidatePagination
+    http_method_names = ("get", "head", "options")
+
+    def get(self, request, *args, **kwargs):
+        query = self.get_serializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        users = invitation_candidates(actor=request.user,
+            profile_id=self.profile_access_context.profile_id,
+            search=query.validated_data.get("search", ""))
+        page = self.paginate_queryset(users)
+        response = self.get_paginated_response([candidate_data(user) for user in page])
+        response.data["capabilities"] = profile_invitation_capabilities(self.profile_access_context)
+        return response
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProfileInvitationRecipientListView(TenantReadOnlyViewMixin, generics.ListAPIView):
+    serializer_class = ProfileInvitationRecipientSerializer
+    permission_classes = (HasActiveTenantIdentity,)
+
+    def get_queryset(self):
+        return recipient_invitations_visible_to(self.request.user).order_by("-created_at", "-id")
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProfileInvitationRecipientDetailView(TenantReadOnlyViewMixin, ScopedRetrieveMixin, generics.RetrieveAPIView):
+    serializer_class = ProfileInvitationRecipientSerializer
+    permission_classes = (HasActiveTenantIdentity,)
+    lookup_field = "id"
+    lookup_url_kwarg = "invitation_id"
+
+    def get_queryset(self):
+        return recipient_invitations_visible_to(self.request.user)
+
+
+@method_decorator(never_cache, name="dispatch")
+class ProfileInvitationAccountActionView(TenantApiViewMixin, generics.GenericAPIView):
+    serializer_class = ProfileInvitationActionSerializer
+    permission_classes = (HasActiveTenantIdentity,)
+    http_method_names = ("post", "options")
+    accept = False
+
+    def post(self, request, *args, **kwargs):
+        self.get_serializer(data=request.data).is_valid(raise_exception=True)
+        invitation = respond_account_invitation(actor=request.user,
+            invitation_id=kwargs["invitation_id"], accept=self.accept)
+        # Fresh serializer and current DB membership; replay never implies access.
+        invitation = recipient_invitations_visible_to(request.user).get(pk=invitation.pk)
+        return Response(ProfileInvitationRecipientSerializer(invitation, context={"request": request}).data)
+
+
+class ProfileInvitationAccountAcceptView(ProfileInvitationAccountActionView):
+    accept = True
+
+
+class ProfileInvitationAccountDeclineView(ProfileInvitationAccountActionView):
+    accept = False
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -398,7 +471,7 @@ class WorkspaceListView(TenantApiViewMixin, generics.ListAPIView):
             profile_id=self.profile_access_context.profile_id,
             **serializer.validated_data,
         )
-        response_serializer = WorkspaceReadSerializer(workspace)
+        response_serializer = WorkspaceReadSerializer(workspace, context=self.get_serializer_context())
         return Response(
             response_serializer.data,
             status=status.HTTP_201_CREATED,
@@ -462,7 +535,7 @@ class WorkspaceDetailView(
             workspace_id=self.workspace_access_context.workspace_id,
             **serializer.validated_data,
         )
-        response_serializer = WorkspaceReadSerializer(workspace)
+        response_serializer = WorkspaceReadSerializer(workspace, context=self.get_serializer_context())
         return Response(response_serializer.data)
 
 
@@ -482,7 +555,7 @@ class WorkspaceLifecycleView(TenantApiViewMixin, generics.GenericAPIView):
             profile_id=self.workspace_access_context.profile_id,
             workspace_id=self.workspace_access_context.workspace_id,
         )
-        return Response(WorkspaceReadSerializer(workspace).data)
+        return Response(WorkspaceReadSerializer(workspace, context=self.get_serializer_context()).data)
 
 
 class WorkspaceArchiveView(WorkspaceLifecycleView):

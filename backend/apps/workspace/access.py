@@ -4,6 +4,8 @@ from uuid import UUID
 from django.core.exceptions import ValidationError
 from django.db.models import Exists, OuterRef, Q, Subquery
 
+from apps.common.deletion import profile_live_q, workspace_live_q
+
 from .models import (
     Profile,
     ProfileInvitation,
@@ -120,7 +122,7 @@ def _is_current_workspace_context(context):
             if context.workspace_role is not None:
                 return False
 
-            return Workspace.objects.filter(
+            return Workspace.objects.filter(workspace_live_q()).filter(
                 id=context.workspace_id,
                 profile_id=profile_context.profile_id,
                 profile__memberships__id=profile_context.membership_id,
@@ -140,7 +142,7 @@ def _is_current_workspace_context(context):
         ):
             return False
 
-        return WorkspaceMember.objects.filter(
+        return WorkspaceMember.objects.filter(workspace_live_q("workspace")).filter(
             workspace_id=context.workspace_id,
             user_id=profile_context.user_id,
             is_active=True,
@@ -167,7 +169,7 @@ def profiles_visible_to(user):
     if user_id is None:
         return Profile.objects.none()
 
-    return Profile.objects.filter(
+    return Profile.objects.filter(profile_live_q()).filter(
         memberships__user_id=user_id,
         memberships__user__is_active=True,
         memberships__is_active=True,
@@ -182,7 +184,7 @@ def resolve_profile_access_context(user, profile_id):
         raise TenantAccessNotFound()
 
     try:
-        membership = ProfileMembership.objects.only(
+        membership = ProfileMembership.objects.filter(profile_live_q("profile")).only(
             "id",
             "profile_id",
             "user_id",
@@ -207,7 +209,7 @@ def _refresh_profile_access_context(context):
         raise TenantAccessNotFound()
 
     try:
-        membership = ProfileMembership.objects.only(
+        membership = ProfileMembership.objects.filter(profile_live_q("profile")).only(
             "id",
             "profile_id",
             "user_id",
@@ -228,11 +230,14 @@ def _refresh_profile_access_context(context):
     return _build_profile_access_context(membership)
 
 
-def _workspaces_visible_to_valid_context(context):
+def _workspaces_visible_to_valid_context(context, *, include_deleted=False):
     # Repeat the Profile membership predicates in the returned lazy queryset.
     # A context that becomes stale before queryset evaluation therefore fails
     # closed instead of widening access.
-    queryset = Workspace.objects.filter(
+    # Historical analytics may retain Workspace identity while hiding its normal
+    # Task/read routes. Profile deletion always closes both scopes.
+    deletion_scope = profile_live_q("profile") if include_deleted else workspace_live_q()
+    queryset = Workspace.objects.filter(deletion_scope).filter(
         profile_id=context.profile_id,
         profile__memberships__id=context.membership_id,
         profile__memberships__user_id=context.user_id,
@@ -261,11 +266,11 @@ def _workspaces_visible_to_valid_context(context):
     ).distinct()
 
 
-def workspaces_visible_to(context):
+def workspaces_visible_to(context, *, include_deleted=False):
     """Return the current, fail-closed Workspace scope for a Profile context."""
 
     current_context = _refresh_profile_access_context(context)
-    return _workspaces_visible_to_valid_context(current_context)
+    return _workspaces_visible_to_valid_context(current_context, include_deleted=include_deleted)
 
 
 def resolve_workspace_access_context(profile_context, workspace_id):
@@ -351,7 +356,7 @@ def can_create_workspace(context):
             ProfileMembership.Role.OWNER,
             ProfileMembership.Role.ADMIN,
         )
-        and Profile.objects.filter(
+        and Profile.objects.filter(profile_live_q()).filter(
             id=current_context.profile_id,
             status=Profile.Status.ACTIVE,
         ).exists()
@@ -390,7 +395,7 @@ def profile_invitations_visible_to_managers(context):
     if not can_manage_profile_invitations(current_context):
         raise TenantAccessNotFound()
 
-    queryset = ProfileInvitation.objects.filter(
+    queryset = ProfileInvitation.objects.filter(profile_live_q("profile")).filter(
         profile_id=current_context.profile_id,
         profile__memberships__id=current_context.membership_id,
         profile__memberships__user_id=current_context.user_id,
@@ -417,7 +422,7 @@ def profile_members_visible_to_managers(context):
     if not can_manage_profile_invitations(current_context):
         raise TenantAccessNotFound()
 
-    return ProfileMembership.objects.filter(
+    return ProfileMembership.objects.filter(profile_live_q("profile")).filter(
         profile_id=current_context.profile_id,
         profile__memberships__id=current_context.membership_id,
         profile__memberships__user_id=current_context.user_id,
@@ -437,7 +442,7 @@ def profile_invitation_capabilities(context):
     if not can_manage_profile_invitations(current_context):
         raise TenantAccessNotFound()
 
-    active = Profile.objects.filter(
+    active = Profile.objects.filter(profile_live_q()).filter(
         id=current_context.profile_id,
         status=Profile.Status.ACTIVE,
         memberships__id=current_context.membership_id,
@@ -465,7 +470,7 @@ def _has_active_workspace_state(context):
     if not _is_current_workspace_context(context):
         return False
 
-    return Workspace.objects.filter(
+    return Workspace.objects.filter(workspace_live_q()).filter(
         id=context.workspace_id,
         profile_id=context.profile_id,
         profile__status=Profile.Status.ACTIVE,
@@ -595,7 +600,7 @@ def workspace_member_candidates_visible_to_managers(context):
     if not can_manage_workspace_members(context):
         raise TenantAccessNotFound()
 
-    actor_profile = ProfileMembership.objects.filter(
+    actor_profile = ProfileMembership.objects.filter(profile_live_q("profile")).filter(
         id=context.profile_context.membership_id,
         profile_id=context.profile_id,
         user_id=context.user_id,
@@ -608,11 +613,12 @@ def workspace_member_candidates_visible_to_managers(context):
         user_id=OuterRef("user_id"),
         is_active=True,
     )
-    queryset = ProfileMembership.objects.filter(
+    queryset = ProfileMembership.objects.filter(profile_live_q("profile")).filter(
         profile_id=context.profile_id,
         profile__status=Profile.Status.ACTIVE,
         profile__workspaces__id=context.workspace_id,
         profile__workspaces__status=Workspace.Status.ACTIVE,
+        profile__workspaces__deleted_at__isnull=True,
         user__is_active=True,
         is_active=True,
     ).annotate(
@@ -648,7 +654,7 @@ def can_manage_workspace_lifecycle(context):
             ProfileMembership.Role.OWNER,
             ProfileMembership.Role.ADMIN,
         )
-        and Profile.objects.filter(
+        and Profile.objects.filter(profile_live_q()).filter(
             id=context.profile_id,
             status=Profile.Status.ACTIVE,
         ).exists()
@@ -692,7 +698,7 @@ def workspace_members_visible_to_managers(context):
         role=ProfileMembership.Role.MEMBER,
     )
 
-    return WorkspaceMember.objects.filter(
+    return WorkspaceMember.objects.filter(workspace_live_q("workspace")).filter(
         actor_profile_scope,
         actor_workspace_scope,
         workspace_id=context.workspace_id,

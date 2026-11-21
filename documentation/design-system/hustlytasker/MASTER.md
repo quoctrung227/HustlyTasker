@@ -1,5 +1,119 @@
 # HustlyTasker web design system
 
+## Trash V1 — existing system extension
+
+2026-11-20. Keep teal/neutral tokens, typography, shared Card/Button/Alert/
+Pagination and native Dialog. Global **Thùng rác** remains reachable near the
+sidebar end even when the last Profile is deleted. Use wrapping type filters,
+a persistent search label and readable object cards; metadata becomes one column
+on mobile. Countdown and retention blockers use text as well as visual state.
+The deadline is eligibility for conditional purge, not a promise of deletion.
+
+Delete, restore and permanent purge have explicit confirmations; Workspace and
+Profile purge require the exact name. Pending locks duplicate submission/dismissal;
+recoverable errors stay visible. Confirmed mutations reset private query data.
+After a row disappears, focus returns to the persistent Trash heading; canceled
+dialogs return focus to the trigger. No optimistic permission or data restoration.
+
+The full local skill/master were read. Actual focused `keyboard focus modal
+--domain ux` selected visible/unobscured focus; `async form pending error cleanup
+--stack react` selected caught async errors and effect cleanup. These informed
+native-dialog, pending/error and cancellation review; React-wide refactoring and
+native-only guidance were not adopted. Real isolated Trash7/7 verifies keyboard,
+focus, no overflow and axe0 at375/768/1440 and812×375 landscape. Root inspected
+the375/1440 PNGs. Current full regression and rollout gates belong in HANDOVER;
+these design patterns do not authorize development migration, purge or scheduling.
+
+## Organization invitation V2 — existing system extension
+
+Implementation status: **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.**
+Isolated browser verification covers the patterns below; no Owner manual UI
+acceptance or persistent-development activation is implied.
+
+2026-11-13. Retain teal/neutral tokens, Plus Jakarta Sans, shared Button/Alert/
+FormField/Pagination and native Dialog. **Thêm thành viên** opens **Mời thành viên**
+with a labeled server search, native radio rows and20-account pages. Search uses
+approximately300ms debounce; changed search resets page and cancels stale results.
+Rows wrap safe name/disambiguator/relation labels without exposing raw email,
+UUID names or unrelated-tenant data. An ambiguous choice remains unavailable.
+Selection can persist across result pages but is revalidated on submit.
+
+Role selection has a clear placeholder and only current server-authorized roles.
+Pending disables repeated submission, reserves layout and exposes busy/error
+state; invalid input keeps inline errors with a focusable summary when needed.
+Empty search results explain how to recover instead of looking like a network
+failure. Closing/identity/Profile changes cancel requests and clear scoped state.
+
+Invitation Notification cards show organization/inviter/role and explicit Web
+accept/decline controls for the authenticated recipient even before membership.
+Decline uses an inline Alert confirmation so the notification menu's native dialog
+does not contain a second modal/focus trap. Read-state is independent from the
+decision. No optimistic membership or automatic POST replay is shown; after a
+confirmed accept, **Đến tổ chức** is an explicit link, not a forced tenant switch.
+Legacy code entry remains a direct compatibility route, not a promoted V2 action.
+ACCOUNT retry keeps the invitation and displays truthful separate email state.
+
+The implementation team read the full local UI UX Pro Max skill/master and ran
+focused Search/No Results, Loading Buttons and React Effects/Cleanup/Debounce
+searches. Native haptic results were rejected; no generated visual theme or new
+UI dependency was adopted. Relevant guidance informed stable loading, disabled
+semantics, visible labels/focus, radio keyboard behavior and scope cleanup.
+Current real375/768/1440/landscape,keyboard/axe/screenshot outcomes belong in
+[HANDOVER](../../HANDOVER.md), not an inference from this pattern description.
+
+## Task responsibility and analytics — HT-TASK-REASSIGN-ANALYTICS-V1
+
+2026-11-13. Reuse the existing teal/neutral tokens, font, Card/Button/Alert and
+native Dialog. Thống kê uses the Phosphor bar-chart icon between Tổ chức and
+Thông báo, with the existing active navigation state. The approved page order is
+filters, six KPI, pale-teal finance, status donut/monthly line, employee table
+and a same-page detail panel. There is no new chart dependency or visual theme.
+
+KPI are a three-column/two-row desktop grid and two columns on narrow screens.
+The finance area gives exact integer-string amounts room to wrap rather than
+shrinking or converting them to floating point. Plain-language scope notes
+separate Task creation cohort, current responsibility and approval events.
+Unknown historical amounts and unpriced Tasks have explicit counts; estimates
+must never be labeled paid salary, received money, revenue or profit.
+
+Donut slices use real exclusive statuses with adjacent textual count/percentage
+legends; overdue is an overlapping warning, not another slice. Scoped semantic
+chart colors supplement labels. The monthly line has exact-value buttons and
+text feedback available by keyboard, pointer and touch; SVG is decorative when
+the full values are already represented in HTML. Empty/error/loading and a
+single-month explanation prevent fabricated trends. Controls retain visible
+focus and reduced-motion behavior.
+
+Employee rows include current/accepted/overdue counts and authorized current/
+accepted amounts. At widths <=1000px the same semantic table reflows into labeled
+cards without removing financial context or requiring document-wide overflow.
+Search/sort/pagination use backend queries, not client-side aggregation. Details
+receive heading focus and link only to currently readable Task routes. A SELF
+or redacted response never reuses prior management financial rows.
+
+Task Detail puts the real assignee and Phân công nhân viên/Thay đổi phân công
+action together. The native dialog groups transfer/removal choices, current
+person, eligible paginated member selection, optional reason and a separate
+confirmation step. Pending state disables repeated submissions; ambiguous
+outcomes require revalidation, never automatic replay. Escape/cancel and focus
+return use the shared dialog; no custom focus trap or optimistic success.
+
+Owner preflight HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT corrects the removal
+consequence to **Task chuyển về Chờ phân công (PENDING)** from ASSIGNED/WORKING.
+The confirmation must retain the explicit promise that submissions, reviews and
+history remain. Transfer still states ASSIGNED so the new worker explicitly
+starts. This changes truthful confirmation copy/state tests only, not layout or
+tokens. The focused offline Confirmation Dialogs search was actually executed;
+current verification and migration approval boundaries remain in HANDOVER.
+
+The implementers read the full local UI UX Pro Max skill/master and actually
+used offline chart, confirmation, responsive Web Table Handling and React
+Effects Cleanup searches. Applicable web accessibility, exact-value disclosure,
+semantic controls, current-scope cleanup and reflow guidance informed the code;
+native-only suggestions and unrelated styling were not adopted. Current real
+browser/axe/screenshot evidence and migration approval status belong in
+[HANDOVER](../../HANDOVER.md), not an inferred manual acceptance claim.
+
 Date: 2026-10-26. HT-FE-P3-01 implementation choices for Owner review.
 Scope: authenticated team-work SaaS web app; not a marketing landing page.
 This master and frontend/src/styles.css are the shared reference for later UI

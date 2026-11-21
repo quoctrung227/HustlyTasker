@@ -16,6 +16,10 @@ def default_profile_invitation_expiry():
 
 class Profile(BaseModel):
 
+    deleted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+", editable=False)
+    purge_after = models.DateTimeField(null=True, blank=True, editable=False)
+
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE"
         ARCHIVED = "ARCHIVED"
@@ -34,11 +38,18 @@ class Profile(BaseModel):
     class Meta:
         constraints = [
             models.CheckConstraint(
+                condition=(models.Q(deleted_at__isnull=True, purge_after__isnull=True, deleted_by__isnull=True)
+                           | models.Q(deleted_at__isnull=False, purge_after__isnull=False,
+                                      purge_after=models.F("deleted_at") + timedelta(days=30))),
+                name="profile_trash_metadata_valid",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(status__in=("ACTIVE", "ARCHIVED")),
                 name="profile_valid_status",
             ),
         ]
         indexes = [
+            models.Index(fields=("purge_after", "id"), condition=models.Q(deleted_at__isnull=False), name="profile_trash_due_idx"),
             models.Index(
                 fields=("status",),
                 name="profile_status_idx",
@@ -159,6 +170,10 @@ class ProfileInvitation(BaseModel):
         SENT = "SENT"
         FAILED = "FAILED"
 
+    class AcceptanceKind(models.TextChoices):
+        EMAIL_TOKEN = "EMAIL_TOKEN"
+        ACCOUNT = "ACCOUNT"
+
     profile = models.ForeignKey(
         Profile,
         on_delete=models.PROTECT,
@@ -182,7 +197,11 @@ class ProfileInvitation(BaseModel):
         on_delete=models.PROTECT,
         related_name="issued_invitations",
     )
-    token_digest = models.CharField(max_length=64, unique=True, editable=False)
+    acceptance_kind = models.CharField(
+        max_length=20, choices=AcceptanceKind.choices,
+        default=AcceptanceKind.EMAIL_TOKEN, editable=False,
+    )
+    token_digest = models.CharField(max_length=64, unique=True, editable=False, null=True, blank=True)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -312,9 +331,17 @@ class ProfileInvitation(BaseModel):
             models.CheckConstraint(
                 condition=(
                     ~models.Q(status__in=("ACCEPTED", "DECLINED"))
+                    | models.Q(acceptance_kind="ACCOUNT")
                     | models.Q(delivery_status="SENT")
                 ),
                 name="pinv_use_requires_sent",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(acceptance_kind="EMAIL_TOKEN", token_digest__isnull=False)
+                    | models.Q(acceptance_kind="ACCOUNT", recipient_user__isnull=False,
+                               token_digest__isnull=True)
+                ), name="pinv_identity_kind_valid",
             ),
             models.CheckConstraint(
                 condition=models.Q(expires_at__gt=models.F("created_at")),
@@ -341,7 +368,7 @@ class ProfileInvitation(BaseModel):
             ),
             models.UniqueConstraint(
                 fields=("profile", "recipient_email_normalized"),
-                condition=models.Q(status="PENDING"),
+                condition=models.Q(status="PENDING", acceptance_kind="EMAIL_TOKEN"),
                 name="uniq_pending_profile_email",
             ),
             models.UniqueConstraint(
@@ -370,6 +397,8 @@ class ProfileInvitation(BaseModel):
                 fields=("expires_at", "status"),
                 name="pinv_expiry_status_idx",
             ),
+            models.Index(fields=("recipient_user", "acceptance_kind", "-created_at", "id"),
+                         name="pinv_recipient_inbox_idx"),
         ]
 
     @property
@@ -412,17 +441,54 @@ class ProfileInvitation(BaseModel):
                 "expires_at": "Invitation expiry must be after creation."
             })
 
-        digest = self.token_digest or ""
-        if len(digest) != 64 or any(
-            ch not in "0123456789abcdef" for ch in digest
-        ):
-            raise ValidationError({"token_digest": "Invalid invitation credential."})
+        if self.acceptance_kind == self.AcceptanceKind.ACCOUNT:
+            if self.recipient_user_id is None or self.token_digest is not None:
+                raise ValidationError("Account invitations require a recipient and no credential.")
+        else:
+            digest = self.token_digest or ""
+            if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+                raise ValidationError({"token_digest": "Invalid invitation credential."})
 
     def __str__(self):
         return f"Profile invitation {self.id} ({self.status})"
 
 
+class InvitationEmailAttempt(BaseModel):
+    """Durable delivery reservation; no addresses, bodies or provider errors."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING"
+        SENT = "SENT"
+        FAILED = "FAILED"
+
+    invitation = models.ForeignKey(ProfileInvitation, on_delete=models.PROTECT,
+                                   related_name="email_attempts")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("invitation", "created_at"), name="pinv_mail_attempt_window_idx")]
+        constraints = [models.CheckConstraint(
+            condition=(models.Q(status="PENDING", finished_at__isnull=True)
+                       | models.Q(status__in=("SENT", "FAILED"), finished_at__isnull=False)),
+            name="pinv_mail_attempt_state_valid",
+        )]
+
+
+class InvitationDirectoryAccess(BaseModel):
+    """Rolling search quota events serialized by the authenticated User row."""
+
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="invitation_directory_accesses")
+
+    class Meta:
+        indexes = [models.Index(fields=("user", "created_at"), name="pinv_directory_window_idx")]
+
+
 class Workspace(BaseModel):
+
+    deleted_at = models.DateTimeField(null=True, blank=True, editable=False)
+    deleted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+", editable=False)
+    purge_after = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE"
@@ -475,6 +541,12 @@ class Workspace(BaseModel):
     class Meta:
         constraints = [
             models.CheckConstraint(
+                condition=(models.Q(deleted_at__isnull=True, purge_after__isnull=True, deleted_by__isnull=True)
+                           | models.Q(deleted_at__isnull=False, purge_after__isnull=False,
+                                      purge_after=models.F("deleted_at") + timedelta(days=30))),
+                name="workspace_trash_metadata_valid",
+            ),
+            models.CheckConstraint(
                 condition=models.Q(status__in=("ACTIVE", "ARCHIVED")),
                 name="workspace_valid_status",
             ),
@@ -495,6 +567,7 @@ class Workspace(BaseModel):
             ),
         ]
         indexes = [
+            models.Index(fields=("purge_after", "id"), condition=models.Q(deleted_at__isnull=False), name="workspace_trash_due_idx"),
             models.Index(
                 fields=("profile", "status", "period"),
                 name="ws_prof_status_period_idx",

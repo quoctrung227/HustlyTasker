@@ -1,12 +1,185 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-Last updated: 2026-11-10
+Last updated: 2026-11-20
 
 ## Giai đoạn hiện tại
 
-`PHASE 4 - Task UX refinement / AI migration pending`
+`PHASE 4 - HT-TRASH-V1 development migration complete; Owner manual acceptance gate`
 
-Current task: **HT-FE-TASK-ASSIGNEE-NAME-FIX-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
+## Current development rollout — 2026-11-20 — HT-TRASH-V1
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+Only workspace0006 then tasks0006 are now APPLIED development after protected
+backup/actual isolated restore and exact-target gates. History 41 → 43; 31 tables
+and all original rows/hash projections are preserved, with nine legacy-NULL
+columns and the approved constraints/indexes only. AI0002 remains UNAPPLIED.
+Fresh isolated 59/59 and 46 read-only handler/27 real HTTP GET checks pass, exits 0;
+official loopback backend/Vite startup succeeds. Full implementation suite counts
+below are historical, not rerun by this rollout. See [rollout](TRASH_V1_ROLLOUT.md).
+
+The next step is Owner manual soft-delete/restore acceptance through React.
+Purge remains disabled; no scheduler is registered/enabled. No AI migration,
+permanent deletion, new feature or deployment is authorized.
+
+## Historical implementation checkpoint — 2026-11-20 — HT-TRASH-V1
+
+Soft-delete/restore Task, Workspace and Profile; global React Trash; conditional
+30-day purge. Keep archive/status, independent child deletion and revoked rights.
+Owner approved no ledger: Review/financial/Invitation/Audit/FK obligations block
+unsafe purge. Source, two new migration files and isolated verification are
+complete. See [design](TRASH_V1_DESIGN.md) and
+[HANDOVER](HANDOVER.md).
+
+Current focused PostgreSQL59/59, full frontend1295/1295 and real Trash browser7/7
+pass, with typecheck/lint/build0 and owned cleanup. The current Workspace/Task/
+Start and collaboration browser regressions also passed 7/7 each. The first full
+backend run executed 1,167 tests with 17 failures, exit 1, including a Profile-create
+serializer-context capability discrepancy and outdated strict field assertions.
+Corrected contexts/current-role contracts pass 141/141. Corrected full backend
+passes 1,168/1,168 in 448.046 seconds, 0 fail/error/skip, Python/launcher 0 and
+owned cleanup; actual history 44 includes AI0002 only in disposable tests.
+Reassignment and corrected Workspace-members browser regressions pass 4/4 each;
+the eight suites contain 44 unique passing tests. Final post-spec quality checks
+also pass. Final Trash rerun 7/7 in 51.1 seconds, source audit and owned-resource
+cleanup pass; this repeated Trash run is not counted twice.
+
+AI governance migration is allowed only in disposable regression if needed,
+never development. No development migration/purge, scheduler enable, deployment
+or next feature is authorized.
+
+**HT-TRASH-V1 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION AND PURGE APPROVAL.**
+
+The next action is Owner review of the schema, retention holds and separate
+rollout/purge controls.
+
+## Historical controlled rollout — 2026-11-13 — HT-ORG-INVITATION-V2
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.** Only
+workspace0005 then notifications0004 applied after fresh backup/restore/planner/
+preservation gates, exits0. Development history39→41/tables29→31, original
+business fingerprints preserved; ai.0002 remains UNAPPLIED. New backend/Vite
+loopback startup,19isolated synthetic API/service checks,5read-only existing-
+Owner projections and25HTTP GET direct/proxy checks pass. Previous implementation
+backend1108/frontend1236/browser25 counts were not rerun by this rollout.
+No other migration, production, real mail or next feature is authorized.
+[Rollout evidence/checkpoint](ORG_INVITATION_V2_ROLLOUT.md) and
+[HANDOVER](HANDOVER.md) define the safe continuation and manual-acceptance gate.
+
+## Historical implementation — 2026-11-13 — HT-ORG-INVITATION-V2
+
+Owner approved D01–D07 and scoped code/new migrations/isolated tests. Source
+implementation is present for directory/account-create/recipient decisions,
+typed Notification, independent mail failure/retry, durable PostgreSQL quotas
+and React picker/inbox/actions. D01 retains current-month Workspace grant only
+after accept and preserves safe rejoin/inherited ADMIN rules. New migrations:
+workspace.0005_account_invitations then notifications.0004_invitation_context.
+
+**HT-ORG-INVITATION-V2 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.** Corrected focused
+backend 62/62 and full 1108/1108 PASS; final frontend 1236 tests / 36 files, quality checks and
+real browser 25/25 across six final suites pass with actual process exits 0 /
+owned cleanup. Initial failed attempts/corrections remain recorded in
+[PROGRESS](PROGRESS.md) and [HANDOVER](HANDOVER.md). No rollout was performed.
+Development rollout needs separate authorization plus fresh identity/backup/
+restore rehearsal/scoped plans. No general migrate or ai.0002 development apply,
+live email/provider, outbox worker, deployment or next feature is authorized.
+
+## Historical design review — 2026-11-13 — HT-ORG-INVITATION-V2
+
+**DESIGN READY — PENDING OWNER DECISIONS.** Account picker, recipient Web decisions
+and notification-only email are specified, not implemented. Source audit exposes
+SENT/token and Notification schema requirements plus the current-month Workspace
+grant conflict. See [spec/design](ORG_INVITATION_V2.md), INV2-D01–D07 and its
+phased implementation/testing proposal. No runtime or migration authorization is
+implied; no AI or adjacent feature begins. Previous rollout remains complete
+with Owner manual UI acceptance pending.
+
+## Verified previous rollout — 2026-11-13
+
+**HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01 — DEVELOPMENT ROLLOUT COMPLETE —
+PENDING OWNER MANUAL ACCEPTANCE.** Exactly reviews.0003_review_compensation_snapshot
+and notifications.0003_task_unassigned applied after full regression, protected
+backup/archive verification, real isolated restore/two-target rehearsal and
+writer/preservation gates. Development has39migration records; tasks.0005 APPLIED,
+ai.0002 UNAPPLIED and no AI governance tables.
+
+Fresh backend1056/1056/no failures-errors-skips PASS323.323s, launcher/Python0;
+frontend1182/1182/quality0.19direct/proxy HTTP GET checks and native read-only
+Owner API checks PASS; official Django/Vite startup and final preservation
+verified. No new browser regression was run in this rollout. Actual receipts:
+[PROGRESS](PROGRESS.md), [HANDOVER](HANDOVER.md).
+
+The explicit ai.0002 exception was used only in a separate disposable full-test
+PostgreSQL database, never development or backup-restored rehearsal. Owned
+test/rehearsal resources removed; protected archive retained. Owner must now
+manually verify reassignment/removal, analytics, notifications, money/RBAC and
+history through React. Do not begin another task, general migration or deployment.
+The earlier blocked snapshots below remain historical.
+
+
+Historical stop before test-isolation approval: **HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01 — WAITING OWNER
+CLARIFICATION ON ISOLATED FULL-TEST SCOPE / ROLLOUT BLOCKED**. Owner authorizes exactly the Review snapshot
+and TASK_UNASSIGNED notification0003 targets after fresh full regression, real
+development backup and isolated restore/migration rehearsal, exact plans and
+verified old-writer shutdown. Fresh inventory/scoped plans/read-only preservation
+pass as recorded below; full backend, backup/hash/restore, execution and
+new-backend GET smoke remain unperformed in [HANDOVER](HANDOVER.md). Prior
+preflight evidence is not a new full test result
+or a restored-backup rehearsal. No ai.0002, general migrate, automatic rollback,
+restore-over-development, production/deployment or next feature is authorized.
+Successful rollout still ends with Owner manual UI acceptance pending.
+
+Fresh frontend1182/1182 PASS46.46s and typecheck/lint112/build0; read-only Django
+preflight06:03:20Z confirms37migrations and exact single-candidate/noAI plans,
+valid schema guards and no model drift. Fresh development has5Tasks/3Deliverables/
+0Reviews/9Notifications/42Audits, not the old4Task checkpoint. Full backend has
+not run because AI governance tests need ai.0002 on disposable PostgreSQL and
+the prompt's AI-migration ban needs scope clarification. The single pending
+question is about that test database only, not renewed candidate rollout approval.
+No new backup/actual restore/apply has occurred. Keep development preserved and
+resume only after the clarification resolves the full-regression gate.
+Final read-only06:05:25Z confirms the rollout baseline fingerprint unchanged:
+886193d95cb05c6cbc54ffed2e481ac97d9652452b78463b5f46d7d21bb81937,
+29tables/37migrations retained; candidates/ai.0002 UNAPPLIED. No process stopped
+or backend startup occurred. Current result: ROLLOUT BLOCKED — DEVELOPMENT STATE
+PRESERVED, with archive/rehearsal/full backend/execution NOT EXECUTED.
+
+Historical task: **HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT — BUSINESS PASS /
+MIGRATION PREFLIGHT PASS WITH COORDINATED WRITER STOP REQUIRED**.
+Unassign now resets to PENDING per the Owner-supplied SRS V3 section4.2.1.
+Fresh guarded business/security/migration preflight158/158 PASS, launcher/Python0;
+full frontend1182 PASS, guarded real browser4/4 PASS47.7s and actual exits0/owned
+cleanup. Typecheck/lint112/build0 (Vite10.33s, chunk639.43kB advisory). Final
+read-only preservation05:43:43Z PASS, exact29-table fingerprint and37migrations
+retained; both candidates and ai.0002 remain UNAPPLIED, tasks.0005 APPLIED,0owned
+resources. Development approval stays PENDING.
+The isolated37-record baseline matches development schema, exact plans apply only
+the two candidates and finish39 without ai.0002. This is not a backup/restore
+rehearsal or safe mixed-version writer/automatic-rollback approval. The earlier
+preserve-status choice is superseded; prior full1051 is historical, not rerun here.
+No development migration is authorized.
+Stop at OWNER APPROVAL GATE; [HANDOVER](HANDOVER.md) records actual fresh results.
+
+Historical task: **HT-TASK-REASSIGN-ANALYTICS-V1 — IMPLEMENTATION COMPLETE /
+PENDING DEVELOPMENT MIGRATION APPROVAL — OWNER REVIEW GATE**.
+Reuses existing locked Task assignment and Review workflow; adds confirmed
+transfer/unassign and real scoped analytics, exact VND totals and approved-work
+uploader attribution. React Thống kê is between Tổ chức and Thông báo. Two
+candidate leaves add future approval compensation snapshots and TASK_UNASSIGNED;
+legacy compensation stays unknown. Fresh full PostgreSQL1051/frontend1181 and
+41real browser cases across9 final passing suites PASS, actual exits0; quality,
+four-size accessibility/visual checks and resume→final development preservation
+verified. November10→13 independent AuditLog activity is distinguished from
+resume preservation. Definitions and evidence: [task design](TASK_REASSIGN_ANALYTICS_V1.md),
+[HANDOVER](HANDOVER.md).
+
+Development rollout of reviews.0003 and notifications.0003 requires separate
+Owner approval, fresh backup and isolated restore/migration rehearsal. No general
+migrate or ai.0002 apply. tasks.0005 remains APPLIED. Do not restart persistent
+development onto schema-dependent new Review code before that rollout. Owner
+UI acceptance follows approved rollout; no automatic AI/Project/next-task work.
+
+Historical task: **HT-FE-TASK-ASSIGNEE-NAME-FIX-01 — IMPLEMENTATION COMPLETE / OWNER REVIEW GATE**.
 The assignee fallback was caused by an old --noreload Django server serving
 localhost. Current name/username/DTO/cache logic is retained. One verified fresh
 server now handles direct/proxy traffic; launcher refuses an occupied port before

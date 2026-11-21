@@ -92,6 +92,23 @@ Run-Test 'child process uses existing venv, loopback, check or runserver only' {
     Assert-True ($htInfo.Arguments -eq 'manage.py runserver 127.0.0.1:8123 --noreload') 'loopback server'
     Expect-Failure { New-HustlyDevelopmentProcessInfo $htRoot (New-TestValues) 'migrate' } 'Unsupported' 'migration command refused'
 }
+Run-Test 'Trash purge is not inherited from the terminal' {
+    $htNames = @('DJANGO_TRASH_PURGE_ENABLED', 'TRASH_PURGE_ENABLED')
+    $htOriginal = @{}
+    foreach ($htName in $htNames) { $htOriginal[$htName] = [Environment]::GetEnvironmentVariable($htName, 'Process') }
+    try {
+        foreach ($htName in $htNames) { [Environment]::SetEnvironmentVariable($htName, 'true', 'Process') }
+        $htValues = New-TestValues
+        $htInfo = New-HustlyDevelopmentProcessInfo (Get-Location).Path $htValues 'check'
+        foreach ($htName in $htNames) { Assert-True (-not $htInfo.EnvironmentVariables.ContainsKey($htName)) 'inherited purge flag removed' }
+        $htParsed = Read-HustlyDevelopmentEnvironment @('DJANGO_TRASH_PURGE_ENABLED=false')
+        $htValues.DJANGO_TRASH_PURGE_ENABLED = $htParsed.DJANGO_TRASH_PURGE_ENABLED
+        $htInfo = New-HustlyDevelopmentProcessInfo (Get-Location).Path $htValues 'check'
+        Assert-True ($htInfo.EnvironmentVariables['DJANGO_TRASH_PURGE_ENABLED'] -ceq 'false') 'selected purge flag preserved'
+    } finally {
+        foreach ($htName in $htNames) { [Environment]::SetEnvironmentVariable($htName, $htOriginal[$htName], 'Process') }
+    }
+}
 Run-Test 'child environment is isolated and security settings are preserved' {
     $htNames = @('DJANGO_SETTINGS_MODULE', 'DJANGO_SECRET_KEY', 'PGSERVICE', 'PYTHONPATH')
     $htOriginal = @{}

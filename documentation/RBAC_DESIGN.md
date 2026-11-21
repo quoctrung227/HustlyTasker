@@ -1,5 +1,154 @@
 # HT-RBAC-DESIGN-P0-01
 
+## Trash V1 verified authority — 2026-11-20
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+The separately approved workspace0006/tasks0006 development rollout is complete;
+purge and scheduler activation remain unapproved. Permissions below did not change
+in rollout; [evidence and manual gate](TRASH_V1_ROLLOUT.md) are recorded separately.
+Reuse current tenant governance rather than adding a role or staff
+bypass. SessionAuthentication/CSRF and service-side revalidation remain.
+
+| Target / action | Current required authority |
+|---|---|
+| Profile soft-delete/restore | Active legitimate Profile OWNER |
+| Workspace soft-delete/restore | Active legitimate Profile OWNER/ADMIN |
+| Task soft-delete/restore | Active Profile OWNER/ADMIN or effective Workspace ADMIN |
+| Any manual purge | Active Profile OWNER, explicit confirmation,720hours elapsed, enabled purge and no retention/FK blocker |
+| Periodic purge | Explicitly enabled command execution; same deadline/dependency checks and audit, no HTTP actor bypass |
+
+Normal business routes exclude explicit or inherited deletion; archive retains
+its existing separate read/lifecycle policy. Trash can expose only authorized
+management metadata even when the parent Profile is not normally selectable.
+Current membership/identity is checked again, not inferred from UUID, historical
+ownership, is_staff, a cached capability or Notification. Restore clears only
+its own deletion fields; it does not activate membership/assignment or independently
+deleted descendants. No compensation amount is added to Trash DTOs.
+
+Any Review, financial/completed history, Invitation retention or unresolved
+reference blocks purge. AuditLog is preserved; no financial ledger or tenant-wide
+global User deletion is authorized. New default-false purge flag and disabled
+schedule export are safeguards, not Owner rollout approval. Focused/full backend
+and current browser role/CSRF checks pass; see [design](TRASH_V1_DESIGN.md) and
+[HANDOVER](HANDOVER.md).
+
+## Current Invitation V2 security contract — 2026-11-13
+
+**HT-ORG-INVITATION-V2 — DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+Owner D01–D07 supersede the historical token-only new-create/resend and recipient-
+inbox proposals below for current source. Legacy token requirements remain only
+for pre-existing EMAIL_TOKEN records until actual expiry. See the approved
+[Invitation V2 specification](ORG_INVITATION_V2.md) and exact
+[API contract](API_DOCUMENTATION.md). This changes no Task/compensation authority.
+
+| Operation | Current server authority and boundary |
+|---|---|
+| Directory/search | Active Profile Owner/Admin with existing invitation authority; ordinary MEMBER, Workspace-only manager and staff-only accounts denied. Safe account labels, fixed20/page and durable30requests/user/minute; no full email/phone/verification/other-tenant data |
+| New ACCOUNT invitation | Current Owner→ADMIN/MEMBER; Admin→MEMBER only. Strict recipient_user_id/requested_role; server owns tenant/inviter/state/expiry. No membership or Workspace access before accept |
+| Own inbox/detail and invitation Notification | Exact active authenticated recipient may read minimal ACCOUNT context before any membership; wrong account or legacy-by-ID remains404. This is not permission to read the invited Profile/Workspace/Task |
+| Accept | Revalidate recipient, active Profile, inviter authority, requested role, lifecycle and existing fail-closed rejoin policy under locks. Atomic membership/audit; current-month MEMBER Workspace grant only after valid accept, inherited ADMIN preserved; stale Workspace access soft-revoked on rejoin, revoked rows never revived |
+| Replay/decline/read | Accepted replay creates no membership/audit or revoked-access regrant; decline creates no membership. Notification read is independent and never accept; current access capability cannot be inferred from historical ACCEPTED |
+| Mail/retry | SMTP cannot veto a committed Web Invitation/Notification. Retry same ACCOUNT pending ID/role/expiry/read-state with current active recipient/current email, capped3attempts/24h. No code/token/automatic accept; no new public legacy issuance or expiry extension |
+
+SessionAuthentication/CSRF and tenant-scoped services remain authoritative; the
+React capability response is only a UI hint. PostgreSQL locks/durable records
+enforce30invites/inviter/24h and5/recipient-account/24h across workers, with
+TTL7days. Typed Notification checks keep the existing Task authorization branch
+separate; no fake Task, staff bypass or global tenant grant was introduced.
+
+Previous implementation full isolated PostgreSQL1108/1108,frontend1236/1236 and
+six browser suites25/25 PASS are historical, not rerun by this rollout. The exact
+workspace0005/notifications0004 targets are now APPLIED development with original
+business/permission state preserved; no AI2 or additional membership grant.
+Current19isolated synthetic API/service checks,5read-only existing-Owner handler
+GETs and25anonymous direct/proxy HTTP GET checks pass, exits0. Positive directory
+GET is tested only on the isolated clone because it persists a quota row. This
+is not actual authenticated development browser/session or Owner acceptance.
+See [rollout evidence](ORG_INVITATION_V2_ROLLOUT.md) and [HANDOVER](HANDOVER.md).
+No real email was sent or SMTP/authentication policy changed.
+The earlier Invitation sections below are legacy/design history where they
+conflict with this approved current contract. Do not apply their old token-create,
+replacement-resend or SENT-prerequisite rules to ACCOUNT invitations.
+
+## Owner preflight correction — 2026-11-13
+
+HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT applies the Owner-supplied SRS V3
+section4.2.1. Unassign must reset ASSIGNED/WORKING→PENDING; the earlier preserve-
+status interpretation is superseded. This changes a workflow transition, not
+who may act or read money. Current manager/tenant/lifecycle checks, assignment
+CAS/locking, history and atomic notification/audit boundaries stay authoritative.
+Fresh guarded business/security/migration regression158/158 PASS, launcher/Python0;
+full frontend1182 and guarded real browser4/4 PASS, typecheck/lint112/build0,
+actual test/launcher/backend exits0 and owned cleanup. Business PASS and migration
+preflight PASS require coordinated old-writer stop. Final read-only preservation
+05:43:43Z PASS: exact29-table fingerprint/37migrations retained, candidates and
+ai.0002 UNAPPLIED, tasks.0005 APPLIED,0owned resources. [HANDOVER](HANDOVER.md)
+owns receipts; earlier counts below are historical for the
+previous implementation. No development migration is granted.
+
+## HT-TASK-REASSIGN-ANALYTICS-V1 — Responsibility and analytics (2026-11-13)
+
+Current candidate source reuses existing SessionAuthentication/CSRF, tenant access
+contexts, manager services and lifecycle checks; it creates no role, staff bypass
+or client-controlled authority. Development application remains separately gated.
+Final isolated PostgreSQL1051, frontend1181 and real browser41 checks PASS with
+actual test/launcher exits0; current evidence and retained initial failure attempts
+are in [HANDOVER](HANDOVER.md). **IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT
+MIGRATION APPROVAL — OWNER REVIEW GATE** does not grant development mutation or
+deployment authorization.
+
+Assign/transfer/unassign require a current legitimate Task manager and active
+Profile/Workspace lifecycle. The target is an active User with active ordinary
+Profile MEMBER and effective Workspace MEMBER(Editor) eligibility. Knowledge of
+Task/membership UUIDs is insufficient. The service rechecks scope under existing
+tenant/Task locks, accepts at most one active assignment and verifies the new
+UI's expected assignment ID plus aware assigned_at. Stale/ABA snapshots return409.
+Optional4000-character reason changes no permission. Read DTO can_assign/
+can_unassign are UI hints and never authorize a later mutation.
+
+Allowed Task states stay PENDING/ASSIGNED/WORKING. Reassign retains ASSIGNED;
+unassign removes current responsibility and resets ASSIGNED/WORKING to PENDING
+(PENDING stays PENDING), preserving all submission/review/assignment history. REVIEW,
+COMPLETED and CANCELLED reject both, protecting pending decisions and accepted
+credit. Request Changes must occur through the existing authorized review flow.
+No parent/child cascade, old submission-author change, review bypass, self-review
+exception or compensation-write permission is added. Old/new recipients receive
+only eligible current-context Notifications in the same transaction; the actor
+is excluded from self-notification and a revoked recipient gains no access.
+
+| Current actor | Analytics scope | Financial payload | Employee results |
+|---|---|---|---|
+| Profile OWNER/ADMIN | Management over current readable Profile Workspaces or selected Workspace | Existing manager scope only | Scoped active/current/historical rows |
+| Profile MEMBER + selected Workspace ADMIN | Management in that exact Workspace | Existing Workspace manager scope | Same selected Workspace |
+| Ordinary member with all-Workspace selected | SELF, even if managing one Workspace | Only Tasks entitled by current existing pay rules | Own row only |
+| Profile MEMBER + Workspace MEMBER | SELF current responsibility/own approved credit | Current eligible assignment or managed Workspace amounts only; historical authorship alone grants no money | Own row only |
+| Workspace VIEWER | SELF, where current Task-read eligibility exists | finance=null; no coworker amounts or money sorting | Own row only |
+| Revoked/inactive/foreign tenant | Existing scoped denial/404 | None | None |
+
+The all-Workspace SELF rule prevents a manager in one Workspace gaining coworkers'
+data in another. Current SQL authority predicates protect against a Profile or
+Workspace role downgrade between context resolution and query evaluation. SELF
+approval events and accepted KPI also require the current actor's uploader
+identity; a legacy assignment pointing to somebody else's approved work is not
+completion credit. Existing archived-context read rules are retained; mutations
+remain blocked, without broadening archive access.
+
+Accepted credit is canonical Deliverable.uploaded_by at approved Review.created_at,
+not current TaskAssignment. Financial totals expose exact strings and coverage:
+new approval snapshot, unpriced approval, unknown legacy amount. No current-price
+backfill, wage/payment claim or coworker payload hidden only by CSS. Unavailable
+historical names are null; search uses only safe disclosable labels and does not
+become an email/global-User directory. Staff and Notification targets are not
+tenant authority.
+
+React keys include User/Profile/Workspace/date plus server authority for employee
+and detail data. A current scope/role denial removes private analytics caches and
+requires explicit recovery instead of a refetch loop; backend authorization still
+decides every GET/mutation. No realtime revocation or repeatable-read multiquery
+snapshot guarantee is claimed. Final tests and preservation are tracked in
+[HANDOVER](HANDOVER.md); candidate development rollout is not authorized here.
+
 ## HT-FE-TASK-UX-REFINEMENT-01 — Scoped display only (2026-11-10)
 
 Task active_assignment.display_name is read-only display data, not permission.

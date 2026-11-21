@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db.models import Exists, OuterRef, Q
+from apps.common.deletion import task_live_q
 
 from apps.workspace.access import (
     TenantAccessNotFound,
@@ -31,7 +32,7 @@ def tasks_visible_to(context):
         id=context.workspace_id,
     ).values("id")
 
-    return Task.objects.filter(
+    return Task.objects.filter(task_live_q()).filter(
         workspace_id__in=visible_workspace_ids,
     )
 

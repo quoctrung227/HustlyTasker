@@ -7,6 +7,7 @@ import { isApiError } from '../../services/api/client'
 import { notificationApi, notificationKeys, notificationTaskPath } from '../../services/api/collaboration'
 import type { AppNotification } from '../../services/api/collaboration'
 import type { Page } from '../../services/api/types'
+import { InvitationDecision, invitationRoleLabels } from '../members/InvitationDecision'
 
 export function useUnreadCount(userId: string) {
   return useQuery({ queryKey: notificationKeys.unreadCount(userId), queryFn: ({ signal }) => notificationApi.unreadCount(signal), enabled: !!userId, staleTime: 0 })
@@ -49,7 +50,7 @@ function ScopedNotificationFeed({ userId, preview = false, onNavigate }: { userI
         await cache.cancelQueries({ queryKey: [...notificationKeys.user(userId), 'feed'] })
         if (controller.signal.aborted) return
         // A denied target is no longer safe to display from cached pages.
-        cache.setQueriesData<Page<AppNotification>>({ queryKey: [...notificationKeys.user(userId), 'feed'] }, (old) => old ? { ...old, results: old.results.filter((row) => row.profile_id !== item.profile_id || row.workspace_id !== item.workspace_id) } : old)
+        cache.setQueriesData<Page<AppNotification>>({ queryKey: [...notificationKeys.user(userId), 'feed'] }, (old) => old ? { ...old, results: old.results.filter((row) => item.target_type === 'PROFILE_INVITATION' ? row.id !== item.id : row.profile_id !== item.profile_id || row.workspace_id !== item.workspace_id) } : old)
         void cache.invalidateQueries({ queryKey: notificationKeys.user(userId) })
       }
     } finally { if (!controller.signal.aborted) { request.current = null; setBusyId('') } }
@@ -64,7 +65,14 @@ function ScopedNotificationFeed({ userId, preview = false, onNavigate }: { userI
       <ul className="notification-list">{rows.map((item) => <li key={item.id}><Card className={`notification-item${item.is_read ? '' : ' notification-item--unread'}`}><article aria-label={item.title}>
         <div className="collaboration-meta"><span className="collaboration-status">{item.is_read ? 'Đã đọc' : 'Chưa đọc'}</span><time dateTime={item.created_at}>{timeLabel(item.created_at)}</time></div>
         <h3>{item.title}</h3><p className="notification-message">{item.message}</p>
-        <div className="work-actions"><Link className="text-link" to={notificationTaskPath(item)} onClick={onNavigate}>Mở công việc</Link>{!item.is_read && <Button variant="secondary" busy={busyId === item.id} disabled={!!busyId} onClick={() => void markRead(item)}>Đánh dấu đã đọc</Button>}</div>
+        {item.target_type === 'PROFILE_INVITATION' && <>
+          <p className="preserve-text">Tổ chức <strong>{item.invitation.profile_name}</strong> · Người mời {item.invitation.inviter_display_label} · {invitationRoleLabels[item.invitation.requested_role]}</p>
+          <InvitationDecision key={`${userId}:${item.invitation_id}`} userId={userId} invitation={item.invitation} onNavigate={onNavigate} />
+        </>}
+        <div className="work-actions">{item.target_type === 'PROFILE_INVITATION'
+          ? <Link className="text-link" to={`/invitations/${item.invitation_id}`} onClick={onNavigate}>Xem lời mời</Link>
+          : <Link className="text-link" to={notificationTaskPath(item)} onClick={onNavigate}>Mở công việc</Link>}
+          {!item.is_read && <Button variant="secondary" busy={busyId === item.id} disabled={!!busyId} onClick={() => void markRead(item)}>Đánh dấu đã đọc</Button>}</div>
       </article></Card></li>)}</ul>
       {preview ? <p className="field__hint">Hiển thị tối đa 5 thông báo trên trang đầu.</p> : <Pagination page={page} count={query.data.count} onPageChange={setPage} disabled={!!busyId} />}
     </>}

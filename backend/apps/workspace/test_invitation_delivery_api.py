@@ -1,38 +1,28 @@
-"""Real commit/API delivery outcomes; all mail transport stays isolated/fake."""
-
-import hashlib
+"""Real-commit ACCOUNT invitation mail tests; transport is locmem/mock only."""
 import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.cache import cache
-from django.db import connection
+from django.db import connection, transaction
 from django.test import override_settings
 from django.urls import reverse
-from rest_framework import status
 from rest_framework.test import APIClient, APITransactionTestCase
 
 from apps.audit.models import AuditLog
-
-from .models import ProfileInvitation, ProfileMembership
+from apps.notifications.models import Notification
+from .account_invitations import create_account_invitation
+from .models import InvitationEmailAttempt, ProfileInvitation, ProfileMembership
 from .services import create_profile_with_owner
 
-
 User = get_user_model()
-LOCMEM_MAILER = {
-    "default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"},
-}
-SMTP_MAILER = {
-    "default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend"},
-}
-DELIVERY_DETAIL = {"detail": "Invitation delivery is currently unavailable."}
+LOCMEM_MAILER = {"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}}
+SMTP_MAILER = {"default": {"BACKEND": "django.core.mail.backends.smtp.EmailBackend"}}
 
 
 @override_settings(MAILERS=LOCMEM_MAILER, DEFAULT_FROM_EMAIL="robot@example.test")
 class InvitationDeliveryApiTests(APITransactionTestCase):
-    """Unlike APITestCase, POST exits a real transaction before returning HTTP."""
-
     def setUp(self):
         cache.clear()
         mail.outbox = []
@@ -40,25 +30,14 @@ class InvitationDeliveryApiTests(APITransactionTestCase):
         self.admin = self.user("admin")
         self.member = self.user("member")
         self.other_owner = self.user("other-owner")
-        self.profile = create_profile_with_owner(
-            name="Delivery API isolated Profile", owner=self.owner,
-        )
-        self.other_profile = create_profile_with_owner(
-            name="Delivery API other Profile", owner=self.other_owner,
-        )
-        ProfileMembership.objects.create(
-            profile=self.profile, user=self.admin, role=ProfileMembership.Role.ADMIN,
-        )
-        ProfileMembership.objects.create(
-            profile=self.profile, user=self.member, role=ProfileMembership.Role.MEMBER,
-        )
-        self.recipient = "delivery-recipient@example.test"
+        self.recipient_user = self.user("recipient")
+        self.recipient = self.recipient_user.email
+        self.profile = create_profile_with_owner(name="Delivery API isolated Profile", owner=self.owner)
+        self.other_profile = create_profile_with_owner(name="Delivery API other Profile", owner=self.other_owner)
+        ProfileMembership.objects.create(profile=self.profile, user=self.admin, role="ADMIN")
+        ProfileMembership.objects.create(profile=self.profile, user=self.member, role="MEMBER")
         self.client.force_login(self.owner)
-        # No test can open SMTP, even if a sender mock is accidentally removed.
-        guard = patch(
-            "django.core.mail.backends.smtp.EmailBackend.open",
-            side_effect=AssertionError("Live SMTP is forbidden in isolated tests."),
-        )
+        guard = patch("django.core.mail.backends.smtp.EmailBackend.open", side_effect=AssertionError("Live SMTP forbidden in isolated tests"))
         self.smtp_open = guard.start()
         self.addCleanup(guard.stop)
         self.addCleanup(self.smtp_open.assert_not_called)
@@ -66,256 +45,189 @@ class InvitationDeliveryApiTests(APITransactionTestCase):
 
     @staticmethod
     def user(suffix):
-        # Session force_login needs no usable password or external credentials.
-        return User.objects.create_user(
-            username=f"delivery-api-{suffix}",
-            email=f"delivery-api-{suffix}@example.test",
-        )
+        return User.objects.create_user(username=f"delivery-api-{suffix}", email=f"delivery-api-{suffix}@example.test")
 
     def list_url(self, profile_id=None):
-        return reverse("workspace:profile-invitation-list", kwargs={
-            "profile_id": profile_id or self.profile.id,
-        })
+        return reverse("workspace:profile-invitation-list", kwargs={"profile_id": profile_id or self.profile.pk})
 
     def resend_url(self, invitation_id):
-        return reverse("workspace:profile-invitation-resend", kwargs={
-            "profile_id": self.profile.id, "invitation_id": invitation_id,
-        })
+        return reverse("workspace:profile-invitation-resend", kwargs={"profile_id": self.profile.pk, "invitation_id": invitation_id})
 
-    def create(self, *, recipient=None, role=ProfileInvitation.Role.MEMBER, client=None):
-        return (client or self.client).post(self.list_url(), {
-            "recipient_email": recipient or self.recipient,
-            "requested_role": role,
-        }, format="json")
-
-    def assert_unavailable(self, response):
-        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
-        self.assertEqual(response.data, DELIVERY_DETAIL)
-        self.assertIn("no-store", response.headers.get("Cache-Control", ""))
+    def create(self, *, recipient=None, role="MEMBER", client=None):
+        target = self.recipient_user
+        if recipient and recipient != target.email:
+            target = User.objects.create_user(username="delivery-target-"+str(User.objects.count()), email=recipient)
+        return (client or self.client).post(self.list_url(), {"recipient_user_id": str(target.pk), "requested_role": role}, format="json")
 
     def assert_failed(self, invitation):
         invitation.refresh_from_db()
-        self.assertEqual(invitation.status, ProfileInvitation.Status.PENDING)
-        self.assertEqual(invitation.delivery_status, ProfileInvitation.DeliveryStatus.FAILED)
+        self.assertEqual(invitation.status, "PENDING")
+        self.assertEqual(invitation.delivery_status, "FAILED")
         self.assertIsNotNone(invitation.delivery_attempted_at)
         self.assertIsNone(invitation.delivered_at)
 
-    def test_unsafe_development_backends_fail_before_token_row_audit_or_send(self):
-        baseline_audit = AuditLog.objects.count()
-        with patch("apps.workspace.invitation_services.secrets.token_urlsafe") as token, patch(
-            "apps.common.email_delivery.EmailMessage.send",
-        ) as sender:
-            for backend in ("console", "dummy", "filebased"):
-                with self.subTest(backend=backend), self.settings(MAILERS={
-                    "default": {"BACKEND": f"django.core.mail.backends.{backend}.EmailBackend"},
-                }):
-                    self.assert_unavailable(self.create())
+    def test_unsafe_development_backends_keep_web_invitation_and_never_issue_token_or_send(self):
+        with patch("apps.workspace.invitation_services.secrets.token_urlsafe") as token, patch("apps.common.email_delivery.EmailMessage.send") as sender:
+            for index, backend in enumerate(("console", "dummy", "filebased")):
+                with self.subTest(backend=backend), self.settings(MAILERS={"default": {"BACKEND": f"django.core.mail.backends.{backend}.EmailBackend"}}):
+                    response = self.create(recipient=f"unavailable-{index}@example.test")
+                    self.assertEqual(response.status_code, 201)
+                    self.assertEqual(response.data["delivery_status"], "FAILED")
+                    self.assertIn("no-store", response.headers["Cache-Control"])
             token.assert_not_called()
             sender.assert_not_called()
-        self.assertEqual(ProfileInvitation.objects.count(), 0)
-        self.assertEqual(AuditLog.objects.count(), baseline_audit)
-        listed = self.client.get(self.list_url())
-        self.assertEqual(listed.status_code, status.HTTP_200_OK)
-        self.assertEqual(listed.data["results"], [])
+        self.assertEqual(ProfileInvitation.objects.count(), 3)
+        self.assertEqual(Notification.objects.filter(event_type="PROFILE_INVITED").count(), 3)
+        self.assertTrue(all(row["delivery_status"] == "FAILED" for row in self.client.get(self.list_url()).data["results"]))
 
-    def test_locmem_success_is_committed_sent_and_never_returns_raw_credential(self):
-        # Locmem proves adapter acceptance only, not genuine mailbox delivery.
-        token = "L" * 43
-        with patch("apps.workspace.invitation_services.secrets.token_urlsafe", return_value=token):
+    def test_locmem_success_commits_sent_notification_only_mail_and_no_credential(self):
+        with patch("apps.workspace.invitation_services.secrets.token_urlsafe") as token:
             response = self.create()
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.status_code, 201)
         invitation = ProfileInvitation.objects.get()
-        self.assertEqual(invitation.delivery_status, ProfileInvitation.DeliveryStatus.SENT)
+        self.assertEqual(invitation.delivery_status, "SENT")
         self.assertIsNotNone(invitation.delivered_at)
+        self.assertIsNone(invitation.token_digest)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [self.recipient])
-        self.assertIn(token, mail.outbox[0].body)
-        self.assertEqual(invitation.token_digest, hashlib.sha256(token.encode()).hexdigest())
-        self.assertNotIn(token, json.dumps(response.data))
+        self.assertIn("/invitations", mail.outbox[0].body)
+        self.assertNotIn("token", mail.outbox[0].body.lower())
+        self.assertNotIn("/accept", mail.outbox[0].body)
         self.assertNotIn("token_digest", response.data)
-        self.assertNotIn("token", response.data)
-        self.assertTrue(AuditLog.objects.filter(
-            entity_id=invitation.id, action="profile.invitation.created",
-        ).exists())
+        self.assertIsNone(response.data["recipient_email"])
+        token.assert_not_called()
 
     @override_settings(MAILERS=SMTP_MAILER)
-    def test_transport_error_returns_503_after_commit_and_failed_row_is_listed(self):
-        token = "F" * 43
-        provider_detail = "synthetic-private-provider-diagnostic"
+    def test_transport_failure_after_business_commit_returns_created_and_persists_web_notification(self):
         observed = []
-
-        def fail_after_commit(*args, **kwargs):
-            persisted = ProfileInvitation.objects.get()
-            observed.append({
-                "inside_atomic": connection.in_atomic_block,
-                "delivery_status": persisted.delivery_status,
-                "audit_committed": AuditLog.objects.filter(
-                    entity_id=persisted.id, action="profile.invitation.created",
-                ).exists(),
-            })
-            raise RuntimeError(provider_detail)
-
-        with patch("apps.workspace.invitation_services.secrets.token_urlsafe", return_value=token), patch(
-            "apps.common.email_delivery.EmailMessage.send", side_effect=fail_after_commit,
-        ) as sender:
+        def fail_after_business_commit(*args, **kwargs):
+            # Delivery uses its own bounded atomic section; prove the earlier
+            # business commit is visible from an independent test connection.
+            observer = connection.copy(alias="invitation_mail_commit_observer")
+            try:
+                with observer.cursor() as cursor:
+                    cursor.execute("SELECT count(*) FROM workspace_profileinvitation")
+                    invitations = cursor.fetchone()[0]
+                    cursor.execute("SELECT count(*) FROM notifications_notification WHERE event_type='PROFILE_INVITED'")
+                    notifications = cursor.fetchone()[0]
+                observed.append((invitations, notifications))
+            finally:
+                observer.close()
+            raise RuntimeError("synthetic-private-provider-diagnostic")
+        with patch("apps.common.email_delivery.EmailMessage.send", side_effect=fail_after_business_commit) as sender:
             response = self.create()
-        self.assert_unavailable(response)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(observed, [(1, 1)])
         sender.assert_called_once_with(fail_silently=False, using="default")
-        # Assert outside the mailer's broad exception sanitizer so a failed
-        # test assertion cannot be mistaken for an intended transport error.
-        self.assertEqual(observed, [{
-            "inside_atomic": False, "delivery_status": "QUEUED", "audit_committed": True,
-        }])
-        invitation = ProfileInvitation.objects.get()
-        self.assert_failed(invitation)
-        serialized = json.dumps(response.data)
-        for private in (token, invitation.token_digest, provider_detail, self.recipient):
-            self.assertNotIn(private, serialized)
-        audit = json.dumps(list(AuditLog.objects.filter(
-            entity_name="ProfileInvitation",
-        ).values_list("metadata", flat=True)))
-        self.assertNotIn(token, audit)
-        self.assertNotIn(provider_detail, audit)
-        listed = self.client.get(self.list_url())
-        self.assertEqual(listed.status_code, status.HTTP_200_OK)
-        self.assertEqual(listed.data["count"], 1)
-        self.assertEqual(listed.data["results"][0]["id"], str(invitation.id))
-        self.assertEqual(listed.data["results"][0]["status"], "PENDING")
-        self.assertEqual(listed.data["results"][0]["delivery_status"], "FAILED")
+        self.assert_failed(ProfileInvitation.objects.get())
+        self.assertNotIn("synthetic-private-provider-diagnostic", json.dumps(response.data))
+        self.assertIsNone(response.data["recipient_email"])
+        self.client.force_login(self.recipient_user)
+        rows = self.client.get(reverse("workspace:profile-invitation-recipient-list"))
+        self.assertEqual(rows.data["count"], 1)
+        self.assertTrue(rows.data["results"][0]["can_accept"])
 
     @override_settings(MAILERS=SMTP_MAILER)
-    def test_transport_accepting_zero_messages_is_not_reported_as_sent(self):
+    def test_zero_messages_is_failed_delivery_but_still_web_created(self):
         with patch("apps.common.email_delivery.EmailMessage.send", return_value=0) as sender:
             response = self.create()
-        self.assert_unavailable(response)
-        sender.assert_called_once_with(fail_silently=False, using="default")
+        self.assertEqual(response.status_code, 201)
         self.assert_failed(ProfileInvitation.objects.get())
-        self.assertEqual(len(mail.outbox), 0)
+        sender.assert_called_once_with(fail_silently=False, using="default")
 
     @override_settings(MAILERS=SMTP_MAILER)
-    def test_repeating_create_after_delivery_failure_conflicts_without_sending_twice(self):
+    def test_repeated_create_after_mail_failure_conflicts_without_duplicate_notification(self):
         with patch("apps.common.email_delivery.EmailMessage.send", side_effect=RuntimeError("synthetic failure")) as sender:
-            self.assert_unavailable(self.create())
-            repeated = self.create()
-        self.assertEqual(repeated.status_code, status.HTTP_409_CONFLICT)
+            self.assertEqual(self.create().status_code, 201)
+            self.assertEqual(self.create().status_code, 409)
         self.assertEqual(sender.call_count, 1)
         self.assertEqual(ProfileInvitation.objects.count(), 1)
-        self.assert_failed(ProfileInvitation.objects.get())
+        self.assertEqual(Notification.objects.filter(event_type="PROFILE_INVITED").count(), 1)
         self.assertEqual(AuditLog.objects.filter(action="profile.invitation.created").count(), 1)
 
     @override_settings(MAILERS=SMTP_MAILER)
-    def test_failed_delivery_resend_rotates_once_and_old_resend_cannot_replay(self):
+    def test_successful_retry_keeps_same_invitation_expiry_and_notification_read_state(self):
         with patch("apps.common.email_delivery.EmailMessage.send", side_effect=[RuntimeError("synthetic failure"), 1]) as sender:
-            self.assert_unavailable(self.create())
-            failed = ProfileInvitation.objects.get()
-            old_digest = failed.token_digest
-            response = self.client.post(self.resend_url(failed.id), {}, format="json")
-            replay = self.client.post(self.resend_url(failed.id), {}, format="json")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(replay.status_code, status.HTTP_409_CONFLICT)
+            self.assertEqual(self.create().status_code, 201)
+            invitation = ProfileInvitation.objects.get()
+            expiry = invitation.expires_at
+            Notification.objects.filter(invitation=invitation).update(is_read=True)
+            response = self.client.post(self.resend_url(invitation.pk), {}, format="json")
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(sender.call_count, 2)
-        replacement = ProfileInvitation.objects.get(replaces=failed)
-        failed.refresh_from_db()
-        self.assertEqual(failed.status, ProfileInvitation.Status.REVOKED)
-        self.assertEqual(failed.delivery_status, ProfileInvitation.DeliveryStatus.FAILED)
-        self.assertEqual(replacement.delivery_status, ProfileInvitation.DeliveryStatus.SENT)
-        self.assertIsNotNone(replacement.delivered_at)
-        self.assertNotEqual(replacement.id, failed.id)
-        self.assertNotEqual(replacement.token_digest, old_digest)
-        self.assertEqual(response.data["id"], str(replacement.id))
-        self.assertEqual(ProfileInvitation.objects.count(), 2)
-        self.assertEqual(ProfileInvitation.objects.filter(status="PENDING").count(), 1)
-        listed = self.client.get(self.list_url())
-        self.assertEqual({item["id"] for item in listed.data["results"]}, {
-            str(failed.id), str(replacement.id),
-        })
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.delivery_status, "SENT")
+        self.assertEqual(invitation.expires_at, expiry)
+        self.assertEqual(response.data["id"], str(invitation.pk))
+        self.assertEqual(ProfileInvitation.objects.count(), 1)
+        self.assertEqual(InvitationEmailAttempt.objects.count(), 2)
+        self.assertTrue(Notification.objects.get(invitation=invitation).is_read)
 
-    def test_unavailable_resend_preserves_failed_row_and_audit_without_rotation(self):
-        with self.settings(MAILERS=SMTP_MAILER), patch(
-            "apps.common.email_delivery.EmailMessage.send", return_value=0,
-        ):
-            self.assert_unavailable(self.create())
-        failed = ProfileInvitation.objects.get()
-        fields = ("id", "status", "delivery_status", "token_digest", "updated_at", "replaces_id")
-        before = ProfileInvitation.objects.values(*fields).get(id=failed.id)
-        before_audit = AuditLog.objects.count()
-        with self.settings(MAILERS={"default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}}), patch(
-            "apps.workspace.invitation_services.secrets.token_urlsafe",
-        ) as token, patch("apps.common.email_delivery.EmailMessage.send") as sender:
-            response = self.client.post(self.resend_url(failed.id), {}, format="json")
-        self.assert_unavailable(response)
-        token.assert_not_called()
-        sender.assert_not_called()
-        self.assertEqual(ProfileInvitation.objects.values(*fields).get(id=failed.id), before)
-        self.assertEqual(AuditLog.objects.count(), before_audit)
+    def test_unavailable_retry_records_truthful_failure_and_uses_bounded_attempts(self):
+        self.assertEqual(self.create().status_code, 201)
+        invitation = ProfileInvitation.objects.get()
+        with self.settings(MAILERS={"default": {"BACKEND": "django.core.mail.backends.console.EmailBackend"}}), patch("apps.common.email_delivery.EmailMessage.send") as sender:
+            self.assertEqual(self.client.post(self.resend_url(invitation.pk), {}, format="json").status_code, 200)
+            self.assertEqual(self.client.post(self.resend_url(invitation.pk), {}, format="json").status_code, 200)
+            self.assertEqual(self.client.post(self.resend_url(invitation.pk), {}, format="json").status_code, 429)
+            sender.assert_not_called()
+        self.assert_failed(invitation)
+        self.assertEqual(InvitationEmailAttempt.objects.count(), 3)
         self.assertEqual(ProfileInvitation.objects.count(), 1)
 
     @override_settings(MAILERS=SMTP_MAILER)
-    def test_failed_records_remain_visible_with_tenant_and_admin_role_ceiling(self):
+    def test_failed_rows_retain_tenant_and_admin_role_ceiling(self):
         with patch("apps.common.email_delivery.EmailMessage.send", return_value=0):
-            self.assert_unavailable(self.create())
-            self.assert_unavailable(self.create(
-                recipient="admin-delivery-recipient@example.test", role=ProfileInvitation.Role.ADMIN,
-            ))
-        owner_rows = self.client.get(self.list_url()).data["results"]
-        self.assertEqual(len(owner_rows), 2)
-        self.assertTrue(all(row["delivery_status"] == "FAILED" for row in owner_rows))
+            self.assertEqual(self.create().status_code, 201)
+            self.assertEqual(self.create(recipient="admin-delivery-target@example.test", role="ADMIN").status_code, 201)
+        self.assertEqual(self.client.get(self.list_url()).data["count"], 2)
         self.client.force_login(self.admin)
-        admin_rows = self.client.get(self.list_url()).data["results"]
-        self.assertEqual(len(admin_rows), 1)
-        self.assertEqual(admin_rows[0]["requested_role"], "MEMBER")
-        self.assertEqual(admin_rows[0]["delivery_status"], "FAILED")
+        rows = self.client.get(self.list_url()).data["results"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["requested_role"], "MEMBER")
+        self.assertEqual(rows[0]["delivery_status"], "FAILED")
         self.client.force_login(self.other_owner)
-        self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_404_NOT_FOUND)
-        own_other = self.client.get(self.list_url(self.other_profile.id))
-        self.assertEqual(own_other.data["results"], [])
+        self.assertEqual(self.client.get(self.list_url()).status_code, 404)
 
-    def test_auth_tenant_and_session_csrf_denials_happen_before_any_delivery(self):
-        baseline_audit = AuditLog.objects.count()
-        anonymous = APIClient()
-        member_client = APIClient()
-        member_client.force_login(self.member)
-        outsider = APIClient()
-        outsider.force_login(self.other_owner)
-        csrf_client = APIClient(enforce_csrf_checks=True)
-        csrf_client.force_login(self.owner)
+    def test_auth_tenant_and_csrf_denials_precede_email(self):
+        baseline = AuditLog.objects.count()
+        anonymous, member, outsider, csrf = APIClient(), APIClient(), APIClient(), APIClient(enforce_csrf_checks=True)
+        member.force_login(self.member); outsider.force_login(self.other_owner); csrf.force_login(self.owner)
         with patch("apps.common.email_delivery.EmailMessage.send") as sender:
-            for client, expected in (
-                (anonymous, status.HTTP_403_FORBIDDEN),
-                (member_client, status.HTTP_403_FORBIDDEN),
-                (outsider, status.HTTP_404_NOT_FOUND),
-                (csrf_client, status.HTTP_403_FORBIDDEN),
-            ):
-                with self.subTest(expected=expected):
-                    self.assertEqual(self.create(client=client).status_code, expected)
+            for client, code in ((anonymous, 403), (member, 403), (outsider, 404), (csrf, 403)):
+                self.assertEqual(self.create(client=client).status_code, code)
             sender.assert_not_called()
-        self.assertEqual(ProfileInvitation.objects.count(), 0)
-        self.assertEqual(AuditLog.objects.count(), baseline_audit)
-        csrf_response = csrf_client.get(reverse("accounts:csrf"))
-        confirmed = csrf_client.post(self.list_url(), {
-            "recipient_email": self.recipient, "requested_role": "MEMBER",
-        }, format="json", HTTP_X_CSRFTOKEN=csrf_response.data["csrf_token"])
-        self.assertEqual(confirmed.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(AuditLog.objects.count(), baseline)
+        token = csrf.get(reverse("accounts:csrf")).data["csrf_token"]
+        response = csrf.post(self.list_url(), {"recipient_user_id": str(self.recipient_user.pk)}, format="json", HTTP_X_CSRFTOKEN=token)
+        self.assertEqual(response.status_code, 201)
         self.assertEqual(len(mail.outbox), 1)
 
     @override_settings(MAILERS=SMTP_MAILER)
-    def test_failed_resend_keeps_replacement_visible_and_no_duplicate_pending(self):
+    def test_failed_retries_never_rotate_or_create_duplicate_pending_rows(self):
         with patch("apps.common.email_delivery.EmailMessage.send", return_value=0) as sender:
-            self.assert_unavailable(self.create())
-            original = ProfileInvitation.objects.get()
-            self.assert_unavailable(self.client.post(self.resend_url(original.id), {}, format="json"))
-            replay = self.client.post(self.resend_url(original.id), {}, format="json")
-        self.assertEqual(replay.status_code, status.HTTP_409_CONFLICT)
-        self.assertEqual(sender.call_count, 2)
-        replacement = ProfileInvitation.objects.get(replaces=original)
-        original.refresh_from_db()
-        self.assertEqual(original.status, ProfileInvitation.Status.REVOKED)
-        self.assert_failed(replacement)
-        self.assertEqual(ProfileInvitation.objects.count(), 2)
+            self.assertEqual(self.create().status_code, 201)
+            invitation = ProfileInvitation.objects.get()
+            self.assertEqual(self.client.post(self.resend_url(invitation.pk), {}, format="json").status_code, 200)
+            self.assertEqual(self.client.post(self.resend_url(invitation.pk), {}, format="json").status_code, 200)
+            self.assertEqual(self.client.post(self.resend_url(invitation.pk), {}, format="json").status_code, 429)
+        self.assertEqual(sender.call_count, 3)
         self.assertEqual(ProfileInvitation.objects.filter(status="PENDING").count(), 1)
-        listed = self.client.get(self.list_url())
-        self.assertEqual(listed.data["count"], 2)
-        self.assertTrue(all(row["delivery_status"] == "FAILED" for row in listed.data["results"]))
-        self.assertTrue(AuditLog.objects.filter(
-            entity_id=replacement.id, action="profile.invitation.resent",
-        ).exists())
+        self.assertEqual(ProfileInvitation.objects.count(), 1)
+        self.assert_failed(invitation)
+
+    def test_callback_revalidates_current_email_and_active_account(self):
+        with transaction.atomic():
+            invitation = create_account_invitation(actor=self.owner, profile_id=self.profile.pk, recipient_user_id=self.recipient_user.pk)
+            self.recipient_user.email = "updated-recipient@example.test"
+            self.recipient_user.save()
+        self.assertEqual(mail.outbox[-1].to, ["updated-recipient@example.test"])
+        other = self.user("deactivated-before-callback")
+        with patch("apps.common.email_delivery.EmailMessage.send") as sender:
+            with transaction.atomic():
+                inactive = create_account_invitation(actor=self.owner, profile_id=self.profile.pk, recipient_user_id=other.pk)
+                other.is_active = False
+                other.save(update_fields=("is_active",))
+            sender.assert_not_called()
+        self.assert_failed(inactive)
+        self.assertTrue(Notification.objects.filter(invitation=invitation).exists())

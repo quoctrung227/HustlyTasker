@@ -2,14 +2,16 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
+from django.utils import timezone
 
 from apps.audit.models import AuditLog
+from apps.common.deletion import task_live_q
 from apps.reviews.models import Deliverable, Review
 from apps.tasks.models import Task, TaskAssignment, TaskComment
 from apps.workspace.access import (
     TenantAccessNotFound, resolve_profile_access_context, resolve_workspace_access_context,
 )
-from apps.workspace.models import Profile, ProfileMembership, Workspace, WorkspaceMember
+from apps.workspace.models import Profile, ProfileInvitation, ProfileMembership, Workspace, WorkspaceMember
 
 from .access import notifications_visible_to, readable_memberships
 from .content import EVENT_CONTENT
@@ -18,6 +20,7 @@ from .models import Notification
 
 EVENT_ACTIONS = {
     "TASK_ASSIGNED": ("task.assigned", "task.reassigned"),
+    "TASK_UNASSIGNED": ("task.unassigned", "task.reassigned"),
     "REVIEW_SUBMITTED": ("task.deliverable.submitted",),
     "REVIEW_APPROVED": ("task.deliverable.approved",),
     "REVIEW_CHANGES_REQUESTED": ("task.deliverable.changes_requested",),
@@ -58,7 +61,8 @@ def emit_task_notifications(*, event, actor, task, event_type, deliverable=None)
         or event.metadata.get("task_id") != str(task.pk)):
         raise ValidationError("Notification event does not match its Task context.")
     recipients = readable_memberships(profile_id=profile_id, workspace_id=task.workspace_id)
-    if (profile.status != Profile.Status.ACTIVE or workspace.status != Workspace.Status.ACTIVE
+    if (not Task.objects.filter(task_live_q(), pk=task.pk).exists()
+        or profile.status != Profile.Status.ACTIVE or workspace.status != Workspace.Status.ACTIVE
         or not recipients.filter(user_id=actor.pk).exists()):
         # Historical replay cannot create notifications after eligibility ends.
         return []
@@ -70,6 +74,11 @@ def emit_task_notifications(*, event, actor, task, event_type, deliverable=None)
         ).first()
         if assignment is None:
             return []
+        # Reactivating the same (Task, User) row must not make an older event
+        # eligible again after A -> B -> A. Legacy event shapes remain readable.
+        expected_time = event.metadata.get("assignment_assigned_at")
+        if expected_time is not None and assignment.assigned_at.isoformat() != expected_time:
+            return []
         recipients = recipients.filter(
             user_id=assignment.user_id, role=ProfileMembership.Role.MEMBER,
             pk=event.metadata.get("target_profile_membership_id"),
@@ -77,6 +86,28 @@ def emit_task_notifications(*, event, actor, task, event_type, deliverable=None)
             user__workspace_memberships__is_active=True,
             user__workspace_memberships__role=WorkspaceMember.Role.MEMBER,
         )
+    elif event_type == Notification.EventType.TASK_UNASSIGNED:
+        if event.entity_name != "TaskAssignment":
+            raise ValidationError("Assignment removal must identify an assignment event.")
+        previous = TaskAssignment.objects.filter(
+            pk=event.metadata.get("previous_assignment_id"), task_id=task.pk,
+            user_id=event.metadata.get("previous_user_id"), is_active=False,
+        ).first()
+        if previous is None:
+            return []
+        if event.action == "task.unassigned":
+            if event.entity_id != previous.pk or TaskAssignment.objects.filter(task_id=task.pk, is_active=True).exists():
+                return []
+        else:
+            replacement = TaskAssignment.objects.filter(
+                pk=event.entity_id, task_id=task.pk, is_active=True,
+                user_id=event.metadata.get("target_user_id"),
+            ).first()
+            if replacement is None or replacement.user_id == previous.user_id:
+                return []
+        # Removal is informational, not a new access grant. A revoked User or
+        # membership is excluded by the same live readable-recipient projection.
+        recipients = recipients.filter(user_id=previous.user_id)
     elif event_type == Notification.EventType.REVIEW_SUBMITTED:
         if (event.entity_name != "Deliverable" or not isinstance(deliverable, Deliverable)
             or event.entity_id != deliverable.pk
@@ -132,11 +163,64 @@ def emit_task_notifications(*, event, actor, task, event_type, deliverable=None)
 
 
 @transaction.atomic
+def emit_invitation_notification(*, event, actor, invitation):
+    """Persist a personal ACCOUNT invitation notice in its business transaction.
+
+    This grants no Profile/Workspace access and never depends on email delivery.
+    Event replay uses the existing user/event uniqueness without resetting read
+    state or generating a second notification system.
+    """
+    if not isinstance(event, AuditLog) or event._state.adding:
+        raise ValidationError("Invitation notification requires a persisted audit event.")
+    canonical = ProfileInvitation.objects.filter(pk=invitation.pk).values("profile_id").first()
+    if canonical is None:
+        raise ValidationError("Invalid invitation notification target.")
+    profile = Profile.objects.select_for_update().filter(pk=canonical["profile_id"]).first()
+    invitation = ProfileInvitation.objects.select_for_update(of=("self",)).select_related(
+        "recipient_user", "invited_by_membership__user",
+    ).filter(pk=invitation.pk, profile_id=canonical["profile_id"]).first()
+    event = AuditLog.objects.filter(pk=event.pk).first()
+    if profile is None or invitation is None or event is None:
+        raise ValidationError("Invalid invitation notification proof.")
+    if (event.action != "profile.invitation.created"
+        or event.entity_name != "ProfileInvitation" or event.entity_id != invitation.pk
+        or event.user_id != actor.pk
+        or invitation.invited_by_membership.user_id != actor.pk
+        or invitation.invited_by_membership.profile_id != profile.pk
+        or event.metadata.get("profile_id") != str(profile.pk)
+        or event.metadata.get("requested_role") != invitation.requested_role
+        or invitation.acceptance_kind != ProfileInvitation.AcceptanceKind.ACCOUNT
+        or invitation.recipient_user_id is None):
+        raise ValidationError("Audit event does not match its account invitation.")
+    from apps.workspace.invitation_services import _can_issue_role
+    inviter = invitation.invited_by_membership
+    if (profile.deleted_at is not None or profile.status != Profile.Status.ACTIVE
+        or invitation.status != ProfileInvitation.Status.PENDING
+        or invitation.expires_at <= timezone.now()
+        or not invitation.recipient_user.is_active
+        or not inviter.is_active or not inviter.user.is_active
+        or not _can_issue_role(inviter, invitation.requested_role)):
+        return []
+    title, message = EVENT_CONTENT[Notification.EventType.PROFILE_INVITED]
+    notification, _ = Notification.objects.get_or_create(
+        event_id=event.pk, user_id=invitation.recipient_user_id,
+        defaults={"profile_id": profile.pk, "invitation_id": invitation.pk,
+                  "event_type": Notification.EventType.PROFILE_INVITED,
+                  "title": title, "message": message},
+    )
+    if (notification.profile_id != profile.pk or notification.invitation_id != invitation.pk
+        or notification.event_type != Notification.EventType.PROFILE_INVITED
+        or notification.workspace_id is not None or notification.task_id is not None):
+        raise ValidationError("Existing notification has inconsistent invitation context.")
+    return [notification]
+
+
+@transaction.atomic
 def mark_notification_read(*, actor, notification_id):
     """Mark personal metadata under tenant locks, including readable archives."""
     try:
         target = notifications_visible_to(actor).filter(pk=notification_id).values(
-            "profile_id", "workspace_id",
+            "profile_id", "workspace_id", "invitation_id", "event_type",
         ).first()
     except (TypeError, ValueError, ValidationError, AttributeError):
         raise TenantAccessNotFound() from None
@@ -146,12 +230,20 @@ def mark_notification_read(*, actor, notification_id):
     # gate: reading/marking an own notification never changes archived content.
     if Profile.objects.select_for_update().filter(pk=target["profile_id"]).first() is None:
         raise TenantAccessNotFound()
-    if Workspace.objects.select_for_update().filter(
-        pk=target["workspace_id"], profile_id=target["profile_id"],
-    ).first() is None:
-        raise TenantAccessNotFound()
-    context = resolve_profile_access_context(actor, target["profile_id"])
-    resolve_workspace_access_context(context, target["workspace_id"])
+    if target["event_type"] == Notification.EventType.PROFILE_INVITED:
+        # Recipient notices must remain readable before Profile membership exists.
+        if not ProfileInvitation.objects.select_for_update().filter(
+            pk=target["invitation_id"], profile_id=target["profile_id"],
+            recipient_user_id=actor.pk, acceptance_kind=ProfileInvitation.AcceptanceKind.ACCOUNT,
+        ).exists():
+            raise TenantAccessNotFound()
+    else:
+        if Workspace.objects.select_for_update().filter(
+            pk=target["workspace_id"], profile_id=target["profile_id"],
+        ).first() is None:
+            raise TenantAccessNotFound()
+        context = resolve_profile_access_context(actor, target["profile_id"])
+        resolve_workspace_access_context(context, target["workspace_id"])
     notification = notifications_visible_to(actor).select_for_update(of=("self",)).filter(
         pk=notification_id,
     ).first()

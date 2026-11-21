@@ -223,6 +223,26 @@ describe('existing mutation contracts', () => {
     await workApi.assignTask(profileId, workspaceId, taskId, { target_profile_membership_id: memberId })
     expect(apiClient.request).toHaveBeenCalledWith(`${taskPath}${taskId}/assign/`, { method: 'POST', body: { target_profile_membership_id: memberId }, signal: undefined, protected: true })
   })
+  it('sends the exact assignment expectation and optional reason without changing timestamp precision', async () => {
+    vi.mocked(apiClient.request).mockResolvedValue(task)
+    const input = { target_profile_membership_id: memberId, expected_assignment_id: otherId, expected_assigned_at: '2026-10-26T01:02:03.123456Z', reason: 'Chuyển ca làm việc' }
+    await workApi.assignTask(profileId, workspaceId, taskId, input)
+    expect(apiClient.request).toHaveBeenLastCalledWith(`${taskPath}${taskId}/assign/`, { method: 'POST', body: input, signal: undefined, protected: true })
+  })
+  it('unassigns through the explicit CSRF-protected action with the current expectation', async () => {
+    vi.mocked(apiClient.request).mockResolvedValue({ ...task, active_assignment: null })
+    const input = { expected_assignment_id: otherId, expected_assigned_at: timestamp, reason: 'Tạm dừng phân công' }
+    expect((await workApi.unassignTask(profileId, workspaceId, taskId, input)).active_assignment).toBeNull()
+    expect(apiClient.request).toHaveBeenLastCalledWith(`${taskPath}${taskId}/unassign/`, { method: 'POST', body: input, signal: undefined, protected: true })
+  })
+  it.each([{ expected_assignment_id: otherId }, { expected_assignment_id: null, expected_assigned_at: timestamp }, { reason: 'bad\u0000reason' }, { reason: 'x'.repeat(4001) }])('rejects incomplete or malformed assignment metadata before sending %j', async (extra) => {
+    await expect(workApi.assignTask(profileId, workspaceId, taskId, { target_profile_membership_id: memberId, ...extra })).rejects.toBeInstanceOf(TypeError)
+    expect(apiClient.request).not.toHaveBeenCalled()
+  })
+  it.each([null, 'true', 1])('rejects malformed optional assignment capabilities %s', async (can_assign) => {
+    vi.mocked(apiClient.request).mockResolvedValue({ ...task, can_assign })
+    await expect(workApi.task(profileId, workspaceId, taskId)).rejects.toMatchObject({ kind: 'invalid-response' })
+  })
   it('start transport uses an empty service action, not a status patch', async () => {
     vi.mocked(apiClient.request).mockResolvedValue(task)
     await workApi.startTask(profileId, workspaceId, taskId)

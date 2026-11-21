@@ -1,10 +1,13 @@
 /** Existing collaboration contracts. Read identities never grant mutation rights. */
 import { ApiError, apiClient, invalidResponse } from './client'
 import type { Page } from './types'
+import { parseRecipientInvitation } from './members'
+import type { RecipientInvitation } from './members'
 
 export type DeliverableStatus = 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED'
 export type ReviewStatus = 'PENDING' | 'APPROVED' | 'REQUEST_CHANGE'
-export type NotificationEvent = 'TASK_ASSIGNED' | 'REVIEW_SUBMITTED' | 'REVIEW_APPROVED' | 'REVIEW_CHANGES_REQUESTED' | 'TASK_COMMENTED'
+export type TaskNotificationEvent = 'TASK_ASSIGNED' | 'TASK_UNASSIGNED' | 'REVIEW_SUBMITTED' | 'REVIEW_APPROVED' | 'REVIEW_CHANGES_REQUESTED' | 'TASK_COMMENTED'
+export type NotificationEvent = TaskNotificationEvent | 'PROFILE_INVITED'
 export interface Review {
   id: string
   status: ReviewStatus
@@ -40,12 +43,9 @@ export interface TaskComment {
   created_at: string
   updated_at: string
 }
-export interface AppNotification {
+interface NotificationBase {
   id: string
-  event_type: NotificationEvent
   profile_id: string
-  workspace_id: string
-  task_id: string
   title: string
   message: string
   /** Server metadata only. Navigation is built from validated IDs instead. */
@@ -54,6 +54,23 @@ export interface AppNotification {
   created_at: string
   updated_at: string
 }
+export interface TaskNotification extends NotificationBase {
+  event_type: TaskNotificationEvent
+  target_type?: 'TASK'
+  workspace_id: string
+  task_id: string
+  invitation_id?: null
+  invitation?: null
+}
+export interface InvitationNotification extends NotificationBase {
+  event_type: 'PROFILE_INVITED'
+  target_type: 'PROFILE_INVITATION'
+  workspace_id: null
+  task_id: null
+  invitation_id: string
+  invitation: RecipientInvitation
+}
+export type AppNotification = TaskNotification | InvitationNotification
 export interface CommentInput { readonly content: string }
 export interface DeliverableSubmitInput { readonly file_url: string }
 export interface DeliverableApproveInput { readonly comment?: string | null }
@@ -99,9 +116,25 @@ function isComment(value: unknown): value is TaskComment {
     (value.is_deleted ? value.content === null && dateTime(value.deleted_at) : text(value.content) && value.deleted_at === null)
 }
 function isNotification(value: unknown): value is AppNotification {
-  return record(value) && uuid(value.id) && uuid(value.profile_id) && uuid(value.workspace_id) && uuid(value.task_id) &&
-    oneOf(['TASK_ASSIGNED', 'REVIEW_SUBMITTED', 'REVIEW_APPROVED', 'REVIEW_CHANGES_REQUESTED', 'TASK_COMMENTED'], value.event_type) &&
-    text(value.title) && text(value.message) && text(value.target_url) && typeof value.is_read === 'boolean' && timestamps(value)
+  if (!record(value) || !uuid(value.id) || !uuid(value.profile_id) || !text(value.title) || !text(value.message) ||
+      !text(value.target_url) || typeof value.is_read !== 'boolean' || !timestamps(value)) return false
+  if (value.target_type === 'PROFILE_INVITATION') {
+    if (value.event_type !== 'PROFILE_INVITED' || value.workspace_id !== null || value.task_id !== null || !uuid(value.invitation_id)) return false
+    try { return sameId(parseRecipientInvitation(value.invitation, value.invitation_id).profile_id, value.profile_id) } catch { return false }
+  }
+  return (value.target_type === undefined || value.target_type === 'TASK') && uuid(value.workspace_id) && uuid(value.task_id) &&
+    (value.invitation_id === undefined || value.invitation_id === null) && (value.invitation === undefined || value.invitation === null) &&
+    oneOf(['TASK_ASSIGNED', 'TASK_UNASSIGNED', 'REVIEW_SUBMITTED', 'REVIEW_APPROVED', 'REVIEW_CHANGES_REQUESTED', 'TASK_COMMENTED'], value.event_type)
+}
+function notificationResult(value: unknown): AppNotification {
+  if (!isNotification(value)) throw invalidResponse()
+  const base = { id: value.id, profile_id: value.profile_id, title: value.title, message: value.message, target_url: value.target_url,
+    is_read: value.is_read, created_at: value.created_at, updated_at: value.updated_at }
+  if (value.target_type === 'PROFILE_INVITATION') return { ...base, event_type: 'PROFILE_INVITED', target_type: 'PROFILE_INVITATION',
+    workspace_id: null, task_id: null, invitation_id: value.invitation_id, invitation: parseRecipientInvitation(value.invitation, value.invitation_id) }
+  return { ...base, event_type: value.event_type, workspace_id: value.workspace_id, task_id: value.task_id,
+    ...(value.target_type === 'TASK' ? { target_type: 'TASK' as const } : {}),
+    ...(value.invitation_id === null ? { invitation_id: null } : {}), ...(value.invitation === null ? { invitation: null } : {}) }
 }
 function asPage<T>(value: unknown, guard: (item: unknown) => item is T): Page<T> {
   if (!record(value) || typeof value.count !== 'number' || !Number.isSafeInteger(value.count) || value.count < 0 ||
@@ -147,6 +180,7 @@ export function deliverableSubmissionError(value: string): string | null {
 }
 
 export function notificationTaskPath(notification: Pick<AppNotification, 'profile_id' | 'workspace_id' | 'task_id'>): string {
+  if (!notification.workspace_id || !notification.task_id) throw new ApiError(404, 'not-found', 'Thông báo này không có đích công việc.')
   return `/profiles/${entityId(notification.profile_id)}/workspaces/${entityId(notification.workspace_id)}/tasks/${entityId(notification.task_id)}`
 }
 
@@ -216,7 +250,8 @@ export const notificationApi = {
     if (isRead !== undefined && typeof isRead !== 'boolean') throw new TypeError('Invalid read filter.')
     const query = new URLSearchParams({ page: String(pageNumber(page)) })
     if (isRead !== undefined) query.set('is_read', String(isRead))
-    return asPage(await apiClient.request<unknown>(`v1/notifications/?${query}`, { signal, protected: true }), isNotification)
+    const result = asPage(await apiClient.request<unknown>(`v1/notifications/?${query}`, { signal, protected: true }), isNotification)
+    return { ...result, results: result.results.map(notificationResult) }
   },
   async unreadCount(signal?: AbortSignal): Promise<number> {
     const value = await apiClient.request<unknown>('v1/notifications/unread-count/', { signal, protected: true })
@@ -226,6 +261,6 @@ export const notificationApi = {
   async markRead(notificationId: string, signal?: AbortSignal): Promise<AppNotification> {
     const value = await apiClient.request<unknown>(`v1/notifications/${entityId(notificationId)}/read/`, { method: 'POST', body: {}, signal, protected: true })
     if (!isNotification(value) || !sameId(value.id, notificationId) || !value.is_read) throw invalidResponse()
-    return value
+    return notificationResult(value)
   },
 }

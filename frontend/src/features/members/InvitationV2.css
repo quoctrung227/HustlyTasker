@@ -1,0 +1,10 @@
+.invitation-candidates { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-control); }
+.invitation-candidates legend { padding-inline: 4px; font-weight: 600; }
+.invitation-candidate-list { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 8px; }
+.invitation-candidate { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-control); cursor: pointer; }
+.invitation-candidate:has(input:checked) { border-color: var(--color-primary); background: var(--color-canvas); }
+.invitation-candidate:has(input:disabled) { cursor: default; color: var(--color-muted); }
+.invitation-candidate input { flex: 0 0 auto; margin-top: 4px; accent-color: var(--color-primary); width: 18px; height: 18px; }
+.invitation-candidate__text { min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.invitation-decision { margin-top: 16px; }
+.invitation-decision .alert { margin-block: 12px; }

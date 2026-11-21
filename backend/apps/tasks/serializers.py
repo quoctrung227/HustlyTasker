@@ -6,7 +6,7 @@ from rest_framework import serializers
 
 from apps.reviews.models import Deliverable, Review
 from apps.reviews.validation import normalize_deliverable_url
-from apps.workspace.access import can_execute_workspace_tasks, can_review_workspace_deliverables
+from apps.workspace.access import can_execute_workspace_tasks, can_manage_workspace_tasks, can_review_workspace_deliverables
 from apps.workspace.models import ProfileMembership
 from apps.workspace.serializers import StrictInputSerializer
 
@@ -14,6 +14,7 @@ from .models import Task
 from .brief import normalize_task_compensation, normalize_task_reference
 from .access import task_assignee_display_values, task_compensation_visible_to
 from .presentation import assignee_display_name
+from .services import normalize_assignment_reason
 
 
 class TaskReferenceField(serializers.Field):
@@ -68,6 +69,9 @@ class TaskReadSerializer(serializers.ModelSerializer):
     active_assignment = serializers.SerializerMethodField()
     can_start = serializers.SerializerMethodField()
     can_submit = serializers.SerializerMethodField()
+    can_assign = serializers.SerializerMethodField()
+    can_unassign = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
     estimated_compensation_vnd = serializers.SerializerMethodField()
 
     class Meta:
@@ -89,6 +93,9 @@ class TaskReadSerializer(serializers.ModelSerializer):
             "active_assignment",
             "can_start",
             "can_submit",
+            "can_assign",
+            "can_unassign",
+            "can_delete",
             "created_at",
             "updated_at",
         )
@@ -214,6 +221,39 @@ class TaskReadSerializer(serializers.ModelSerializer):
             ).exists()
         # A UI hint only: submission repeats every check under service locks.
         return not unresolved
+
+    @cached_property
+    def _assignment_management_allowed(self):
+        context = self.context.get("workspace_access_context")
+        user = getattr(self.context.get("request"), "user", None)
+        return bool(
+            context is not None and getattr(user, "is_authenticated", False)
+            and getattr(user, "is_active", False)
+            and getattr(context, "user_id", None) == user.pk
+            and can_manage_workspace_tasks(context)
+        )
+
+    def get_can_assign(self, task):
+        return bool(
+            task.workspace_id == getattr(self.context.get("workspace_access_context"), "workspace_id", None)
+            and task.status in (Task.Status.PENDING, Task.Status.ASSIGNED, Task.Status.WORKING)
+            and self._assignment_management_allowed
+        )
+
+    def get_can_unassign(self, task):
+        return self.get_can_assign(task) and bool(self._active_assignments(task))
+
+    @cached_property
+    def _deletable_task_ids(self):
+        if not self._assignment_management_allowed:
+            return set()
+        from apps.common.deletion import task_live_q
+        instances = self.parent.instance if isinstance(self.parent, serializers.ListSerializer) else [self.instance]
+        ids = [task.pk for task in instances if isinstance(task, Task)]
+        return set(Task.objects.filter(pk__in=ids).filter(task_live_q()).values_list("pk", flat=True))
+
+    def get_can_delete(self, task):
+        return task.pk in self._deletable_task_ids
 
 
 class ReviewReadSerializer(serializers.ModelSerializer):
@@ -410,8 +450,36 @@ class TaskUpdateSerializer(TaskBriefInputSerializer):
     deadline = TaskDeadlineField(required=False, allow_null=True)
 
 
-class TaskAssignSerializer(StrictInputSerializer):
+class TaskAssignmentReasonField(serializers.Field):
+    def to_internal_value(self, data):
+        try:
+            return normalize_assignment_reason(data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict["reason"]) from None
+
+
+class TaskAssignmentExpectationSerializer(StrictInputSerializer):
+    reason = TaskAssignmentReasonField(required=False, allow_null=True)
+    expected_assignment_id = serializers.UUIDField(required=False, allow_null=True)
+    expected_assigned_at = TaskDeadlineField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        keys = ("expected_assignment_id", "expected_assigned_at")
+        if any(key in attrs for key in keys):
+            if not all(key in attrs for key in keys):
+                raise serializers.ValidationError({"expected_assignment_id": "Supply both assignment expectation fields."})
+            if (attrs[keys[0]] is None) != (attrs[keys[1]] is None):
+                raise serializers.ValidationError({"expected_assignment_id": "Assignment expectation fields must both be null or both set."})
+        return attrs
+
+
+class TaskAssignSerializer(TaskAssignmentExpectationSerializer):
     target_profile_membership_id = serializers.UUIDField()
+
+
+class TaskUnassignSerializer(TaskAssignmentExpectationSerializer):
+    expected_assignment_id = serializers.UUIDField()
+    expected_assigned_at = TaskDeadlineField()
 
 
 class EmptyTaskActionSerializer(StrictInputSerializer):

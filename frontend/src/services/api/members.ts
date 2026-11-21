@@ -27,7 +27,11 @@ export interface ProfileMembersPage extends Page<ProfileMember> {
 export interface ProfileInvitation {
   id: string
   profile_id: string
-  recipient_email: string
+  recipient_email: string | null
+  acceptance_kind?: 'EMAIL_TOKEN' | 'ACCOUNT'
+  recipient_display_label?: string
+  recipient_username?: string | null
+  recipient_masked_email?: string | null
   requested_role: InvitationRole
   status: InvitationStatus
   delivery_status: InvitationDeliveryStatus
@@ -42,8 +46,29 @@ export interface ProfileInvitation {
   updated_at: string
 }
 export interface InvitationCreateInput {
-  readonly recipient_email: string
+  readonly recipient_user_id: string
   readonly requested_role: InvitationRole
+}
+export interface InvitationCandidate {
+  id: string
+  display_label: string
+  username: string | null
+  masked_email: string | null
+  relation: 'AVAILABLE' | 'ACTIVE_MEMBER' | 'PENDING_INVITATION' | 'UNAVAILABLE'
+  can_invite: boolean
+}
+export interface InvitationCandidatesPage extends Page<InvitationCandidate> { capabilities: MemberCapabilities }
+export interface RecipientInvitation {
+  id: string
+  profile_id: string
+  profile_name: string
+  inviter_display_label: string
+  requested_role: InvitationRole
+  status: InvitationStatus
+  expires_at: string
+  can_accept: boolean
+  can_decline: boolean
+  can_open_profile: boolean
 }
 export interface AcceptedInvitation {
   status: 'ACCEPTED'
@@ -102,18 +127,59 @@ function parseCapabilities(payload: unknown): MemberCapabilities {
 }
 function parseInvitation(payload: unknown, profileId: string, invitationId?: string): ProfileInvitation {
   if (!record(payload) || !uuid(payload.id) || !uuid(payload.profile_id) || !sameId(payload.profile_id, profileId) ||
-      (invitationId !== undefined && !sameId(payload.id, invitationId)) || !text(payload.recipient_email) ||
-      !payload.recipient_email.trim() || payload.recipient_email.length > 254 || !role(payload.requested_role) ||
+      (invitationId !== undefined && !sameId(payload.id, invitationId)) || !nullableText(payload.recipient_email) ||
+      (payload.recipient_email !== null && (!payload.recipient_email.trim() || payload.recipient_email.length > 254)) || !role(payload.requested_role) ||
       !status(payload.status) || !deliveryStatus(payload.delivery_status) || !dateTime(payload.expires_at) ||
       !dateTime(payload.created_at) || !dateTime(payload.updated_at) || !nullableDateTime(payload.delivery_attempted_at) ||
       !nullableDateTime(payload.delivered_at) || !nullableDateTime(payload.accepted_at) || !nullableDateTime(payload.declined_at) ||
       !nullableDateTime(payload.revoked_at) || !nullableDateTime(payload.expired_at)) throw invalidResponse()
   // Project the actual serializer fields; unexpected tokens/User fields never enter cache.
-  return { id: payload.id, profile_id: payload.profile_id, recipient_email: payload.recipient_email,
+  const result: ProfileInvitation = { id: payload.id, profile_id: payload.profile_id, recipient_email: payload.recipient_email,
     requested_role: payload.requested_role, status: payload.status, delivery_status: payload.delivery_status,
     expires_at: payload.expires_at, delivery_attempted_at: payload.delivery_attempted_at, delivered_at: payload.delivered_at,
     accepted_at: payload.accepted_at, declined_at: payload.declined_at, revoked_at: payload.revoked_at,
     expired_at: payload.expired_at, created_at: payload.created_at, updated_at: payload.updated_at }
+  if (payload.acceptance_kind !== undefined) {
+    if (!['EMAIL_TOKEN', 'ACCOUNT'].includes(String(payload.acceptance_kind)) || !text(payload.recipient_display_label) ||
+        !payload.recipient_display_label.trim() || !nullableText(payload.recipient_username) || !nullableText(payload.recipient_masked_email) ||
+        (payload.acceptance_kind === 'ACCOUNT' && payload.recipient_email !== null)) throw invalidResponse()
+    result.acceptance_kind = payload.acceptance_kind as 'EMAIL_TOKEN' | 'ACCOUNT'
+    result.recipient_display_label = payload.recipient_display_label
+    result.recipient_username = payload.recipient_username
+    result.recipient_masked_email = payload.recipient_masked_email
+  } else if (payload.recipient_email === null) throw invalidResponse()
+  return result
+}
+
+/** The backend alone supplies recipient capabilities; IDs never grant access. */
+export function parseRecipientInvitation(payload: unknown, expectedId?: string): RecipientInvitation {
+  if (!record(payload) || !uuid(payload.id) || (expectedId !== undefined && !sameId(payload.id, expectedId)) || !uuid(payload.profile_id) ||
+      !text(payload.profile_name) || !payload.profile_name.trim() || !text(payload.inviter_display_label) || !payload.inviter_display_label.trim() ||
+      !role(payload.requested_role) || !status(payload.status) || !dateTime(payload.expires_at) ||
+      typeof payload.can_accept !== 'boolean' || typeof payload.can_decline !== 'boolean' || typeof payload.can_open_profile !== 'boolean' ||
+      (payload.status !== 'PENDING' && (payload.can_accept || payload.can_decline))) throw invalidResponse()
+  return { id: payload.id, profile_id: payload.profile_id, profile_name: payload.profile_name, inviter_display_label: payload.inviter_display_label,
+    requested_role: payload.requested_role, status: payload.status, expires_at: payload.expires_at,
+    can_accept: payload.can_accept, can_decline: payload.can_decline, can_open_profile: payload.can_open_profile }
+}
+function searchText(value: string) {
+  const characters = Array.from(value)
+  const invalidCharacter = characters.some((character) => {
+    const point = character.codePointAt(0) ?? 0
+    return point < 32 || (point >= 127 && point <= 159) || (point >= 0xd800 && point <= 0xdfff)
+  })
+  if (!text(value) || characters.length > 100 || invalidCharacter) {
+    throw new ApiError(400, 'validation', 'Nội dung tìm kiếm chưa hợp lệ. Dùng tối đa 100 ký tự.')
+  }
+  return value.trim()
+}
+function parseCandidate(payload: unknown): InvitationCandidate {
+  if (!record(payload) || !uuid(payload.id) || !text(payload.display_label) || !payload.display_label.trim() ||
+      !nullableText(payload.username) || !nullableText(payload.masked_email) ||
+      !['AVAILABLE', 'ACTIVE_MEMBER', 'PENDING_INVITATION', 'UNAVAILABLE'].includes(String(payload.relation)) ||
+      typeof payload.can_invite !== 'boolean' || (payload.can_invite && payload.relation !== 'AVAILABLE')) throw invalidResponse()
+  return { id: payload.id, display_label: payload.display_label, username: payload.username, masked_email: payload.masked_email,
+    relation: payload.relation as InvitationCandidate['relation'], can_invite: payload.can_invite }
 }
 
 /** Opaque credential stays transient: never a URL, query key, response or error value. */
@@ -134,9 +200,19 @@ export const memberKeys = {
   profile: profileKey,
   members: (userId: string, profileId: string, page = 1) => [...profileKey(userId, profileId), 'members', pageNumber(page)] as const,
   invitations: (userId: string, profileId: string, page = 1) => [...profileKey(userId, profileId), 'invitations', pageNumber(page)] as const,
+  candidates: (userId: string, profileId: string, search = '', page = 1) => [...profileKey(userId, profileId), 'invitation-candidates', search, pageNumber(page)] as const,
+  recipientRoot: (userId: string) => [...userKey(userId), 'recipient-invitations'] as const,
+  inbox: (userId: string, page = 1) => [...userKey(userId), 'recipient-invitations', 'inbox', pageNumber(page)] as const,
+  recipient: (userId: string, invitationId: string) => [...userKey(userId), 'recipient-invitations', 'detail', invitationId.toLowerCase()] as const,
 }
 
 export const membersApi = {
+  async candidates(profileId: string, search = '', page = 1, signal?: AbortSignal): Promise<InvitationCandidatesPage> {
+    const payload = await apiClient.request<unknown>(`${profilePath(profileId)}invitation-candidates/?search=${encodeURIComponent(searchText(search))}&page=${pageNumber(page)}`, { signal, protected: true })
+    const parsed = parsePage(payload, parseCandidate)
+    if (!record(payload) || parsed.results.length > 20) throw invalidResponse()
+    return { ...parsed, capabilities: parseCapabilities(payload.capabilities) }
+  },
   async members(profileId: string, page = 1, signal?: AbortSignal): Promise<ProfileMembersPage> {
     const payload = await apiClient.request<unknown>(`${profilePath(profileId)}members/?page=${pageNumber(page)}`, { signal, protected: true })
     const parsed = parsePage(payload, (item) => parseMember(item, profileId))
@@ -151,11 +227,11 @@ export const membersApi = {
     return parseInvitation(await apiClient.request<unknown>(invitationPath(profileId, invitationId), { signal, protected: true }), profileId, invitationId)
   },
   async createInvitation(profileId: string, input: InvitationCreateInput, signal?: AbortSignal): Promise<ProfileInvitation> {
-    if (!record(input) || !text(input.recipient_email) || !role(input.requested_role)) {
+    if (!record(input) || !uuid(input.recipient_user_id) || !role(input.requested_role)) {
       throw new ApiError(400, 'validation', 'Thông tin lời mời chưa hợp lệ. Vui lòng kiểm tra lại.')
     }
     return parseInvitation(await apiClient.request<unknown>(invitationPath(profileId), {
-      method: 'POST', body: { recipient_email: input.recipient_email, requested_role: input.requested_role }, signal, protected: true,
+      method: 'POST', body: { recipient_user_id: entityId(input.recipient_user_id), requested_role: input.requested_role }, signal, protected: true,
     }), profileId)
   },
   async revokeInvitation(profileId: string, invitationId: string, signal?: AbortSignal): Promise<ProfileInvitation> {
@@ -169,7 +245,23 @@ export const membersApi = {
     const result = parseInvitation(await apiClient.request<unknown>(`${invitationPath(profileId, invitationId)}resend/`, {
       method: 'POST', body: {}, signal, protected: true,
     }), profileId)
-    if (sameId(result.id, invitationId) || result.status !== 'PENDING') throw invalidResponse()
+    if (result.acceptance_kind !== 'ACCOUNT' || !sameId(result.id, invitationId) || result.status !== 'PENDING') throw invalidResponse()
+    return result
+  },
+  async recipientInvitations(page = 1, signal?: AbortSignal): Promise<Page<RecipientInvitation>> {
+    return parsePage(await apiClient.request<unknown>(`v1/invitations/?page=${pageNumber(page)}`, { signal, protected: true }), (item) => parseRecipientInvitation(item))
+  },
+  async recipientInvitation(invitationId: string, signal?: AbortSignal): Promise<RecipientInvitation> {
+    return parseRecipientInvitation(await apiClient.request<unknown>(`v1/invitations/${entityId(invitationId)}/`, { signal, protected: true }), invitationId)
+  },
+  async acceptAccountInvitation(invitationId: string, signal?: AbortSignal): Promise<RecipientInvitation> {
+    const result = parseRecipientInvitation(await apiClient.request<unknown>(`v1/invitations/${entityId(invitationId)}/accept/`, { method: 'POST', body: {}, signal, protected: true }), invitationId)
+    if (result.status !== 'ACCEPTED') throw invalidResponse()
+    return result
+  },
+  async declineAccountInvitation(invitationId: string, signal?: AbortSignal): Promise<RecipientInvitation> {
+    const result = parseRecipientInvitation(await apiClient.request<unknown>(`v1/invitations/${entityId(invitationId)}/decline/`, { method: 'POST', body: {}, signal, protected: true }), invitationId)
+    if (result.status !== 'DECLINED') throw invalidResponse()
     return result
   },
   async acceptInvitation(token: string, signal?: AbortSignal): Promise<AcceptedInvitation> {

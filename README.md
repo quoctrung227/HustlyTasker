@@ -3,6 +3,24 @@
 HustlyTasker uses Django 6.1, Django REST Framework, and PostgreSQL 16, with a
 React/TypeScript frontend consuming the existing SessionAuthentication API.
 
+## Current organization invitations — 2026-11-13
+
+**HT-ORG-INVITATION-V2 — DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+Account search/picker, authenticated recipient inbox and accept/decline, typed
+Web notifications and same-invitation email retry are implemented and verified
+with isolated PostgreSQL/fake mail. Prior implementation backend1108,
+frontend1236 and six browser suites25/25 are historical, not rerun in rollout.
+The separately approved workspace0005/notifications0004 targets are now APPLIED,
+development history41, ai.0002 still UNAPPLIED. Backup/actual isolated restore,
+19synthetic API/service checks,5read-only Owner-handler projections and25HTTP
+GET direct/proxy smoke checks pass, exits0; original business data is preserved.
+Official loopback backend/Vite are ready at `http://127.0.0.1:5173`; Ctrl+F5 and
+reuse the running servers. No authenticated development browser or genuine email
+delivery/manual acceptance is claimed. See [HANDOVER](documentation/HANDOVER.md),
+[rollout record](documentation/ORG_INVITATION_V2_ROLLOUT.md) and
+[Invitation V2](documentation/ORG_INVITATION_V2.md). Earlier checkpoints below
+preserve their historical scope and test results, not current V2 limitations.
+
 ## Frontend MVP
 
 HT-AI-P4-03C **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE** integrates the
@@ -45,7 +63,7 @@ See [HANDOVER](documentation/HANDOVER.md) for current evidence and review gate.
 Historical FE05 isolated backend662/662, frontend426/426 and real browser25/25 PASS;
 typecheck/lint/build and development preservation checks pass. The Owner's
 manual real-website acceptance remains pending; no production readiness claim.
-Invitation UI and broader membership onboarding remain separately pending;
+At that FE05 checkpoint, Invitation UI and broader membership onboarding were separately pending;
 `HT-AI-P4-02C` is the separate AI Generator preview/edit/confirm UI task above.
 
 Historical HT-FE-P3-04 is **COMPLETE / OWNER REVIEW GATE**. Its approved MVP includes account

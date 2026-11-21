@@ -1,6 +1,1146 @@
 # HUSTLYTASKER HANDOVER
 
-## Current checkpoint — 2026-11-10 — HT-FE-TASK-ASSIGNEE-NAME-FIX-01
+## Current rollout — 2026-11-20 — HT-TRASH-V1
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+Owner conditionally authorized exactly workspace.0006_soft_delete then
+tasks.0006_soft_delete. Both actually applied after fresh identity/planner/source/
+backup/restore/writer gates. PURGE EXECUTION AND SCHEDULER REGISTRATION/ENABLEMENT
+REMAIN FORBIDDEN. Do not start another task or follow a generic migrate suggestion.
+See [rollout evidence and manual checklist](TRASH_V1_ROLLOUT.md) and
+[retention/FK design](TRASH_V1_DESIGN.md). Prior implementation evidence below is historical.
+
+### Fresh baseline and migration result
+
+Docker29.8.2/PostgreSQL16.14; same hustlytasker_postgres container
+49ef9315294450710e2c71eefb1559993c821aff94531e79541d9811534ebbbe,
+docker_postgres_data volume,127.0.0.1:5432,hustlytasker_db,config.settings development.
+Database system ID7671936116369391654 verified before/after each stage. Approximately
+140GBfree disk vs10.9MB database; dump/restore tools also16.14.
+
+Read-only baseline31tables/41migrations, both candidates absent/no Trash columns.
+Exact workspace plan contained one candidate; tasks plan contained workspace0006
+then tasks0006 only. No destructive/data/backfill operation, new table, default or
+AI dependency. Source hashes checked before every apply; standard Django migrate
+was called with one exact app/migration target each time, never fake/unscoped.
+
+Actual development application times:
+
+- workspace.0006_soft_delete:2026-11-20 10:47:47.315037UTC (17:47:47 Vietnam),native0.
+- tasks.0006_soft_delete:2026-11-20 10:48:00.223314UTC (17:48:00 Vietnam),native0.
+
+Final31tables/43migrations. Only these two history rows were added; every original
+history row remains exact. ai.0002_dispatch_governance is UNAPPLIED and governance
+tables remain absent. The one pending-AI Django startup warning is expected;
+DO NOT execute its generic migrate recommendation.
+
+Nine new nullable/no-default columns: deleted_at/deleted_by_id/purge_after on
+Profile/Workspace/Task. All pre-existing records have all three NULL. Three CHECKs,
+three validated deferred User FKs, three partial due indexes and three FK indexes
+are valid/ready; old schema/index/constraint definitions remain exact on development.
+Django SET_NULL is ORM deletion policy; actual PostgreSQL FK is deferred NO ACTION.
+No original object was placed in Trash. Archive/status/membership flags unchanged.
+
+| Data | Before | After startup/GET verification |
+|---|---:|---:|
+| Users / Sessions |5 /3|5 /3|
+| Profiles / ProfileMemberships |2 /3|2 /3|
+| Workspaces / WorkspaceMembers |3 /3|3 /3|
+| Tasks / TaskAssignments |5 /5|5 /5|
+| Deliverables / Reviews / Comments |3 /0 /1|3 /0 /1|
+| Invitations / Notifications / AuditLogs |3 /12 /48|3 /12 /48|
+| Security tokens / AI proposals / AI operations |1 /0 /0|1 /0 /0|
+| Invitation directory events / email attempts |4 /1|4 /1|
+| Content types / auth permissions |27 /108|27 /108|
+
+Every original table row hash matches, including Task fields/financial values,
+Review schema, Invitation identity/delivery, notifications and audit history. There
+are0actual Review rows; synthetic historical Review protection is test evidence,
+not a claimed nonempty development Review migration. All original sequences stay
+exact except the expected+2 migration sequence. Aggregate original-row SHA256,
+before=after across31tables:
+`130EE97AF4E63A2D6CD9AE6A4F73A48C84FBFBE5E68205E3BF4B30C699D06CA5`.
+Projection excludes only the new Trash fields; two new migration rows are accounted
+for separately. No PII/session/token/password values were logged.
+
+### New retained backup and actual rehearsal
+
+Outside-repository custom archive,141777bytes, ACL restricted to Owner/SYSTEM/Admins:
+`D:/da/HustlyTaskerBackups/HT-TRASH-V1-ROLLOUT/20261120T104345Z_9cc7157fd3764eed96955ab59a60fad5/hustlytasker_development_20261120T104345Z.dump`
+
+SHA256 `45EA1FDD1F7736502D21279EF93A6D1C0F5226A0A60D62B4748D8D75FE4A5F37`.
+Custom signature, dump exit, pg_restore--list, full archive read and actual restore
+all PASS0. Rehash before each development apply and at final verification matches;
+backup is retained, not overwritten/uploaded/deleted. Older backups untouched.
+
+Rehearsal DB ht_trash_9cc7157fd3764eed96955ab59a60fad5 used a distinct cluster,
+internal labelled network,tmpfs,no named volume/no published port; backup readonly,
+backend/scripts/gate readonly, no Owner.env mounted. Restored41migration history,
+all row hashes and logical schema preserved; exact two targets produced43 records,
+expected schema/NULL defaults/constraints/indexes and no AI0002. Tools/PG/network
+resources were ownership-checked and removed; final run-label queries found0.
+
+pg_restore changed deparsed representation of19old enum-array CHECK expressions.
+Every variation was verified as the same literal array after varchar/text casts
+by PostgreSQL READ ONLY equality, with the rest of each boolean expression exact.
+No development constraint was normalized/edited. An initial simplistic string
+comparison could not recognize the cast/parenthesis form; stronger proofs are in
+restored-check-equivalence-verified.json, while the earlier diagnostic is retained.
+No actual dump/restore/migration failure occurred. An initial direct PowerShell
+helper import was execution-policy blocked; corrected explicit process-only
+ExecutionPolicy Bypass (official launcher convention) completed safe validation.
+Neither invalid initial output was treated as proof of success.
+
+### Startup and checks actually run in this rollout
+
+Initial8000/5173 listeners absent; fresh writer gate stopped0processes and verified
+8000free. PostgreSQL/other Python/Node were not stopped. Official hidden backend
+launcher29320 and Vite launcher35128 now serve loopback8000/5173; Vite was newly
+started because none existed, without npm ci. HTTP smoke verified the unique new
+backend listener and a run marker in its log. Reuse these services, do not start
+another server on the same ports.
+
+- Fresh isolated PostgreSQL Trash/security/migration tests59/59 PASS11.389s;
+  actual Python0/launcher0,43test migration records,AI0002 absent. Run
+  ce5f5325074c425a967a2ddbb8506582 owned DB/resources cleaned. Purge/restore race/
+  rollback/retention cases ran only on synthetic disposable test data.
+- Django check, makemigrations--check--dry-run, exact target plans and current
+  graph/history/schema consistency PASS0 on development with read-only checks.
+  Remaining leaf plan is only deliberately pending AI0002, not an error to fix.
+-27actual HTTP GET checks directDjango and Viteproxy PASS0: health/CSRF, anonymous
+  auth/tenant/Trash boundaries and expected method restrictions; no mutation.
+-46existing-Owner handler GET projections PASS0 in one REPEATABLE READ READ ONLY
+  transaction: current Profile/Workspace/Task can_delete, nested Deliverable/Review,
+  Comment, InvitationV2, Notification, Trash and4Analytics GETs. Full original data/
+  schema fingerprints before/after match. These use force_authenticate; no password
+  login, new Session or actual HTTP-session authentication claim. Positive candidate
+  directory GET is intentionally skipped because it records quota events.
+- Final post-startup read-only gate/fingerprint checks PASS0, backup rehash PASS,
+  purge processes0/registered purge tasks0, disabled XML remains unregistered.
+
+Full1168backend/frontend1295/browser44 below are implementation-checkpoint results,
+not rerun during this rollout; runtime source has not changed. No real email,
+paid/live AI, development fixture, soft-delete/restore/purge smoke, production
+operation, automatic rollback or restore-over-development occurred.
+
+### Source preservation, purge controls and Owner continuation
+
+Fresh source baseline861files:0missing,0runtime changes; all35migration files
+(including both now-applied candidates and still-unapplied AI0002) retain hashes.
+Git remains main at31f0af932a9ffaf3e578115d63faa4a776e75175. Only related documentation
+changed/new rollout record; all pre-existing dirty/untracked work is preserved.
+No commit/push/reset/revert/clean. Local.env was loaded privately through the
+existing loader, never edited; required names present, actual purgeflagFalse.
+
+No purge command was run on development or the restored real-data rehearsal.
+No scheduler was registered, enabled or executed. Actual final Windows queries
+found0purge processes/0matching tasks. XML Settings.Enabled=false; an enabled
+trigger inside an unregistered disabled export does not schedule execution.
+TRASH_PURGE_ENABLED remainsFalse; manual permanent delete stays disabled.
+
+Evidence is Git-ignored at `.local_backups/HT-TRASH-V1-ROLLOUT/`: baseline snapshots,
+backup/process/restore receipts, staged apply/post reports, readonly-smoke JSON,
+http-smoke-result.json, final-state.json, final-data-fingerprint.json and
+final-source-preservation.json. No secrets or raw response bodies are in reports.
+
+No rollout blocker remains. Open http://127.0.0.1:5173 and Ctrl+F5, then use Owner-
+chosen TEST Task/Workspace/Profile for manual soft-delete/Trash/restore acceptance.
+Verify hidden active rows, retained child data/independent deletion/revoked rights,
+parent-first restore and720-hour deadline. Such manual data changes are real
+development data and remain Owner-controlled. Do NOT test permanent deletion or
+run purge in this first acceptance. Keep scheduler disabled. No further feature,
+migration or public deployment is authorized by this handover.
+
+## Historical implementation checkpoint — 2026-11-20 — HT-TRASH-V1
+
+**HT-TRASH-V1 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION AND PURGE APPROVAL.**
+Stop at OWNER REVIEW GATE. No development migration, real-data purge or scheduler
+enablement is authorized. Latest resume attachment7a79508c governs this checkpoint;
+it permits AI0002 only in disposable tests if needed, never on development.
+Owner approved conditional V1 retention without a financial ledger. Read the
+[design and FK impact matrix](TRASH_V1_DESIGN.md) before preparing any rollout.
+
+### Recovery and completed behavior
+
+The existing partial implementation was audited and completed, not rebuilt.
+Profile/Workspace/Task now have nullable deleted_at, deleted_by and purge_after,
+with exact30day CHECKs and partial due indexes. Archive and Task status stay
+separate. Deleting a parent makes descendants unavailable through central live
+scopes; only explicit deletions are stamped/listed. Restore clears the target's
+own metadata within30days, requires an available parent and never reactivates
+memberships/assignments or independently deleted children. No status cascade.
+
+Trash API is authenticated SessionAuthentication + CSRF:
+
+- `GET /api/v1/trash/`: object_type/search/profile_id/page, fixed20/page.
+- `POST /api/v1/trash/{task|workspace|profile}/{uuid}/{delete|restore|purge}/`.
+- Delete/restore accept strict empty JSON; purge requires literal confirm:true,
+  plus exact confirmation_name for Profile/Workspace. Delete200; restore/purge204.
+- Profile delete/restore: current Profile Owner. Workspace: current Profile
+  Owner/Admin. Task: those managers or effective Workspace ADMIN. Manual purge:
+  Profile Owner only. All mutations revalidate current scope/role under locks.
+- Ordinary DTOs add read-only can_delete. Profile/Workspace mutation serializers
+  now pass request context, matching current GET capabilities after creation.
+
+Before physical purge, plan the exact aggregate and FK closure. ANY Review,
+completed/financial history, pending or retained Invitation metadata (at least12
+calendar months), pending email attempt, unresolved AI references, unknown/outside
+FKs and separately deleted children whose deadlines have not elapsed block purge.
+Blocked rows remain retained with reasons and may be retried;30days is eligibility,
+not unconditional deletion. AuditLog is preserved and receives metadata-only atomic
+events. Explicit scoped deletion plus immediate FK checks rolls back on failure;
+no forced CASCADE, User deletion, global quota cleanup or financial ledger.
+Operational analytics omit effectively deleted Tasks; authorized retained financial
+approval totals remain, without deleted Task details or cross-tenant grants.
+
+React provides global /trash near the sidebar end, reachable after deleting the
+last Profile; type filters, bounded search, pagination, deleter/deadline/impact,
+restore and conditional purge dialogs. Confirmed mutations cancel/reset private
+cache; revoked/expired scope fails closed. C1 search validation, page reset after
+row removal, native-dialog focus/Escape and persistent-heading focus are tested.
+UI UX Pro Max was applied via actual focused UX/React searches, shared teal/neutral
+tokens and existing components. No new UI dependency or design-system replacement.
+
+Management command purge_trash defaults to dry-run. Execution requires the Python
+setting TRASH_PURGE_ENABLED (defaultfalse), loaded from DJANGO_TRASH_PURGE_ENABLED.
+The loader clears inherited purge flags. Command emits sanitized counters/blocker
+codes, safe concurrent no-op counts and nonzero unexpected failures. Blocked old
+rows do not starve later eligible rows. scripts/purge-trash.ps1 is the later local
+wrapper; it was NOT run on development. export-trash-purge-schedule.ps1 exported
+only disabled XML (daily03:00 local, StartWhenAvailable, IgnoreNew). No job was
+registered/enabled/executed. Machine off/logged out cannot provide continuous purge.
+
+### Actual final verification in this resume
+
+| Check | Actual result | Process evidence |
+|---|---|---|
+| Focused Trash/migrations/access |59/59 PASS,11.085s|Python0/launcher0,43 migrations,AI0002 absent|
+| Corrected API/RBAC/Trash contracts |141/141 PASS,19.911s|Python0/launcher0,43 migrations,AI0002 absent|
+| Full isolated PostgreSQL |1168/1168 PASS,448.046s;0fail/error/skip|Python0/launcher0,44 migrations including test-onlyAI0002|
+| Harness / PowerShell launcher guards |19/19 and16/16 PASS|native0|
+| Full frontend |1295/1295 PASS,38files|npm0|
+| Focused frontend Trash / Members |59/59 and37/37 PASS|subsets of frontend suite,exit0|
+| TypeScript / Biome / production build |PASS|all exit0,final post-spec checks included|
+| Real isolated browser,8suites |44/44 unique cases PASS|Playwright/launcher/backend0;owned cleanup|
+| Source/migration preservation and whitespace |PASS|834baseline files,0missing;33old migrations unchanged;diffcheck0|
+
+Browser counts: Trash7 (final51.1s), Task/Start7, Collaboration7, Workspace Members4
+(final44.5s), Organization Members4, InvitationV2 7, Task Stability4, Reassignment/
+Analytics4. Trash was repeated after final code; its7cases are counted once.
+Four sizes375×812/768×1024/1440×900/812×375 verify no overflow and axe0, keyboard/
+focus and native confirmations. Root inspected actual375/1440 Trash PNGs. Synthetic
+fixture setup is separate from business actions performed through React. These
+are automated isolated results, not manual Owner/development website acceptance.
+
+Pip check, Django check, makemigrations--check--dry-run and actual full migration
+chain/history consistency passed in the isolated runners. Full run:
+f271462fa432479ca4bc5c3166caee1b; corrected contracts4db5ada7fd8043eab6144066603279b6;
+final Trash955b607b33c645b28daa9990d459586f; final Workspace5bd0f12ebe2b4589bbb6643f39ae9bf1.
+Raw stdout/stderr/process and child-exit receipts remain Git-ignored under
+`.local_backups/HT-TRASH-V1/`, including resume-final-full-BackendFull-* and
+resume-final-browser-*. Containers/networks/databases were ownership-checked and
+removed; final labeled-container/network queries returned0resources. PostgreSQL
+137 in Docker die receipts is intentional disposable-container cleanup, not the
+Python test exit. No test/rehearsal database was development.
+
+Intermediate failures are retained, not hidden: CLI flag string-splat exit2;
+stale precomputed migration plan caught before business tests (AI0002 only in
+an authorized disposable DB);54focused with1TEMP-FK fixture error; initial full
+1167/17failures including missing additive fieldsets and actual serializer context
+bug; TypeScript tuple error and outdated frontend/sidebar expectations. Corrected
+141/full1168 and frontend1295 supersede them. Initial Trash browser1failed/6not-run
+used a wrong page=1 listener. Initial Workspace1failed/3not-run used the obsolete
+pre-V2 email-create UI. Its fixture/spec now seeds an explicit pre-cutover legacy
+invitation; registration/acceptance and Workspace grant/update/revoke still use
+real UI and all security assertions remain. No Invitation runtime policy changed.
+The Members unit test settles the existing initial300ms debounce before paging;
+the underlying initial-debounce timing behavior is an out-of-scope observation.
+
+### Development/source preservation and exact continuation
+
+Fresh read-only identity/history/schema checks at09:50 and10:10:07UTC confirm
+PostgreSQL16.14, hustlytasker_db, the same hustlytasker_postgres container,
+docker_postgres_data volume and127.0.0.1:5432:41migrations; workspace0006/tasks0006
+and ai.0002 UNAPPLIED;0Trash columns. Final transaction_read_only=on receipt:
+`.local_backups/HT-TRASH-V1/resume-final-development-readonly-state.json`.
+No fresh row-count/fingerprint snapshot is claimed; the inventory below is historical.
+No development data/schema mutation, fixture, purge, backup change, .env read/edit,
+SMTP/provider call, scheduler enable, commit/push/reset/clean or deployment occurred.
+Do not start the new Trash-aware persistent backend before approved migration.
+
+Git remains main at31f0af932a9ffaf3e578115d63faa4a776e75175. All834baseline files remain;
+33pre-existing migrations (including applied V2 and unapplied AI0002) retain hashes.
+No dependency, AI app, User schema or SRS/HLD Word change. Earlier dirty Task/
+Analytics/Invitation/frontend work is preserved. Task delta:52existing files plus
+27new files; exact paths are in resume-final-source-audit.json/resume-source-review.json.
+Main groups: common/deletion.py; new apps/trash; workspace/tasks models/access/
+serializers/services and capability response tests; deletion-aware analytics/
+Invitation/Notification gates; React Trash/navigation/actions/cache; isolated
+harness/fixtures and disabled scheduler scripts;13affected documentation files.
+
+Only new migrations are workspace.0006_soft_delete and tasks.0006_soft_delete;
+tasks0006 depends on workspace0006. Both were exercised on isolated PostgreSQL,
+including historical-null preservation, constraints/indexes and reversibility.
+No new migration belongs to apps/trash itself. Do not apply AI0002 or a general
+unscoped migrate during a future rollout. Build retains its676.15kB chunk advisory.
+
+No implementation blocker remains. Development migration, real-data purge,
+scheduler activation and manual Owner UI acceptance are separate PENDING gates.
+Next safe step is Owner source/design review, then a separately authorized scoped
+backup/restore-rehearsal/migration rollout for these two migrations. Approve purge
+policy/execution and scheduling separately; keep disabled until then. After rollout,
+manual UI acceptance can verify soft-delete/restore, independent child deletion,
+revocation, history holds and financial totals using Owner-chosen development data.
+Do not start another feature/task, purge records or deploy automatically.
+
+## Current verified rollout — 2026-11-13 — HT-ORG-INVITATION-V2
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+Owner attachment7575b212 authorized exactly workspace0005 and notifications0004
+after fresh identity/planner/backup/restore/security/writer gates. Both targets
+actually applied: workspace.0005_account_invitations at11:44:56UTC, then
+notifications.0004_invitation_context at11:44:58UTC (18:44:56/58 Vietnam), native
+launcher/guard exits0. No general migrate, fake/manual history, AI migration,
+automatic reverse/restore, business fixtures, real email or production deployment.
+Stop at OWNER MANUAL ACCEPTANCE; no adjacent feature/rollout is authorized.
+
+### Fresh development identity, history and preservation
+
+PostgreSQL16.14; Docker29.8.2; same hustlytasker_postgres container
+49ef9315294450710e2c71eefb1559993c821aff94531e79541d9811534ebbbe;
+docker_postgres_data volume,127.0.0.1:5432,hustlytasker_db,config.settings
+development. Initial29tables/39migrations → final31tables/41migrations.
+workspace0005 and notifications0004 APPLIED; tasks0005 remains APPLIED;
+ai.0002_dispatch_governance remains UNAPPLIED and governance tables are absent.
+The new backend's one-pending-AI startup warning is expected. Do not follow its
+generic unscoped migrate recommendation.
+
+| Existing data | Before | After |
+|---|---:|---:|
+| Users / Sessions |5 /2|5 /2|
+| Profiles / ProfileMemberships |2 /3|2 /3|
+| Workspaces / WorkspaceMembers |3 /3|3 /3|
+| Tasks / TaskAssignments |5 /5|5 /5|
+| Deliverables / Reviews / Comments |3 /0 /1|3 /0 /1|
+| Invitations / Notifications / AuditLogs |2 /9 /42|2 /9 /42|
+| AccountSecurityTokens / AiProposal / AiOperation |1 /0 /0|1 /0 /0|
+
+All original business-table row SHA256 fingerprints match, not only counts.
+Invitation projection excludes only the new acceptance_kind column; all old
+rows are EMAIL_TOKEN, retaining every old field/digest/identity/expiry/status.
+Both are SENT: oneACCEPTED, oneREVOKED; there are0realPENDING invitations, so
+no actual pending-user acceptance was performed or claimed. Task Notification
+projection excludes only new invitation_id; all oldrows haveNULL and are unchanged.
+No Profile/Workspace membership/access was granted or revoked by rollout.
+
+Only expected framework metadata changed: django_migrations+2,
+django_content_type25→27,auth_permission100→108 (two new quota models/four
+permissions each); every original metadata row hash remains. New
+InvitationDirectoryAccess/InvitationEmailAttempt tables are empty. All constraints
+validated/indexesvalid+ready; existing development column/constraint/index/sequence
+metadata stays exact outside the explicitly approved delta. New FK/identity/
+context/uniqueness checks were also exercised on isolated synthetic data.
+
+### Backup and isolated restore evidence
+
+Protected outside-repo archive, retained for Owner review:
+D:/da/HustlyTaskerBackups/HT-ORG-INVITATION-V2-ROLLOUT/20261113T114057Z_0a7b46be366643fa9f3a52526991b82c/hustlytasker_development_20261113T114057Z.dump
+
+Size132398bytes; SHA256:
+`6CB6EB961DF83DA3C819CCD143A17F3C2CFC0FE32379E27216C2ECD43F05ADDC`.
+ACL restricted to current Owner/SYSTEM/Administrators; customPGDMP magic,
+pg_restore--list,full archive read and actual restore exits0. No upload or
+backup overwrite/delete. Backup hash checked before rehearsal retry and rollout.
+
+First isolated restore succeeded but a private verifier rejected physical
+django_content_type attnum gaps (app_label3→2,model4→3) removed by pg_dump.
+All other column metadata/logical order matched. Verifier now compares logical
+ordinal order across clusters; same development cluster retains strict physical
+checks. An earlier read-only gate also needed explicit JSONB-string decoding.
+These were controlled private-verifier corrections, not product/schema/data
+faults. Original failed receipts are retained; development remained untouched
+until corrected backup/restore/scoped rehearsal gates passed.
+
+Final rehearsal cluster/run665321a7ed2b4cadaefd13180017b034 differs from development,
+uses internal Docker network,tmpfs storage,no ports,no development-volume mount,
+read-only backup/source mounts. Restored data/history preserved, both exact targets
+applied,AI0002absent,post-migration schema/model/preservation checksPASS. A separate
+`ht_inv2_665321a7ed2b4cadaefd13180017b034_smoke` clone ran19/19synthetic security/API/
+service groupsPASS,process0: safe directory/page20/role/tenant/CSRF,Web persistence
+after fake SMTP failure,own zeroProfile inbox/notice,read independent ofaccept,
+same-recordretry/3attemptcap,accept/replay/revokedmembership/currentmonth-only,
+decline,synthetic pre-cutover legacytoken,DBconstraints and original-row hashes.
+Four locmem messages only;0realmail/AIcalls. No browser E2E result is claimed
+for this rollout. Both attempts' exact owned containers/networks/clones removed;
+backup retained. Do not clean the intentional local backend/Vite services.
+
+### Startup and fresh read-only smoke
+
+Writer gate found0old backend processes and port8000free, so no process needed
+termination. Fresh pre-apply data/planner/identity/hash gates passed; each target
+was checked again immediately before its own standard Django migrate call.
+
+New backend started via existing scripts/start-backend-dev.ps1 (hidden background
+launcher PID10520), Vite via npm dev (launcherPID25832), loopback8000/5173. A unique
+new backend listener and log marker were verified. No .env edit/credential reset;
+existing safe loader supplied local values privately, without printing secrets.
+No startup migration/fixtures or automatic login. The backend runs--noreload.
+
+Actual new verification: Django check/makemigrations--check--dry-run PASS;
+25/25HTTP GET checks directDjango+Viteproxy PASS (health/CSRF200,appropriate
+anonymous boundaries403/loginGET405,includingcandidate/inbox/detail/notification).
+These25checks are HTTP smoke, NOT the historical25Playwright tests. Separately,
+five authenticated handler GET projections200 used an existing legitimate Owner
+under PostgreSQL READ ONLY with APIRequestFactory/force_authenticate, creating
+no session and proving no live-HTTP/password-login behavior. Final post-startup
+fingerprints remain unchanged and quota tables remain empty.
+
+IMPORTANT: successful authorized directoryGET intentionally writes durable quota.
+It was NOT called on persistentdevelopment in a read-only rollout. Positive
+directory/schema/role behavior is verified on the isolated clone; development
+anonymous denial is verified over HTTP. Authenticated real-browser directory,
+recipient decisions and genuine SMTP receipt remain Owner manual acceptance.
+No credentials/session cookie were extracted to bypass that boundary.
+
+### Source/docs, limitations and exact next step
+
+Git main/HEAD31f0af932a9ffaf3e578115d63faa4a776e75175 preserved; all initial dirty
+files remain. Rollout baseline833source files; runtime/models/migrations/settings
+are frozen, with only rollout documentation/private ignored helpers changing.
+Final audit:833baseline files retained,0runtime changes,33migration file hashes
+unchanged;206relative links in16affected documents resolve,git diff--check exit0.
+Evidence .local_backups/HT-ORG-INVITATION-V2-ROLLOUT/ has source/hash/process/SQL
+plans,backup/restore/cleanup,fingerprint,schema,HTTP and startup receipts.
+[ORG_INVITATION_V2_ROLLOUT](ORG_INVITATION_V2_ROLLOUT.md) owns detailed gates and
+manual acceptance checklist. Prior1108backend/1236frontend/25browser results below
+belong to implementation and were NOT rerun or relabeled as rollout tests.
+
+REAL EMAIL DELIVERY NOT VERIFIED IN THIS ROLLOUT. SENT means transport accepted,
+not inboxreceipt; on_commit is not durableoutbox,crash may require bounded explicit
+retry. Production quota-history retention remains separate. No liveAI or
+production readiness/deployment is claimed; reverse with ACCOUNT data may fail
+and would require separate recovery approval,never automatic deletion/restore.
+
+Owner next: openhttp://127.0.0.1:5173,hardreload,login with existing testaccounts,
+chooseorganization→members→registered-account picker→role→send; login recipient,
+checkownnotice/inbox,markreadthenaccept/decline;checkcurrent-month access/noTask
+assignment;retryFAILED on sameID if needed;checklegacyexistinghistory. Manual
+actions create real development data and may send real configured SMTP email;
+Owner chooses recipient/cleanup. No automated mutation was done on development.
+Servers are already running: do not launch duplicates. Do not applyAI0002 or
+start another task. Stop at OWNER REVIEW/MANUAL ACCEPTANCE GATE.
+
+## Historical implementation verification — 2026-11-13 — HT-ORG-INVITATION-V2
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.**
+Owner D01–D07 are APPROVED by attachment3600fd19-6b5c-4700-9553-f199ff75b200.
+Backend, React, additive migration files and isolated verification are complete.
+No development migration, data change, .env access/change, real email, live AI,
+commit/push or deployment was performed. Stop at OWNER REVIEW GATE; this is not
+approval to restart pending-schema code or run migrations on development.
+
+### DONE — actual implementation
+
+- New create accepts only recipient_user_id/requested_role from an authenticated,
+  CSRF-protected manager. Owner can invite ADMIN/MEMBER; Admin only MEMBER.
+  Directory access uses current Profile authority, never staff status alone.
+  Active accounts only; safe name/username, optional coarse masked-email fallback,
+  ambiguous labels disabled, no full email/phone/verification/other-Profile data.
+- Directory is server-searched, fixed20/page, max100-character validated search,
+  ~300ms React debounce, stable pagination and User/Profile/search/page query keys.
+  Invalid control/NUL/surrogate input returns400, not500. PostgreSQL durable
+  counters enforce30searches/user/minute,30invites/inviter/24h,5/recipient-account/
+  24h and3emailattempts/Invitation/24h including initial. TTL remains7days.
+- ACCOUNT Invitation + audit + typed Web Notification commit atomically, before
+  SMTP. Own recipient inbox/detail/ID decisions work with zero Profiles. Strict
+  Notification branches preserve existing Task context; read is not accept.
+- Accept revalidates account, inviter, Profile, role and rejoin policy under locks.
+  D01 keeps current-month MEMBER Workspace grant AFTER valid accept, inherited
+  ADMIN and stale Workspace soft-revocation on rejoin. No revoked Workspace row
+  reactivation, historical Workspace grant or Task assignment. Replay adds no
+  membership/audit and cannot restore revoked access. Ambiguous rejoin fails closed.
+- ACCOUNT identity is bound to User, not snapshot email. Current active User/
+  current email are rechecked for send/retry. Email has no token/code/autoaccept.
+  SMTP failure records FAILED while Web create returns201; same-record bounded
+  retry preserves role/expiry/notification/read-state. No automatic worker/outbox.
+- Legacy rows default EMAIL_TOKEN, retain digest/identity/expiry/history and old
+  accept/decline until actual expiry. Public new email/code issuance and legacy
+  resend are rejected; compatibility route remains direct and unpromoted.
+- React account picker, pending management, /invitations inbox/detail and typed
+  Notification actions use existing API/client/cache/dialog primitives. Explicit
+  accept/decline confirmation; server-confirmed state, no optimistic access grant
+  or automatic tenant switch. Logout/session-expiry clear private cache.
+
+### Schema files — NOT applied to development
+
+1. workspace.0005_account_invitations: acceptance_kind, conditional legacy token/
+   SENT/identity constraints, recipient inbox index, durable directory/email-attempt
+   models; account-specific pending uniqueness retains existing User constraint.
+2. notifications.0004_invitation_context: protected Invitation FK, PROFILE_INVITED,
+   three strict context branches; depends on workspace.0005 and the pre-existing
+   notifications.0003_task_unassigned.
+
+All31pre-existing migration file hashes remain unchanged, including ai.0002.
+Migration tests preserve legacy fixtures and verify constraints, full chain and
+reverse failure atomically when new ACCOUNT/notification data is incompatible.
+Rollback is not automatic recovery; never remove real rows to force a reverse.
+
+### Current tests — actually run on final runtime source
+
+| Check | Result | Exit/cleanup evidence |
+|---|---|---|
+| Focused Invitation/Notification/migration/delivery backend |62/62 PASS,23.148s|Python0,launcher0,owned resources removed|
+| Full isolated PostgreSQL backend |1108/1108 PASS,398.807s,0FAIL/ERROR/SKIP|Actual backend child0,launcher0,DB/resources removed|
+| pip check / Django check / model drift / migration graph/full chain |PASS|Shared isolated backend runner0|
+| Frontend unit/contract |1236/1236 PASS,36files,39.54s|Process0|
+| TypeScript / Biome / production build |PASS|Process0;final E2E typecheck/lint0|
+| Invitation V2 real isolated browser |7/7 PASS,52.8s|Playwright/launcher/backend0|
+| Members real isolated browser |4/4 PASS,40.2s|Playwright/launcher/backend0|
+| Fake-mail delivery-failure browser |2/2 PASS,16.0s|Playwright/launcher/backend0|
+| Workspace inheritance browser |4/4 PASS,28.8s|Playwright/launcher/backend0|
+| Task reassignment/analytics browser |4/4 PASS,35.0s|Playwright/launcher/backend0|
+| Task stability browser |4/4 PASS,20.4s|Playwright/launcher/backend0|
+
+Final browser total25/25 across6suites, all owned disposable DBs/resources removed.
+375/768/1440/812x375, axe, radio keyboard selection, native dialog/focus-return,
+large server search/pagination, fake SMTP failure/retry, wrong-user/CSRF/tenant,
+legacy compatibility and zero-Profile recipient flows were actually exercised.
+UI UX Pro Max full local skill/master and offline search/pagination, loading,
+React cleanup/debounce guidance were applied; teal/neutral/shared tokens retained.
+
+Initial failures are retained as evidence, not hidden: backend361 batch had3
+invalid-search subcase errors (fixed DRF error mapping; corrected62 and full1108
+passed); first V2browser had a label-selector mismatch (corrected7/7); first
+Members3/4 encountered Chrome's native search Escape clearing the input before
+dialog cancel. A standalone Chrome receipt proved this behavior; test now focuses
+the existing Close button before Escape and retains all close/focus assertions.
+No production UI behavior or security assertion was weakened for that fix.
+
+Raw stdout/stderr/process/child receipts and screenshots are Git-ignored under
+.local_backups/HT-ORG-INVITATION-V2-IMPLEMENTATION/. Full backend run ID
+9ddf8dcf0ccf4228811be68c0f350d85; backend child0. PostgreSQL cleanup exit137
+means intentional owned-container termination, not failed Python tests.
+Browser modes keep ai.0002 UNAPPLIED; full disposable backend regression may
+include it under prior explicit authorization. Neither mode loads Owner .env.
+
+### Source and development preservation
+
+Git main/HEAD31f0af932a9ffaf3e578115d63faa4a776e75175 retained. Initial64dirty paths
+were preserved; pre-existing Task reassignment/analytics work remains uncommitted.
+The817-file pre-implementation baseline has0missing files;31existing migration
+hashes unchanged. V2 changes are limited to workspace/notifications backend,
+members/notification/frontend integration and related tests/docs/harness modes.
+Detailed changed/new paths: final-source-preservation.json in ignored evidence.
+Final documentation audit:affected-document relative links resolve;
+git diff --check exit0, and all16new files pass whitespace checks. Cleanup receipts
+confirm no containers/networks remain for the test run IDs created by this task.
+
+Metadata-only Docker inspect confirms the same running development container
+49ef9315294450710e2c71eefb1559993c821aff94531e79541d9811534ebbbe,
+hustlytasker_postgres, docker_postgres_data and loopback5432. This task made0
+development SQL connections and0development mutations. There is NO fresh SQL
+row-count/fingerprint or migration-history read in V2;39migrations/5Users/2Sessions
+below are prior-rollout history. No independent current inventory is claimed.
+No new V2 migration was executed on development; ai.0002 was not applied there.
+
+### Limitations and next safe step
+
+REAL EMAIL DELIVERY NOT VERIFIED IN THIS TASK. Mail tests use fake/locmem transport;
+SENT means backend acceptance, not inbox receipt. on_commit is not a durable queue:
+process crash may leave QUEUED/reserved attempt. Explicit capped retry is provided;
+no automatic dispatcher is promised. Durable quota rows need a separately approved
+retention/maintenance policy before production scale. Build has a nonfatal >500kB
+chunk advisory. No manual Owner browser/deployment/live provider result is claimed.
+
+Only remaining gate: separately approved controlled development rollout with fresh
+identity/legacy-data checks, backup+restore rehearsal, exact plans for workspace0005
+then notification0004, coordinated backend stop/start and post-migration integrity/
+non-mutating smoke. Do not run general migrate or ai.0002 on development. New code
+requires the new columns; do not restart persistent pending-schema backend as if
+runtime were already compatible. After rollout Owner can manually accept the UI.
+No automatic rollout, deployment, AI, Project or adjacent implementation follows.
+
+## Historical design checkpoint — 2026-11-13 — HT-ORG-INVITATION-V2
+
+**DESIGN READY — PENDING OWNER DECISIONS. IMPLEMENTATION NOT STARTED.**
+The Owner supplied an account-based organization invitation specification with
+an explicit no-source/no-migration/no-development-DB/no-real-email boundary.
+The original sections1–9 are preserved in [ORG_INVITATION_V2.md](ORG_INVITATION_V2.md);
+sections10–14 record actual source audit, proposed contracts/schema/UI, BR/E
+traceability, migration compatibility and seven pending decisions. Do not begin
+runtime implementation or create/apply migrations from this document alone.
+
+Initial Git main/HEAD31f0af932a9ffaf3e578115d63faa4a776e75175,63pre-existing dirty
+paths. All existing runtime, tests and applied/untracked migrations must remain.
+This task reads source only; no database connection/inventory, `.env` read, mail
+send, AI call, process restart, test fixture or runtime/settings edit was made.
+Previous rollout facts/tests below are historical, not V2 verification.
+
+Already present: five Invitation statuses, three separate delivery states,
+recipient_user FK, pending-account uniqueness, Owner→ADMIN/MEMBER and
+Admin→MEMBER ceiling, atomic accept, inviter authority revalidation and active
+membership uniqueness. Missing: registered-account directory, recipient inbox,
+ID-bound decisions and invitation Notification target/authorization.
+Current DB/service requires SENT plus token/email for accept/decline; Task-only
+Notification requires full Workspace/Task context and current membership. V2
+cannot be implemented solely as React controls or an extra enum.
+
+Important BR09 conflict: current accept auto-grants MEMBER current-month Workspace
+membership under the separately approved inheritance policy. Proposed ACCOUNT V2
+omits that grant, retains stale Workspace-access soft-revocation on rejoin and
+does not change inherited ADMIN governance. Owner must confirm legacy/cutover
+scope before code. Keep legacy credentials/history; do not activate all old
+pending invitations by ID or backfill account identity by guessing email.
+
+Other pending choices: safe account disambiguator (username can contain contact
+data; no avatar field), inactive rejoin/replay, typed Notification schema,
+email recovery/destination after email change and durable search/retry quotas.
+Email failure must not invalidate Web invitation in V2; current post-commit503
+and legacy resend-rotation behavior cannot be reused unchanged for ACCOUNT.
+An on_commit callback is not a durable queue; no outbox/worker is approved yet.
+
+Full local UI UX Pro Max skill/master were read; offline UX search/pagination,
+loading-button and React cleanup/debounce searches ran exit0. Rejected native
+haptic output; retained teal/neutral/shared native dialogs and explicit decisions.
+No UI/browser/axe result is claimed. Existing Invitation and UI tests were read,
+not rerun; V2 test coverage is a future isolated test plan in the design document.
+
+Only seven documentation files are affected: ORG_INVITATION_V2, HANDOVER,
+PROGRESS, PROJECT_ROADMAP, REQUIREMENT_STATUS, CHANGELOG and DECISION_LOG.
+Private source/spec preservation receipts are ignored under
+.local_backups/HT-ORG-INVITATION-V2/. Verification:817existing files retained,
+790non-document files unchanged; only6existing documents plus1new spec changed.
+Git main/HEAD unchanged,64dirty paths =63preserved +new spec. Owner spec content
+preserved (Markdown paragraph/trailing-space formatting only). All86local links
+in the7affected documents resolve; git diff --check exit0. The new untracked
+document has0trailing-whitespace lines; native no-index comparison against
+/dev/null returns1 for file differences without whitespace errors, not a test
+failure. No runtime test result is claimed. API_DOCUMENTATION, DATABASE_SCHEMA
+and RBAC remain actual-runtime descriptions; the proposed contract is separated.
+
+Next safe step: Owner reviews INV2-D01–D07, especially BR09/legacy compatibility,
+directory privacy, Notification/Invitation constraints and delivery recovery.
+Only a separately approved implementation may change code/models or prepare
+migrations; persistent development rollout still requires its own authorization.
+No real email/provider/deployment is authorized. Stop at OWNER REVIEW GATE.
+
+## Verified previous rollout — 2026-11-13 — HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+Owner explicitly approved ai.0002 ONLY in the disposable full-regression test DB.
+The two separately approved development candidates were executed after full
+regression, fresh backup, actual archive restore, scoped rehearsal and fresh
+identity/plan/data/source gates. No additional migration or public deployment is
+authorized. Stop at Owner manual UI acceptance; do not start another task.
+
+Actual development execution (UTC): reviews.0003_review_compensation_snapshot
+06:27:28, notifications.0003_task_unassigned06:27:29, both native exit0. Each plan
+contained only its own candidate, with existing dependencies. Final history39
+(previous37), all prior migration records preserved. tasks.0005 remains APPLIED;
+ai.0002_dispatch_governance remains UNAPPLIED, and no governance tables exist.
+Django startup's one-pending-AI warning is EXPECTED. Do not follow its generic
+unscoped migrate suggestion. No migration source was edited and no fake/manual
+migration history/rollback/restore was used on development.
+
+Three distinct database contexts:
+
+| Context | Database | PostgreSQL cluster ID | AI0002 |
+| --- | --- | --- | --- |
+| Persistent development | hustlytasker_db | 7671936116369391654 | UNAPPLIED |
+| Disposable full regression | test_hustlytasker_56fab597b4a5414fa0dc916e05da894a | 7707536011302096936 | Applied only here; observed history40 during suite |
+| Accepted actual archive rehearsal | ht_reassign_b2175cbfd7b64337b1b1ed360d8910e8 | 7707538505807134766 | UNAPPLIED, history37→39 |
+
+The test cluster used shared harness tmpfs, internal network, no published ports
+or development mounts, source read-only. Test-only AI permission does not extend
+to rehearsal or development. Rehearsal restored the actual new custom archive,
+not a schema-equivalent fixture. Its separate clone
+ht_reassign_ddf51abb61764f92adbb1f60e6f68f89 ran8 synthetic service checks with outer
+rollback: new Review writer, WORKING transfer→ASSIGNED, history, old/new events,
+approval500000 snapshot/COMPLETED, protected completed state, and both open-state
+unassign→PENDING paths. This was not UI/browser or development mutation testing.
+
+Backup retained outside repository and cleanup paths:
+D:\da\HustlyTaskerBackups\HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01\20261113T062311Z_45ed96efc82d4a1181574796900b20c4\hustlytasker_development_20261113T062311Z.dump
+Size131888bytes; SHA256:
+3489FBBA02C05734BF95422CDD300D90A2734B5BFE22657E6B98F8C2E17F68E8.
+Protected ACL permits only current Owner SID, SYSTEM and Administrators. pg_dump,
+archive list, full archive read and actual restore exit0. Checksum unchanged at
+final verification. First rehearsal comparison STOP was a private verifier false
+positive: per-item varchar→text vs whole-array varchar[]→text[] rendering. No
+application/migration change was needed. A strict whole-expression grammar with
+exact old5/new6 event enums was validated offline with1positive/8negative cases;
+the second actual archive restore passed all gates. Original attempt evidence
+is retained; no failed condition was silently counted PASS.
+
+Final READ ONLY post-startup preservation06:30:00Z confirms original development
+container49ef9315294450710e2c71eefb1559993c821aff94531e79541d9811534ebbbe,
+docker_postgres_data,127.0.0.1:5432,PG16.14. All29tables retained. Inventory before
+and after:5Users/2Sessions/2Profiles/3ProfileMemberships/3Workspaces/3WorkspaceMembers/
+2Invitations/5Tasks/5TaskAssignments/3Deliverables/0Reviews/9Notifications/42AuditLogs/
+1Comment/1AccountSecurityToken/0AIProposal/0AIOperation. All legacy row fingerprints
+and business sequences match, including all old migration rows. Expected changes
+are exactly2Review columns,2validatedReview CHECKs, Notification event CHECK enum,
+2migration records and its sequence37→39. All existing FK/constraints/indexes are
+valid/ready. Review snapshot bool is NOT NULL/defaultNone; amount numeric(18,0)
+nullable/nonnegative. Legacy False/NULL means unknown, not0. Actual development
+has0Review rows; synthetic/migration tests cover legacy snapshot behavior.
+
+Fresh full backend shared suite1056/1056 PASS,0fail/error/skip,323.323s; actual
+Python process0 and PowerShell launcher0. pip check, Django check and model/graph
+consistency PASS. PostgreSQL disposable container exit137 was deliberate forced
+cleanup after the passing Python process, not test failure. Owned test DB removal
+and zero remaining owned test/rehearsal containers/networks verified. Test history
+40 was captured during execution, not falsely described as final teardown history.
+Earlier in this same rollout, with unchanged runtime hashes: frontend1182/1182
+across34files PASS46.46s/npm0, Biome112files0, typecheck/build0 (Vite15.99s,
+639.43kB advisory). Browser4/4 belongs to prior OWNER-PREFLIGHT, not a new browser
+run in this rollout. No full browser regression or manual Owner login was run here.
+
+No old project backend/listener or other DB connection existed immediately before
+migration;0processes killed and PostgreSQL was not restarted. New backend started
+through scripts/start-backend-dev.ps1, Django6.1.2, --noreload, one loopback8000
+listener. Vite6.4.5 was started only because5173 was free, ready on loopback.
+19actual HTTP GET checks PASS through Django and Vite proxy: health/CSRF bootstrap,
+authenticated-only boundaries, method restriction and HTML. Unique health marker
+in new-backend log plus single listener proves responses came from new server.
+Separate read-only force-authenticated existing-Owner handler checks passed for
+2Profile analytics summaries/2employee lists/1employee detail/3Workspaces/
+5Task details/5Deliverable lists/notification feeds and unread counts. This is
+APIRequestFactory verification, not authenticated browser/manual acceptance;
+no Session or business row was created. Native Django check/model drift and scoped
+post-plans PASS; candidate plans empty and only AI migration remains pending.
+
+Git remains main/HEAD31f0af932a9ffaf3e578115d63faa4a776e75175 with all63pre-existing
+dirty paths preserved. All817existing tracked/new files remain;790non-document
+file hashes unchanged. This rollout changed only10affected documents plus ignored
+private evidence/helpers. No runtime/model/migration/.env/SMTP/AI/RBAC policy edit,
+no commit/push/reset/clean/deploy, no real mail or live provider call.
+Evidence: .local_backups/HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01/ including
+full-backend-result.json, full-test-isolation.json, backup.json,
+rehearsal-attempt-2/, execution-safety-gates.json, development-*-execution.json,
+http-smoke-result.json, development-after-startup-preservation-process.json and
+final-cleanup-and-backup.json. Do not delete the retained backup before acceptance.
+
+Owner next: open http://127.0.0.1:5173/, refresh, log in and verify unassign
+ASSIGNED/WORKING→PENDING, transferWORKING→ASSIGNED with correct recipient,
+REVIEW/COMPLETED denial, Task detail/list/analytics without duplicate compensation,
+old/new assignment notifications, MEMBER/VIEWER/manager boundaries and retained
+history/snapshot. These manual mutations affect real development data; Owner
+chooses records. No new development fixtures were created by automation. Await
+Owner feedback; do not automatically migrate AI or begin another task.
+
+## Historical resume checkpoints — 2026-11-13 — superseded by verified rollout below/above
+
+**Verified checkpoint 06:26Z:** full shared regression1056/1056 PASS323.323s,
+0fail/error/skip; actual Python and launcher0. Test resources removed; development
+unchanged at pre-backup inventory. New protected custom backup131888bytes SHA256
+3489FBBA02C05734BF95422CDD300D90A2734B5BFE22657E6B98F8C2E17F68E8 is retained at
+D:\da\HustlyTaskerBackups\HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01\20261113T062311Z_45ed96efc82d4a1181574796900b20c4\hustlytasker_development_20261113T062311Z.dump.
+List/full read/actual restore exit0. First rehearsal comparison stopped due a
+private comparator false positive (per-element vs whole-array text casts), with
+no runtime/migration change. Original evidence retained. Strict full-expression
+grammar plus exact5→6 enum comparison was verified offline against1positive and
+8negative cases. A second actual restore of the same unmodified archive into a
+new isolated cluster passed all preservation checks and both scoped migrations.
+Accepted rehearsal DB ht_reassign_b2175cbfd7b64337b1b1ed360d8910e8, cluster
+7707538505807134766, history37→39, noAI0002. Eight synthetic service checks passed
+in a separate clone with outer rollback; no mail/provider calls. Owned rehearsal
+containers/networks removed; backup retained. Evidence in rehearsal-attempt-2/.
+
+Next safe action: execute-approved.ps1 revalidates source, backup, old-writer
+absence, unchanged development and exact per-candidate plans, then applies only
+the two approved leaves. No development migration has occurred at this checkpoint.
+Post schema/data checks and official new-backend startup are still pending.
+
+**HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01 — IN PROGRESS.** The Owner now explicitly
+permits ai.0002_dispatch_governance ONLY in the disposable full-backend-test
+PostgreSQL database. The scope conflict in the historical checkpoint below is
+resolved. This does not permit that migration on development or restore rehearsal.
+Do not ask again for this exception or the already authorized two-candidate rollout.
+
+Shared full regression is running. Observed resource run
+d2c66c0fef184c15b12216589c48d174 uses PostgreSQL tmpfs without published ports or
+development mounts, an internal network and read-only source. Its database is
+test_hustlytasker_56fab597b4a5414fa0dc916e05da894a, in a different PostgreSQL cluster
+from development. A read-only observation during tests recorded 40 migrations,
+including the two candidates and ai.0002. This is not yet a final test result.
+Development still has 37 migrations and ai.0002 absent at this observation.
+
+Next: capture actual full-suite counts/exits and owned cleanup; verify development
+preservation. Only on PASS create the fresh protected custom backup, restore that
+actual archive into a separate disposable cluster, rehearse only the two approved
+candidates, compare data/schema, then execute the guarded development rollout and
+startup checks. No fresh backup/rehearsal/development migration has occurred yet.
+Any failed required gate stops rollout without automatic rollback or restore.
+Evidence remains in the ignored task directory. Preserve all existing source,
+secrets, AI settings and the Owner manual acceptance gate.
+
+## Historical blocked checkpoint — 2026-11-13 — superseded by explicit test exception and rollout
+
+**ROLLOUT BLOCKED — DEVELOPMENT STATE PRESERVED.** Owner conditionally authorizes
+reviews.0003_review_compensation_snapshot and notifications.0003_task_unassigned
+on local development AFTER every gate. Do not ask for that same authorization
+again. No development migration, backup or restore has been executed in this task.
+
+The remaining scope conflict requires Owner clarification: the prompt requires
+FULL backend regression before rollout and also prohibits applying AI migrations.
+The full suite includes apps.ai.test_governance and test_governance_migrations;
+the latter explicitly migrates ai.0002 (e.g. test at line77). A full PASS cannot
+be claimed while secretly excluding those tests. One asynchronous question is
+pending: permit ai.0002 ONLY on the disposable full-regression test database,
+while forbidding it on development and the restored rehearsal database, OR keep
+the absolute test ban and stop. No answer has been received; elapsed time is not
+approval. Do not run the full suite until this is resolved. There is no credential
+blocker or new need to approve the two already-authorized candidate migrations.
+
+Completed independent checks: source/SRS/locking/history/analytics audit PASS;
+both candidates match their preflight hashes. Fresh frontend1182/1182 across34
+files PASS46.46s/npm0; Biome112files0; typecheck/build0, Vite15.99s and639.43kB
+chunk advisory. Local launcher ValidateOnly PASS with values hidden. Actual
+Django/config.settings READ ONLY plan06:03:20Z PASS: exact37history, each plan
+contains only its own candidate, dependencies present, no model drift, all
+existing constraints/indexes valid, no candidate columns/new event or AI schema.
+The private django_gate.py supports readonly preflight/post/GET smoke only.
+
+Fresh development baseline: original container49ef9315…/docker_postgres_data,
+127.0.0.1:5432/hustlytasker_db/PG16.14,29tables/37migrations/5Users/2Sessions/
+5Tasks/3Deliverables/0Reviews/9Notifications/42AuditLogs/0AIrows. The newer Task/
+Audit counts supersede prior snapshots; no cause or actor is inferred. No owned
+backend/Vite process or8000/5173 listener was found, and app connections were0.
+No process was killed and PostgreSQL was not restarted. READ ONLY final check
+06:05:25Z matches every before/after snapshot property except connections;
+canonical SHA256 both886193d95cb05c6cbc54ffed2e481ac97d9652452b78463b5f46d7d21bb81937.
+tasks.0005 remains APPLIED; both candidate leaves and ai.0002 remain UNAPPLIED.
+
+Evidence is ignored under .local_backups/HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01/.
+main/HEAD31f0af932a9ffaf3e578115d63faa4a776e75175 and all63dirty paths are retained.
+No runtime/migration source, .env, credentials, business data, mail/provider or
+production change. Backup location design is a new timestamp/GUID ACL-protected
+child under existing D:\da\HustlyTaskerBackups\; NO archive exists for this task
+yet, so no checksum or restore success is claimed. Do not run earlier Task Brief
+rollout scripts unchanged: their target/migration/compare rules differ.
+
+Exact continuation after clarification: if isolated full-test AI migration is
+explicitly permitted, run the shared full backend harness and record actual
+Python/launcher exits. Only after full PASS continue fresh restricted custom
+backup, list/full-read/checksum, actual archive restore to unpublished owned
+PostgreSQL, exact two-target rehearsal/data preservation, old-writer exclusion,
+fresh live target plans and guarded development execution. Keep ai.0002 absent
+from both development and rehearsal. If a gate fails, stop without automatic
+rollback or restore. Final new-backend startup/GET smoke and Owner UI acceptance
+follow only a successful rollout; do not claim completion or start another task.
+
+## Historical preflight — 2026-11-13 — HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT
+
+
+**BUSINESS RULE PASS — MIGRATION PREFLIGHT PASS WITH CONDITIONS.**
+**STOP: OWNER APPROVAL GATE — DEVELOPMENT MIGRATIONS STILL NOT AUTHORIZED.**
+Owner explicitly supplies SRS V3§4.2.1: unassign ASSIGNED/WORKING→PENDING,
+transfer WORKING→ASSIGNED, ordinary REVIEW/COMPLETED mutations denied. No SRSV3
+file was found in the repository; the Owner's current excerpt is the authority.
+The previous implementation AND its tests really preserved status, so the old
+report was consistent with code but the code was inconsistent with this rule.
+The earlier preserve-status decision below is historical and SUPERSEDED.
+
+Fixed existing unassign service through _save_task_status(PENDING), with actual
+before/after audit status and the same atomic assignment/audit/notification
+transaction, CAS and current RBAC. Twenty-six reassignment tests include both
+reset paths, preserved submission/review/assignment history, failed-audit/send
+rollback and concurrent winner states. Transfer and protected-state policy stay.
+Only confirmation copy, two state-specific component cases and the browser
+unassign assertion change in frontend; no layout, stack, schema or migration edit.
+UI UX Pro Max/master were reused; actual offline confirmation/consequences search
+supports truthful action consequences, existing native dialog and pending guards.
+
+Fresh guarded isolated PostgreSQL158/158 PASS60.885s, run
+cd7a89a5764b4403b9847984160474ea; actual Python and launcher exit0, owned cleanup0.
+pip/Django/model consistency checks PASS. Private runner reuses existing test
+image/Compose/cluster ownership and cleanup guards, rebuilding the exact actual
+37-migration development baseline. Its tables/columns/constraints/indexes match
+the read-only development snapshot, then each candidate plan contains exactly
+its own leaf. Final isolated history39 includes the two candidates and excludes
+ai.0002. Every migration execution is guarded against that forbidden migration,
+including test cleanup. This is schema-equivalent rehearsal with synthetic
+legacy fixtures, NOT a restore of a new development backup.
+
+Seven migration cases inside158 verify legacyFalse/NULL, true/NULL vs exact0,
+numeric(18,0), nullability and validated CHECKs, original data retention, scoped
+plans and conditional reversal. Old Review readers work; old writer INSERT is
+proven to fail SQLSTATE23502 on compensation_snapshot_recorded (NOT NULL with
+no permanent DB default). Current writer succeeds. Review reversal loses saved
+snapshot value; reapply cannot recover it. Notification reversal succeeds before
+new event rows, but with TASK_UNASSIGNED it fails atomically while data, expanded
+CHECK and applied history remain. These are expected negative tests, not hidden
+migration failures. Neither migration source/dependency was edited.
+
+Fresh frontend1182/1182 across34 files PASS46.81s/npm0; final Biome112files exit0.
+Real Chromium/isolated PostgreSQL reassign/analytics4/4 PASS47.7s, run
+e8cbb590088b42dfba66b8b568d7025e, launcher/Playwright/backend0 with owned database
+and resource removal. The updated UI confirms PENDING and the actual mutation
+returns PENDING; four-size reflow/axe/keyboard checks remain in this suite.
+Private browser entrypoint also refuses ai.0002 during setup; no source runtime
+settings or shared harness were edited. Build/typecheck exit0, Vite10.33s,
+chunk639.43kB advisory. No failed/skipped final tests in this preflight.
+
+Final development READ ONLY verification2026-11-13T05:43:43Z confirms original
+container/volume/loopback/PG16.14. All29-table schema/data/history/index/sequence/
+cluster properties match before/after except transient connections; SHA256 both:
+6bf61a2742683fbd8dfa18ab36051611c060165e6e942c1b82b2c6b085efd639.
+Retained37migrations/5Users/2Sessions/2Profiles/3ProfileMemberships/3Workspaces/
+3WorkspaceMembers/2Invitations/4Tasks/38AuditLogs/0AIrows. tasks.0005 APPLIED;
+reviews.0003, notifications.0003 and ai.0002 all UNAPPLIED. No live data or schema
+was changed, no fixture inserted or mail/provider called. Read-only postscan
+finds0owned containers/networks for both test runs; only development PostgreSQL
+remains. No backup/restore or automatic rollback was performed on development.
+
+All logs, process receipts, guarded runners and read-only snapshots are ignored
+under .local_backups/HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT/. All817existing
+tracked/new files remain and the63dirty paths are retained. Comparison to prior
+V1 tested manifests isolates exactly7source changes: tasks/services.py,
+test_reassignment.py, test_analytics_migrations.py, notifications migration tests,
+TaskAssignment.tsx/test and reassign-analytics.spec.ts. No unexpected source
+change; migration files match their original hashes. Thirteen affected documents
+include the SRS correction and compatibility gate; historical decisions/results
+are labeled superseded/historical rather than silently rewritten.
+
+RESULT: initial business FAIL was an implementation defect, now corrected/tested
+PASS. Forward migration/schema/legacy-data checks PASS on the isolated exact
+baseline. **Old Review writers after migration FAIL**; coordinated activation
+with every old backend writer stopped is mandatory. Reverse Review loses saved
+snapshots and reverse Notification with new events fails; automatic/lossless
+rollback is NOT safe or authorized. No candidate migration code was changed to
+hide these risks. The Owner must review those maintenance/recovery conditions
+before separately authorizing a fresh backup, isolated restore/rehearsal and
+targeted development rollout. Neither this preflight nor earlier V1 completion
+grants development apply, general migrate, ai.0002, deploy or a next task.
+
+Not rerun: full backend1051 and other8browser regression suites; their prior
+results below are historical, not this correction's evidence. The focused158
+cover Task/Review, analytics, pay/RBAC, notification and migration regressions.
+No manual development UI acceptance was performed.
+
+Final hygiene:13affected documents/124local Markdown targets and git diff --check
+PASS/exit0. The two candidate migration SHA256 values match the prior tested
+source; both model/migration files are unchanged by this correction. Current
+HEAD31f0af932a9ffaf3e578115d63faa4a776e75175 and63pre-existing dirty paths remain.
+The source comparison retains all817files with no unexpected modifications;
+tested-source.json records the corrected7source/test files and unchanged2migration
+files. Stop here; no development apply or next implementation starts.
+
+## Historical completed implementation — 2026-11-13 — HT-TASK-REASSIGN-ANALYTICS-V1
+
+
+**IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION APPROVAL.**
+**STOP: OWNER REVIEW GATE.** Do not rebuild completed code or start another task.
+main/HEAD31f0af932a9ffaf3e578115d63faa4a776e75175 is unchanged. The initial task
+baseline was clean; the resume preserved all task changes. No commit/push/reset.
+
+Backend source hashes match the frozen candidate. The interrupted corrected run
+was recovered: actual Python1051/1051 PASS356.196s/exit0, original launcher exit
+unavailable; owned2containers/1network cleanup exit0 is separately retained.
+Fresh full1051/1051 PASS373.676s, run e4d6c2a8e4c445e4ab407cd546726842, both
+launcher and actual Python0. pip/Django/model/graph/full isolated chain PASS;
+owned cleanup completed (intentional PostgreSQL stop137 is not Python failure).
+Frontend final34files1181/1181 PASS51.84s; focused6files279/279 PASS37.61s;
+typecheck0, Biome112files0, build0/24.76s, chunk639.38kB advisory. Runtime22-file
+manifest is frontend-tested-source.json. Independent review found no blocking bug. Dashboard
+snapshot_at is a live reporting timestamp, not repeatable-read across widgets;
+concurrent business writes may temporarily change figures between queries.
+
+Read-only development identity/schema/history still match the original target:
+29tables/37migrations/5Users/2Sessions/4Tasks, tasks.0005APPLIED, ai.0002UNAPPLIED.
+Original Nov10 data fingerprint differs due to dated Nov11 activity BEFORE this
+resume: workspace.updated, verification requested/confirmed, login/session and
+notification read metadata. Audit35→38 and account-security-token0→1(CONSUMED).
+No actor identity is inferred or printed. Do not restore/revert those changes.
+Original snapshot is retained; development-resume-before.json and sanitized
+resume-external-activity-metadata.json are the new resume comparison evidence.
+No persistent migration, fixture, live mail/AI request or credential edit.
+
+New real Chrome/Playwright suite4/4 PASS35.8s, run
+fa00a904077b4cd49b9e9c148c7d66eb. Launcher/Playwright/backend0, owned DB/resources
+removed. UI transfer A→B→unassign→assignA refreshes current counts/money without
+moving historical uploader/snapshot credit; API negative checks remain labeled
+as such. Manager/SELF/Viewer payloads, notifications, HCM dates and exact large
+integer amounts are verified. Four sizes375/768/1440/812×375, reduced motion,
+keyboard/native-dialog focus and axe0 PASS. Root viewed375/1440 analytics and
+375dialog PNGs; mobile mutations are NOT separately claimed (mutation journey
+ran desktop1440). Initial browser attempta9f82f38… failed1/skipped3 because exact
+getByLabel did not resolve a wrapped select. Only new-spec selectors changed to
+accessible combobox role/name; assertions retained, failed logs/context preserved.
+Standalone spec Biome/TS using the project's ESNext/Bundler resolution PASS;
+earlier commands from the wrong cwd/module mode failed and changed no config.
+
+### Final isolated browser regressions
+
+All eight affected suites completed37/37 PASS; with the new4-case suite the final
+result is **41/41 across9 passing suites,0failed/0skipped**. Every launcher,
+Playwright child and isolated backend returned0, with owned database removal and
+resource cleanup verified. These are real React UI + Django/PostgreSQL tests,
+not mock frontend tests or manual Owner acceptance. No live provider/email call.
+
+| Suite | PASS | Run ID |
+|---|---:|---|
+| Reassign/analytics |4|fa00a904077b4cd49b9e9c148c7d66eb|
+| Workspace/Task/Start |7|dec9feeb22254d368e5e4e164d4f901e|
+| Task brief/pay |4|d5f068121cd045ae9bb7621258077af6|
+| Task UX/revisions |4|8648736781034917a7bf4849aa6c2faa|
+| Workspace members |4|3e7727288b394d7d8f648a00629cae84|
+| Collaboration |7|0f4b845b5f7b4f6291d3d441d10d0c3e|
+| Full business acceptance |1|aa4e119624a64b28bbc32e2fa74dd7d5|
+| Task stability |4|99317cc2ad1e4c2ab62be55f4864b9be|
+| Auth/CSRF/tenant |6|70aebdf9a1cf49d2b303cfe814d2c946|
+
+Final application typecheck and Biome112files were rerun after the new browser
+selector adjustment; both exit0 (release-check receipts). The runtime build and
+1181 unit/contract results remain valid against unchanged tested runtime hashes.
+Initial backend fixture failure, missing interrupted-launcher receipt, initial
+browser1failed/3notrun and initial frontend/tool-invocation errors remain retained;
+they are not represented as final passing attempts or silently removed.
+
+### Development preservation and schema gate
+
+Final guarded READ ONLY check2026-11-13T05:24:15Z verifies original container
+49ef9315294450710e2c71eefb1559993c821aff94531e79541d9811534ebbbe, volume
+docker_postgres_data, loopback127.0.0.1:5432/hustlytasker_db/PG16.14. Every
+29-table schema/data/history/index/sequence/cluster property matches the resume
+snapshot except transient connections. Canonical SHA256 before=after:
+6bf61a2742683fbd8dfa18ab36051611c060165e6e942c1b82b2c6b085efd639.
+
+Inventory retained:37migrations/5Users/2Sessions/2Profiles/3ProfileMemberships/
+3Workspaces/3WorkspaceMembers/2Invitations/4Tasks/4TaskAssignments/3Deliverables/
+0Reviews/38AuditLogs/8Notifications/1consumedAccountSecurityToken/0AIrows.
+tasks.0005 remains APPLIED; ai.0002 and both new candidate migrations remain
+UNAPPLIED. Review snapshot columns are absent; old Notification event CHECK is
+validated and has no TASK_UNASSIGNED. No development fixture, mutation, migration,
+rollback/restore, credential edit, real email/AI call or production action.
+
+Cleanup audit05:24:17Z finds **0 owned containers/networks remaining** across
+4backend runs and10browser attempts (including the failed attempt and separately
+recovered interrupted run). Persistent PostgreSQL/container/volume is untouched.
+No persistent Django/Vite server was started by this task. A prior private Vite
+pause probe found0 project processes to stop. Do not infer old historical server
+availability or restart new Review ORM code against the unapplied schema.
+
+### Source, contracts and remaining limitations
+
+Source preservation verifies796original Git-tree files, unchanged branch/HEAD,
+no missing/unexpected paths and frozen backend20/frontend22/browser+harness8
+hashes. There are63approved modified/new paths: backend20, frontend runtime/unit22,
+browser+harness8 and affected documentation13. The complete path list is in the
+final ignored source receipt; the durable entry points are:
+
+- Backend: tasks/services.py, serializers.py, views.py, urls.py; new analytics.py,
+  analytics_serializers.py, analytics_views.py, analytics_urls.py and three focused
+  test modules; api/urls.py; reviews/models.py plus its new0003 migration;
+  notifications/models.py, services.py, content.py, migration test and new0003.
+- Frontend: pages/analytics.tsx/css/tests, features/analytics/AnalyticsCharts.tsx,
+  features/tasks/TaskAssignment.tsx/css/tests; TaskForms, Task Detail,
+  useWorkContext, TaskCollaboration, App/routes/sidebar; analytics transport/test
+  and fixtures, work-management/collaboration/client DTOs and contract tests.
+- Browser/harness: reassign-analytics.spec.ts, five existing selector updates,
+  frontend_integration.py and test-frontend-integration.ps1. All new fixtures are
+  independent synthetic tenants in ownership-checked isolated PostgreSQL.
+- Documentation: this HANDOVER, TASK_REASSIGN_ANALYTICS_V1, PROGRESS, ROADMAP,
+  REQUIREMENT_STATUS, CHANGELOG, API_DOCUMENTATION, DATABASE_SCHEMA, RBAC_DESIGN,
+  DECISION_LOG, PROJECT_CONTEXT, FRONTEND_GUIDE and existing design-system MASTER.
+
+New read-only Task hints can_assign/can_unassign never grant authority. Existing
+POST assign gains optional reason and expected assignment ID/timestamp pair;
+new POST unassign requires that pair. Three GET analytics endpoints provide
+summary, paginated employees and employee-related Tasks. See
+[API contracts](API_DOCUMENTATION.md) and [metric definitions](TASK_REASSIGN_ANALYTICS_V1.md).
+
+Legacy accepted compensation remains unknown until trustworthy evidence exists;
+no backfill from today's price. Current Task/Workspace visibility and existing
+pay eligibility still apply to historical money. All-Workspace ordinary members
+get SELF, not combined management totals. Roster search remains current-page
+display-label search under the existing identity-disclosure policy. Multi-query
+dashboard consistency, build chunk advisory and Owner manual acceptance remain
+explicit limitations; no payroll/payment or production-readiness claim.
+
+UI UX Pro Max was read/applied using the real .agents path (.agent absent),
+focused offline chart/confirmation/table/React searches, existing teal/neutral
+tokens and accessible native controls. No UI/chart dependency or new design system.
+
+**Exact next action:** Owner reviews this implementation and separately approves
+a controlled rollout of reviews.0003_review_compensation_snapshot plus
+notifications.0003_task_unassigned. Fresh backup, full archive read, isolated
+restore/rehearsal, exact scoped migration plans and preserved data evidence are
+mandatory before any development apply. [DATABASE_SCHEMA](DATABASE_SCHEMA.md)
+records that proposed sequence and rollback limitations. Do not run general
+migrate, apply ai.0002, automatically reverse/drop snapshots or restore over
+development. After approved rollout, Owner performs the
+[manual UI checklist](TASK_REASSIGN_ANALYTICS_V1.md); no AI/Project/next task starts.
+
+Final hygiene/source check2026-11-13T05:26Z: main/HEAD unchanged,796originals
+present,63allowed dirty/new paths only; all50backend/frontend/browser+harness
+tested file hashes match. After documentation sync,13affected documents and
+114local Markdown targets validate; git diff --check exits0. No remaining
+implementation blocker; candidate migration approval and later Owner UI
+acceptance are the next gates. All evidence is retained in ignored
+.local_backups/HT-TASK-REASSIGN-ANALYTICS-V1/; no backup or private record is
+committed or uploaded.
+
+## Historical implementation checkpoint — 2026-11-10 — HT-TASK-REASSIGN-ANALYTICS-V1
+
+**IN PROGRESS — REASSIGNMENT AND ANALYTICS IMPLEMENTATION.** Read current
+documentation/TASK_REASSIGN_ANALYTICS_V1.md for reviewed workflow, historical
+money gap, metric definitions, scope and additive schema candidates. Owner
+authorizes candidate code/isolated tests, NEVER development migration or AI0002.
+
+Fresh source baseline main/31f0af932a9ffaf3e578115d63faa4a776e75175, clean Git
+status: Owner committed the earlier work between tasks. No agent commit/reset.
+Git tree/status/HEAD and guarded read-only development snapshot saved under
+ignored .local_backups/HT-TASK-REASSIGN-ANALYTICS-V1/. Actual37migrations/
+29tables/5Users/2Sessions/4Tasks/3Deliverables/0Reviews/35Audits; this includes
+Owner activity after the previous3Deliverable count was still2. No data values
+or secrets printed. tasks.0005APPLIED/ai.0002UNAPPLIED, no persistent writes.
+
+Audits DONE: existing atomic assign/reassign and one-active constraint; missing
+unassign/old-worker notification; immutable Review.created_at/uploader attribution
+available, historical approved compensation missing. New Review snapshot candidate
+will capture future approvals, leave legacy unknown (no inferred backfill).
+Unassign preserves status; reassignment keeps existingASSIGNED semantics;
+REVIEW/COMPLETED/CANCELLED blocked. CAS pair protects new confirmed UI from ABA.
+
+Three implementation owners: reassign_backend owns Task services/API/capabilities,
+notification candidate/events and tests, plus atomic approval snapshot hook;
+analytics_backend owns Review model/candidate, new analytics modules/tests;
+analytics_frontend owns sidebar/routes/analyticsUI/API/forms/cache/tests.
+Root owns shared integration harness/e2e, orchestration, evidence and docs.
+.agent is absent; actual .agents/skills/ui-ux-pro-max fully read and offline
+chart/confirmation/React searches executed. Existing master/tokens reused.
+
+NEXT: finish coordinated contracts/source, targeted isolated PostgreSQL and
+frontend tests, real browser analytics/reassign coverage and appropriate full
+regressions; verify migrations/model state and development preservation, update
+docs and STOP OWNER REVIEW. Do not restart persistent backend onto candidate
+schema or claim new features work on development before separate rollout approval.
+No .env edit, live mail/AI, deploy or business fixtures on development.
+
+BACKEND CHECKPOINT: first targeted152/152 PASS27.488s, run
+b8b0965ab21e4175ab17e3a7693d779c; launcher/actualPython0, pip/system/model/graph/
+full isolated chain/cleanupPASS. Independent security review fixed and tested
+stale Profile-manager authorization and SELF uploader attribution. First full
+1051 run1be462f06f7d432e96980177bc392974 finished1050pass/1failure, actualPython1:
+test_only_latest_approved_revision_counts had shared frozen timezone.now, equal
+Deliverable.created_at values and randomUUIDtie ordering. Runtime canonical
+latest(created_at,id) was correct; ONLY the fixture now gives the later revision
+NOW+1microsecond, preserving all rejection/unknown-money assertions. Failed-run
+logs/hashes retained. Corrected full run is in progress; do not claim fullPASS.
+Backend24reassignment+29analytics+2migration cases added; two new candidate leaves
+reviews.0003_review_compensation_snapshot and notifications.0003_task_unassigned
+are isolated-only. No dependency on AI0002. Root sharedharness and5existingE2E
+selector updates are in progress; independentanalytics fixture has5created-cohort
+Tasks/2approvalevents with one legacyunknown and one immutable700000snapshot.
+Frontend source/tests are still in progress, including current-role cache cleanup
+and immediate verifiedDTO name updates. NewE2E authored by analytics_backend;
+root will run browser only after isolated suites are ready and ownedVite is free.
+
+---
+
+## Historical checkpoint — 2026-11-10 — HT-FE-TASK-ASSIGNEE-NAME-FIX-01
 
 **IMPLEMENTATION COMPLETE — OWNER REVIEW GATE.** The real development blocker
 was an old Django --noreload server answering requests, not a missing username

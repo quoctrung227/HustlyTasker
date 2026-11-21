@@ -168,7 +168,7 @@ test.describe('Vietnamese Task brief — real UI, isolated PostgreSQL and no ext
 
   test('only current managers and assignee receive pay in real Network responses, including after reassignment', async ({ browser }) => {
     test.setTimeout(60_000)
-    await manager.getByRole('button', { name: 'Phân công', exact: true }).click()
+    await manager.getByRole('button', { name: 'Phân công nhân viên', exact: true }).click()
     const dialog = manager.getByRole('dialog', { name: 'Phân công công việc', exact: true })
     await dialog.getByLabel('Thành viên', { exact: true }).selectOption(fixtureId('editor_profile_membership'))
     await dialog.getByRole('button', { name: 'Xác nhận phân công', exact: true }).click()
@@ -219,10 +219,11 @@ test.describe('Vietnamese Task brief — real UI, isolated PostgreSQL and no ext
       if (actor === 'editor') editor = page
     }
     // Assignment history is preserved, but only its current assignee can read pay.
-    await manager.getByRole('button', { name: 'Phân công', exact: true }).click()
-    const reassign = manager.getByRole('dialog', { name: 'Phân công công việc', exact: true })
+    await manager.getByRole('button', { name: 'Thay đổi phân công', exact: true }).click()
+    const reassign = manager.getByRole('dialog', { name: 'Thay đổi phân công', exact: true })
     await reassign.getByLabel('Thành viên', { exact: true }).selectOption(fixtureId('other_editor_profile_membership'))
-    await reassign.getByRole('button', { name: 'Xác nhận phân công', exact: true }).click()
+    await reassign.getByRole('button', { name: 'Kiểm tra thay đổi', exact: true }).click()
+    await reassign.getByRole('button', { name: 'Xác nhận chuyển giao', exact: true }).click()
     await expect(reassign).not.toBeVisible()
     if (!editor) throw new Error('Assigned actor browser was not created.')
     const redacted = editor.waitForResponse((response) => new URL(response.url()).pathname === `${apiTasks}${taskId}/` && response.request().method() === 'GET')

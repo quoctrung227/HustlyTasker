@@ -7,6 +7,8 @@ import { ApiError } from '../../services/api/client'
 import { notificationApi, notificationKeys, notificationTaskPath } from '../../services/api/collaboration'
 import type { AppNotification } from '../../services/api/collaboration'
 import { NotificationFeed, NotificationMenu } from './NotificationHub'
+import { membersApi } from '../../services/api/members'
+import type { RecipientInvitation } from '../../services/api/members'
 
 const id = '00000000-0000-4000-8000-000000000501'
 const item: AppNotification = { id, event_type: 'TASK_COMMENTED', profile_id: '00000000-0000-4000-8000-000000000502', workspace_id: '00000000-0000-4000-8000-000000000503', task_id: '00000000-0000-4000-8000-000000000504', title: 'Task comment', message: 'A new comment was added.', target_url: 'https://untrusted.example/ignored', is_read: false, created_at: '2026-10-26T00:00:00Z', updated_at: '2026-10-26T00:00:00Z' }
@@ -26,6 +28,32 @@ beforeEach(() => {
 })
 
 describe('Personal notification UI', () => {
+  it('shows an invitation for a nonmember using a typed safe invitation target', async () => {
+    const invitation: RecipientInvitation = { id, profile_id: item.profile_id, profile_name: 'Tổ chức đang mời', inviter_display_label: 'Quản lý hợp lệ', requested_role: 'MEMBER', status: 'PENDING',
+      expires_at: '2026-11-20T00:00:00Z', can_accept: true, can_decline: true, can_open_profile: false }
+    vi.mocked(notificationApi.feed).mockResolvedValue(page([{ ...item, event_type: 'PROFILE_INVITED', target_type: 'PROFILE_INVITATION', workspace_id: null, task_id: null, invitation_id: id, invitation }]))
+    setup()
+    expect(await screen.findByRole('button', { name: 'Chấp nhận lời mời' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Từ chối lời mời' })).toBeEnabled()
+    expect(screen.getByRole('link', { name: 'Xem lời mời' })).toHaveAttribute('href', `/invitations/${id}`)
+    expect(screen.queryByRole('link', { name: 'Mở công việc' })).not.toBeInTheDocument()
+    expect(notificationApi.markRead).not.toHaveBeenCalled()
+  })
+  it('keeps invitation read-state independent from accepting or declining', async () => {
+    const invitation: RecipientInvitation = { id, profile_id: item.profile_id, profile_name: 'Tổ chức đang mời', inviter_display_label: 'Quản lý hợp lệ', requested_role: 'MEMBER', status: 'PENDING',
+      expires_at: '2026-11-20T00:00:00Z', can_accept: true, can_decline: true, can_open_profile: false }
+    const invited: AppNotification = { ...item, event_type: 'PROFILE_INVITED', target_type: 'PROFILE_INVITATION', workspace_id: null, task_id: null, invitation_id: id, invitation }
+    vi.mocked(notificationApi.feed).mockResolvedValueOnce(page([invited])).mockResolvedValue(page([{ ...invited, is_read: true }]))
+    vi.mocked(notificationApi.markRead).mockResolvedValue({ ...invited, is_read: true })
+    const accept = vi.spyOn(membersApi, 'acceptAccountInvitation')
+    const decline = vi.spyOn(membersApi, 'declineAccountInvitation')
+    setup()
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Đánh dấu đã đọc' }))
+    expect(await screen.findByText('Đã đánh dấu thông báo là đã đọc.')).toBeVisible()
+    expect(await screen.findByRole('button', { name: 'Chấp nhận lời mời' })).toBeEnabled()
+    expect(accept).not.toHaveBeenCalled()
+    expect(decline).not.toHaveBeenCalled()
+  })
   it('renders real metadata and a validated internal route, ignoring server target_url', async () => {
     setup()
     expect(await screen.findByRole('article', { name: item.title })).toHaveTextContent(item.message)

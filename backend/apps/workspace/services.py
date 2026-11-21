@@ -2,6 +2,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 
 from apps.audit.models import AuditLog
+from apps.common.deletion import profile_live_q, workspace_live_q
 
 from .access import (
     TenantAccessNotFound,
@@ -115,16 +116,18 @@ def lock_workspace_mutation_context(*, actor, profile_id, workspace_id):
         workspace_id,
     )
 
-    profile = Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(profile_live_q()).filter(
         id=profile_context.profile_id
-    ).get()
+    ).first()
+    if profile is None:
+        raise TenantAccessNotFound()
 
     if profile.status != Profile.Status.ACTIVE:
         raise PermissionDenied(
             "Workspace changes are not allowed while the Profile is archived."
         )
 
-    workspace = Workspace.objects.select_for_update().filter(
+    workspace = Workspace.objects.select_for_update(of=("self",)).filter(workspace_live_q()).filter(
         id=workspace_context.workspace_id,
         profile_id=profile_context.profile_id,
     ).first()
@@ -211,7 +214,7 @@ def create_profile_with_owner(*, name, owner):
 @transaction.atomic
 def _set_profile_status(*, actor, profile_id, next_status):
     profile_context = resolve_profile_access_context(actor, profile_id)
-    profile = Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(profile_live_q()).filter(
         id=profile_context.profile_id,
     ).first()
     if profile is None:
@@ -284,9 +287,11 @@ def update_profile_membership(
 ):
     profile_context = resolve_profile_access_context(actor, profile_id)
 
-    profile = Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(profile_live_q()).filter(
         id=profile_context.profile_id
-    ).get()
+    ).first()
+    if profile is None:
+        raise TenantAccessNotFound()
 
     if profile.status != Profile.Status.ACTIVE:
         raise PermissionDenied(
@@ -437,11 +442,11 @@ def _workspace_inheritance_source(*, profile_context, source_workspace_id, lock=
     """Resolve a readable same-tenant snapshot, including archived months."""
 
     context = resolve_workspace_access_context(profile_context, source_workspace_id)
-    queryset = Workspace.objects.filter(
+    queryset = Workspace.objects.filter(workspace_live_q()).filter(
         id=context.workspace_id, profile_id=context.profile_id,
     )
     if lock:
-        queryset = queryset.select_for_update()
+        queryset = queryset.select_for_update(of=("self",))
     source = queryset.first()
     if source is None:
         raise TenantAccessNotFound()
@@ -533,7 +538,7 @@ def create_workspace(
 ):
     profile_context = resolve_profile_access_context(actor, profile_id)
 
-    profile = Profile.objects.select_for_update().filter(
+    profile = Profile.objects.select_for_update().filter(profile_live_q()).filter(
         id=profile_context.profile_id
     ).first()
     if profile is None:

@@ -2,11 +2,366 @@
 
 # HustlyTasker Database Design
 
-Version: **0.13 persistent development** after the Owner-approved
-HT-DB-TASK-BRIEF-ROLLOUT-01 execution on2026-11-10. The earlier R3 rollout applied
-ai.0001; tasks.0005_task_brief is now APPLIED. Source still contains the unapplied
-ai.0002 governance candidate below; source/development schema are not identical.
-Production state is not verified.
+## Trash V1 development schema — APPLIED 2026-11-20
+
+**HT-TRASH-V1 — DEVELOPMENT MIGRATION COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+After fresh protected backup and isolated restore/rehearsal, development applied
+workspace.0006_soft_delete then tasks.0006_soft_delete, each exact-target native
+exit 0. History is 43, tables remain 31 and all original rows/hash projections
+are preserved. Profile/Workspace/Task each have three new nullable columns with
+no database default and NULL on all legacy rows. Three validated metadata CHECKs,
+three deferred User FKs and six valid/ready indexes (three partial due, three FK)
+are verified; no old same-cluster schema definition changed.
+
+Django `deleted_by` deletion policy is SET_NULL; PostgreSQL uses deferred
+NO ACTION FKs, not SQL ON DELETE SET NULL. Content types/permissions remain
+27/108 and AI0002/governance tables remain absent. Purge is disabled and no
+deletion backfill, business fixture or scheduler was run. Exact times, backup,
+all-table preservation and verification: [TRASH_V1_ROLLOUT](TRASH_V1_ROLLOUT.md).
+
+## Historical Trash V1 schema implementation before development rollout
+
+**HT-TRASH-V1 — IMPLEMENTATION COMPLETE — PENDING DEVELOPMENT MIGRATION AND PURGE APPROVAL.**
+
+Current source adds nullable metadata to existing Profile, Workspace and Task;
+no separate Task status and no replacement tenant model is introduced.
+
+| Field / invariant | Definition |
+|---|---|
+| `deleted_at` | Nullable timezone-aware datetime; only explicit deletion stamps it |
+| `deleted_by` | Nullable User FK, SET_NULL, internal/read-only; tenant purge never deletes User |
+| `purge_after` | Nullable datetime, exactly `deleted_at + 30days` when deleted |
+| Metadata CHECK | All three NULL, or deletion/deadline non-NULL with exact720-hour interval; deleted_by may become NULL if its account is later removed separately |
+| Due index | Partial `(purge_after,id)` index for rows with `deleted_at IS NOT NULL` |
+
+New files: [workspace0006](../backend/apps/workspace/migrations/0006_soft_delete.py)
+depends on workspace0005 and existing User; it changes Profile and Workspace.
+[tasks0006](../backend/apps/tasks/migrations/0006_soft_delete.py) depends on
+tasks0005/workspace0006 and existing User; it changes Task. Both are additive
+candidate files, not development APPLIED evidence. Legacy metadata defaultsNULL;
+no identity, membership, finance or deletion backfill is guessed.
+
+Checks are `profile_trash_metadata_valid`, `workspace_trash_metadata_valid`,
+`task_trash_metadata_valid`; indexes have matching `*_trash_due_idx` names.
+Default managers stay unfiltered; effective deletion is applied explicitly by
+normal read/mutation access scopes, including ancestor Task deletion.
+
+Assignment/Deliverable/Review/Comment/Notification/Invitation/Audit data stays
+unchanged until a permitted purge. Any Review, completed/financial history,
+unexpired Invitation retention or unresolved dependency blocks physical removal.
+AuditLog is never in the deletion set; global User, directory quota and unscoped
+Client/Finance tables are not tenant purge targets. No ledger is added. See
+[full FK disposition matrix](TRASH_V1_DESIGN.md). Focused59/59PostgreSQL checks,
+including migration tests, pass on history43withoutAI0002. Corrected full backend
+1,168/1,168 passes on44disposable migration records, including AI0002 only as
+authorized for that test database. Final read-only development metadata has
+41records, no new0006/Trash columns and no AI0002. No development schema operation
+is authorized by source.
+
+## Invitation V2 schema — controlled development migration APPLIED
+
+**HT-ORG-INVITATION-V2 — DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+
+Owner separately approved and executed the exact controlled development rollout.
+Applied files are [workspace0005](../backend/apps/workspace/migrations/0005_account_invitations.py)
+and [notifications0004](../backend/apps/notifications/migrations/0004_invitation_context.py).
+After fresh protected backup/actual isolated restore, workspace0005 applied at
+11:44:56.741107Z and notifications0004 at11:44:58.160588Z, exact guard/launcher0.
+Development tables29→31/history39→41; original business and metadata hashes are
+preserved, with expected content types25→27/permissions100→108 only. New quota
+tables are empty; old Invitations are EMAIL_TOKEN, old Notifications have null
+Invitation context. Actual legacy data contains1ACCEPTED+1REVOKED/SENT and no
+PENDING rows; synthetic pending-token behavior was checked on isolated clone.
+All constraints/indexes/FKs and Django/model consistency gates pass; ai.0002 and
+governance tables remain absent. [Rollout evidence](ORG_INVITATION_V2_ROLLOUT.md)
+records fresh inventory, full archive restore and19synthetic API/service checks.
+Prior implementation62/1108backend and25browser counts below are historical,
+not rerun by the database rollout. Earlier inventory sections remain historical.
+
+### ProfileInvitation and durable quota records
+
+| Change | Source behavior |
+|---|---|
+| acceptance_kind varchar(20) | EMAIL_TOKEN default for existing rows; ACCOUNT for new public API issuance; no identity/expiry guessing or recipient backfill |
+| token_digest | Nullable unique digest; EMAIL_TOKEN requires non-null, ACCOUNT requires null token and non-null recipient_user |
+| pinv_identity_kind_valid | Enforces the two identity kinds and their credential/account shapes |
+| pinv_use_requires_sent | ACCEPTED/DECLINED legacy still requires SENT; ACCOUNT can be accepted/declined while email is QUEUED/FAILED |
+| uniq_pending_profile_email | Existing name retained with EMAIL_TOKEN-only pending condition; account email snapshots cannot block another account legitimately reusing an address |
+| uniq_pending_profile_user | Retained across pending account-bound records; one pending invitation per Profile/recipient User |
+| pinv_recipient_inbox_idx | recipient_user,acceptance_kind,-created_at,id for personal inbox ordering |
+| InvitationEmailAttempt | UUID/BaseModel timestamps,protected Invitation FK,status PENDING/SENT/FAILED,finished_at; state CHECK and invitation/created_at window index |
+| InvitationDirectoryAccess | UUID/BaseModel timestamps,protected User FK and user/created_at window index; stores no search text or email |
+
+ProfileMembership's existing unique-active Profile/User rule and history stay
+unchanged. Rejoin still fails closed on ambiguous/mismatched inactive history.
+Account issuance serializes identities in stable User order; accept/retry/email
+use scoped row locks rather than implicitly locking joined User rows in a reverse
+order. Directory search locks the actor User before recording/querying its rolling
+window. Invitation reservation and aggregate/recipient locks make send/attempt
+counters shared across processes. Default TTL remains7days; no new infrastructure.
+
+### Typed Notification context
+
+`notifications.0004_invitation_context` depends on notifications0003 and
+workspace0005. It adds nullable protected `invitation` FK,PROFILE_INVITED and
+rebuilds context/event CHECKs with three valid shapes:
+
+- Historical legacy: event/Profile/Workspace/Task/Invitation/audit context all null.
+- Task: one existing Task event,complete Profile/Workspace/Task/audit context,
+  Invitation null; existing live tenant checks remain.
+- Invitation: PROFILE_INVITED,Profile/Invitation/audit present,Workspace/Task null;
+  canonical same-Profile/recipient/event proof is enforced by service/projection.
+
+Existing user/event deduplication and User/read/created ordering stay. No fake
+Task, deleted history, Task schema, AI schema or applied migration rewrite occurs.
+
+### Development rollout and recovery constraints
+
+The separately approved rollout completed fresh exact plans, protected backup,
+real restore/migration rehearsal, writer exclusion and final preservation checks.
+Neither target depends on ai.0002; never use general migrate on development.
+No reverse or restore over development was attempted. Backup remains retained.
+
+New backend reads require acceptance_kind/Invitation context columns. Both are
+now present in development and the new backend started after verification. Never
+restart an old writer against this schema. A model default is not a permanent DB
+default for old writer INSERTs. Reverse migrations with V2 data intentionally
+fail atomically rather than discard account identity/notification history; do not
+automatically reverse, delete records or restore over development. Quota records
+have no automatic retention purge. Their rolling checks ignore older rows, but
+production storage retention needs a separately approved policy. The email
+callback is not an outbox; process-crash recovery remains explicit bounded retry.
+
+## Last verified persistent development checkpoint — historical rollout
+
+Persistent development checkpoint: **39 applied migrations** after the
+Owner-approved Review/Notification rollout on2026-11-13. The earlier R3 applied
+ai.0001 and Task Brief rollout applied tasks.0005; both remain APPLIED.
+reviews.0003_review_compensation_snapshot and notifications.0003_task_unassigned
+are APPLIED. Source still includes ai.0002_dispatch_governance, UNAPPLIED on
+development; source/development schema are not identical. Production is unverified.
+
+## Historical HT-DB-REASSIGN-ANALYTICS-SAFE-ROLLOUT-01 — Verified development rollout
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING OWNER MANUAL ACCEPTANCE.**
+On2026-11-13, only reviews.0003_review_compensation_snapshot06:27:28Z and
+notifications.0003_task_unassigned06:27:29Z applied, each native process0 and
+each final pre-apply plan exactly one candidate. Final migration history39,
+both candidate plans empty, tasks.0005 APPLIED, ai.0002 UNAPPLIED. No AI governance
+tables exist; no general migrate or migration-file edit occurred.
+
+Review adds compensation_snapshot_recorded boolean NOT NULL with no permanent
+DB default and compensation_snapshot_vnd nullable numeric(18,0), plus validated
+review_snapshot_nonnegative and review_snapshot_recorded_pair CHECKs.
+Notification's validated notif_valid_event_type now includes TASK_UNASSIGNED;
+existing rows/read state/context are retained. Current development has0Reviews:
+legacy false/NULL behavior is proven on isolated fixtures, not manufactured
+development history. Other tables/columns/FKs/indexes and business sequences/
+row hashes remain unchanged. Expected changes include the migration sequence.
+
+Fresh protected custom backup/archive validation and actual restore/rehearsal
+PASS; restored history37→39, no ai.0002. Full backend1056/1056 PASS with ai.0002
+only in a separate disposable full-test database;8rollback-isolated synthetic
+service checks PASS. First private CHECK-cast comparator stop remains recorded.
+All development schema/model/constraints/indexes and final preservation checks0;
+[PROGRESS](PROGRESS.md) and [HANDOVER](HANDOVER.md) own inventory/hash/path receipts.
+
+Old Review INSERT remains incompatible with the new NOT NULL field; mixed old
+writers are forbidden. No old project writer was found/killed and PostgreSQL
+was not restarted; current backend startup/read-only smoke PASS. Review reverse
+can lose snapshots; Notification reverse can fail with new event rows. Automatic
+rollback/restore is never authorized. The prior blocked/preflight snapshots
+below remain historical and do not undo this verified APPLIED state.
+
+
+## Historical rollout stop before test-isolation approval
+
+2026-11-13. The Owner conditionally authorizes exactly the two0003 candidates
+below on the existing local development database. This is **WAITING OWNER
+CLARIFICATION ON ISOLATED FULL-TEST SCOPE / ROLLOUT BLOCKED**, not
+an APPLIED or version-increment claim. A fresh read-only identity/history/schema/
+data baseline, full isolated regression, new complete custom-format development
+backup, archive integrity and restore of that exact archive into isolated
+PostgreSQL are required first. Compare restored migration history, schema,
+legacy rows and constraints before rehearsing the exact two target plans there.
+The earlier schema-equivalent fixture rehearsal does not replace this gate.
+
+Fresh read-only Django preflight06:03:20Z confirms37records, exact one-candidate
+plans without ai.0002, no model drift, valid constraints/indexes and absent new
+Review columns. Actual development baseline29tables/5Users/2Sessions/5Tasks/
+3Deliverables/0Reviews/9Notifications/42Audits differs from the historical4Task
+snapshot due to independent activity; retain it.0application connections and
+no8000/5173server were observed, with writer state still requiring recheck before
+execution. Fresh frontend1182/1182/quality checks pass. Full backend is unrun
+because its explicit AI governance migration tests need ai.0002 in disposable
+test PostgreSQL; the Owner's AI-migration ban needs clarification only for that
+test target. No permission is inferred for development or restored rehearsal.
+No real backup, restore rehearsal or persistent migration has executed.
+Final read-only06:05:25Z matches this rollout's fresh baseline across all29-table
+schema/data/history properties, SHA256 both:
+886193d95cb05c6cbc54ffed2e481ac97d9652452b78463b5f46d7d21bb81937.
+The37existing records remain, both0003 candidates and ai.0002 are UNAPPLIED;
+no process stopped or backend started. No new archive exists and no backup hash,
+restored rehearsal or applied schema is claimed. Current outcome is ROLLOUT
+BLOCKED — DEVELOPMENT STATE PRESERVED until the full-test scope is clarified.
+
+Both candidate dependencies are the already-existing0002 migrations in their
+own apps. Each actual plan must contain only its authorized candidate; any
+ai.0002 or unexpected operation means STOP. Old backend writers must be stopped
+before the NOT NULL Review column is introduced, and schema/backend/frontend
+activation must remain coordinated. Reversal remains potentially lossy or
+blocked by TASK_UNASSIGNED rows, so no automatic reverse/restore is permitted.
+
+Fresh read-only inventory/preservation and scoped target plans pass above.
+Actual backup path/size/SHA256, pg_restore results, execution times and
+post-apply CHECK/default/history verification are NOT EXECUTED in
+[HANDOVER](HANDOVER.md). ai.0002 must remain UNAPPLIED on
+development and the restored rehearsal database. Persistent version0.13 and
+37migration counts below describe the last verified historical checkpoint until
+fresh evidence supersedes them. No real business fixtures or mutation tests run
+on development; legacy false/NULL stays unknown, never guessed as0 or backfilled.
+
+## Historical Owner preflight — unchanged0003 candidates and recovery boundaries
+
+2026-11-13. **HT-TASK-REASSIGN-ANALYTICS-OWNER-PREFLIGHT — MIGRATION PREFLIGHT
+PASS WITH COORDINATED WRITER STOP REQUIRED; DEVELOPMENT APPROVAL PENDING**.
+SRS correction of unassign ASSIGNED/WORKING→PENDING is service logic and needs
+no model/migration change. The two candidate files below remain unchanged.
+Fresh guarded preflight158/158 PASS60.885s includes seven migration tests,
+actual Python/launcher0 and cleanup0; [HANDOVER](HANDOVER.md) owns receipts.
+Read-only development history37 was rebuilt as an isolated baseline with exact
+matching tables/columns/constraints/indexes, followed by exact single-candidate
+plans and39 final migration records. ai.0002 is guarded against even there.
+Synthetic legacy fixture preservation is verified; this is **not** a development
+backup/restore rehearsal. Business158, frontend1182 and guarded real browser4
+tests PASS, all actual process exits0; typecheck/lint112/build0 and owned cleanup
+verified. Final read-only development preservation05:43:43Z PASS: all29-table
+schema/data/history properties match,37migrations retained, both candidates and
+ai.0002 UNAPPLIED/tasks.0005 APPLIED,0owned resources. This result authorizes no
+development apply; stop at OWNER APPROVAL GATE.
+No development apply or ai.0002 is authorized.
+
+- reviews.0003 depends only on reviews.0002_review_workflow_foundation. Its
+  Boolean defaultFalse plus nullable numeric(18,0) is safe for legacy rows:
+  false/NULL means unknown historical amount; true/NULL is recorded-but-unpriced;
+  true/0 is a known zero. CHECKs reject negatives and false/nonnull pairs.
+  No current Task price is copied into historical Reviews and no FK is changed.
+- notifications.0003 depends only on notifications.0002_notification_context.
+  It expands the existing event choice/CHECK without rewriting old rows,
+  recipients, read state or deduplication. The new event fits varchar(32).
+  The exact target plans passed against the schema-equivalent legacy state and
+  contain neither ai.0002 nor unrelated migrations; current development identity,
+  satisfied dependencies and drift must still be rechecked before any later apply.
+
+Schema compatibility is not a blanket rolling-version guarantee. Older Review
+code can read its original columns after additive apply, but old writers are
+not compatible: compensation_snapshot_recorded is NOT NULL and the candidate
+declares a model defaultFalse, not a permanent db_default. Isolated inspection
+confirmed column_default=NULL after migration, and the historical0002 model
+INSERT fails SQLSTATE23502 on compensation_snapshot_recorded. The failed insert
+rolls back without orphan data; the new model supplies false/NULL correctly.
+New Review code cannot run before the
+columns exist. Older strict frontend Notification parsers do not
+recognize TASK_UNASSIGNED, so serving new events to an old client may break its
+feed decoding. Plan coordinated schema/backend/frontend activation, a clear
+refresh policy and a controlled maintenance window; preserve Session/CSRF/RBAC.
+
+Rollback is conditional, not an automatically safe recovery operation. Review
+reverse removes both snapshot columns, permanently discarding any recorded
+amounts; it does not reconstruct earlier money. Notification reverse restores
+the old event CHECK, which rejected TASK_UNASSIGNED rows and failed atomically in
+the isolated test while those rows existed; the applied history/new CHECK were
+preserved. Isolated reversal without new-type rows succeeded. Review reverse and
+reapply also proved recorded500000 becomes false/NULL: snapshot loss is real.
+A successful isolated reverse before new data does not
+authorize deleting events or dropping snapshots on development. Rehearse both
+paths only on disposable PostgreSQL; after any real rollout failure, preserve
+state and ask Owner for a separately reviewed recovery plan. No automatic reverse,
+restore-over-development, --fake or migration-history SQL is permitted.
+
+## HT-TASK-REASSIGN-ANALYTICS-V1 — Additive candidates, development UNAPPLIED
+
+2026-11-13. Source adds two independent migration leaves. They are authorized for
+candidate implementation and isolated PostgreSQL verification only. **Do not
+apply them to persistent development without separate Owner rollout approval.**
+Version0.13 persistent development above is unchanged; candidate source and live
+schema intentionally differ. tasks.0005 stays APPLIED, ai.0002 stays UNAPPLIED.
+Implementation is verified on isolated PostgreSQL, **IMPLEMENTATION COMPLETE —
+PENDING DEVELOPMENT MIGRATION APPROVAL**, not a schema rollout. Final read-only
+development05:24:15Z retains37migrations and no new Review snapshot columns or
+Notification event CHECK application. Resume→final data/schema/history fingerprints
+match; November11 independent audit activity is separately documented in
+[HANDOVER](HANDOVER.md), not concealed by claiming equality to November10.
+
+| Candidate | Dependency | Schema effect |
+|---|---|---|
+| reviews.0003_review_compensation_snapshot | reviews.0002_review_workflow_foundation | Add compensation_snapshot_recorded boolean defaultFalse and nullable numeric(18,0) compensation_snapshot_vnd to Review |
+| notifications.0003_task_unassigned | notifications.0002_notification_context | Add TASK_UNASSIGNED event choice; replace existing notif_valid_event_type CHECK with the expanded allowed set |
+
+Review CHECKs: review_snapshot_nonnegative permits NULL or >=0;
+review_snapshot_recorded_pair requires amountNULL unless recorded=true.
+Both fields are noneditable model metadata; no new client write authority or
+Review API amount projection is added. Future approvals set recorded=true and
+copy the current exact Task estimate atomically with approval; true/null means
+unpriced at approval. Existing Reviews retain false/null, meaning unknown
+historical amount. No current-price, assignment or audit-based guessed backfill,
+data migration, foreign-key change, Task/Deliverable rewrite or new index is used.
+
+The Notification migration does not rewrite recipients or old events. The
+existing event+recipient deduplication, context constraints and FK policies stay
+intact. TASK_UNASSIGNED uses the existing atomic audit/business consistency;
+it is informational and never grants access. Source TaskAssignment's one ACTIVE
+row constraint remains unchanged; assignment rows are deactivated/reactivated,
+while scoped AuditLog records actor/time/from/to/reason chronology. No new
+TaskAssignment table or schema is needed for unassign/transfer.
+
+Analytics is a read-only projection over current Task/member data and canonical
+approved Deliverable/Review evidence. Current responsibilities and historical
+uploader credit are distinct. Exact Decimal aggregates do not turn estimates
+into payroll/payment, and legacy unknown amounts are explicitly counted.
+See [metric/API contract](API_DOCUMENTATION.md) and
+[task definitions](TASK_REASSIGN_ANALYTICS_V1.md).
+
+### Separate development rollout proposal — NOT EXECUTED
+
+Before approval/execution, recheck actual container ID, Compose/database/volume,
+loopback target, PostgreSQL compatibility, current migration history and schema;
+inventory all tables and fingerprint existing data without printing values.
+Create a new restricted local custom-format backup outside tracked source;
+retain timestamp/path/size/SHA256 and actual pg_dump exit. Validate pg_restore
+list/full archive read and restore to a newly owned isolated PostgreSQL target
+without mounting the writable development volume. Compare restored schema,
+history/counts/legacy fingerprints, then rehearse only these two targets there.
+New/old-row defaults, CHECK validity, approval snapshot atomicity, notifications
+and data preservation must pass before the development step can be approved.
+
+The eventual execution must use the existing trusted private environment loader
+and backend/venv Python, working directory backend. The following are **command
+targets for a future approved rollout**, not commands run by this implementation:
+
+```text
+python manage.py migrate reviews 0003_review_compensation_snapshot --plan
+python manage.py migrate notifications 0003_task_unassigned --plan
+python manage.py migrate reviews 0003_review_compensation_snapshot --noinput
+python manage.py migrate notifications 0003_task_unassigned --noinput
+```
+
+Each live plan must contain only its approved leaf and any explicitly reviewed
+already-satisfied dependencies; an unexpected migration, reverse operation,
+schema/history drift or ai.0002 means STOP. No general migrate, --fake or manual
+history update. Coordinate only positively identified project backend processes
+so schema-dependent Review ORM is not served prematurely; do not restart
+PostgreSQL or unrelated services. Recheck both plans immediately before apply,
+record actual exits and inspect schema/history plus unchanged legacy data after.
+Only then restart one backend with the existing exclusive-port launcher and run
+non-mutating smoke; business acceptance writes belong to the Owner.
+
+No automatic rollback/restore is authorized. Reversing the Review migration drops
+recorded history; reversing the Notification CHECK after TASK_UNASSIGNED rows
+exist can fail. Failure requires preserving state/evidence and a separate recovery
+decision, not deleting new events, editing applied migrations or guessing data.
+Current tests/preservation evidence and final gate remain in [HANDOVER](HANDOVER.md).
 
 ## HT-FE-TASK-UX-REFINEMENT-01 — No schema change (2026-11-10)
 
@@ -2132,10 +2487,12 @@ local, and response-neutral password-reset requests are not timing-equalized.
 | Tenant authorization | Profile Owner/Admin Workspace-content inheritance and ordinary-Member explicit assignment are approved. Profile/Workspace contexts, scoped selectors, Workspace routes and Task/Deliverable/internal Review scoping now exist with IDOR/concurrency/audit tests. General Profile CRUD/membership APIs and Client/Finance/Audit/external-review scoping remain absent. |
 | Task/Review workflow | The approved internal flow is implemented in source: manager create/assign, assigned Editor execute/submit, distinct manager approve or request changes, and completion only after valid approval. HT-COM-P2-06 adds discussion/event notifications without changing that flow. Client/Guest approval, arbitrary cancellation, file storage/media handling, Task soft delete, and Payroll/Payment pricing/trigger remain separate and unimplemented. |
 
-## Implemented ProfileInvitation contract — development schema applied
+## Historical legacy ProfileInvitation contract — workspace0004 development schema applied
 
-This subsection began as approved design in `HT-RBAC-P1-03` and is now
-reconciled to the `HT-INV-P2-04` implementation. It describes current source
+This subsection records the pre-V2 contract, beginning as approved design in
+`HT-RBAC-P1-03` and reconciled to the `HT-INV-P2-04` implementation. The current
+ACCOUNT source schema and pending development rollout are described at the top;
+this historical subsection describes legacy token behavior
 and additive migration `workspace.0004_profileinvitation`, which is applied
 only to the separately authorized development target. It does not authorize
 another persistent environment. A hash-only token is not authentication:
