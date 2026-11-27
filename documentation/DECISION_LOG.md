@@ -1,5 +1,21 @@
 ---
 
+# HT-AI-MVP — Groq Free integration authorization
+
+On 2026-11-27 the Owner approved the Groq provider wiring and the narrow schema
+change that permits `GROQ_LIVE` in three governance CHECKs. Groq Free with
+`openai/gpt-oss-120b` is the default live provider at a zero USD allocation.
+OpenAI stays an explicit choice with its own key and budget. Reported usage
+and published-rate estimates stay separate from verified billed cost.
+
+Owner separately authorized development rollout of only AI 0004. The rollout
+completed after verified backup and restore. The two synthetic live requests
+still require separate approval.
+The controlled Django path permits one durable slot per feature and uses the
+fixed synthetic manifest. See [AI_MVP](AI_MVP.md#groq-free-provider-integration).
+
+---
+
 # HT-TRASH-V1 — conditional purge Owner decision and resume boundary
 
 ## Subsequent Owner authorization — controlled development schema only

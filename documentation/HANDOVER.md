@@ -1,5 +1,191 @@
 # HUSTLYTASKER HANDOVER
 
+## HT-AI-MVP Groq governance development rollout — 2026-11-27
+
+**HT-AI-MVP — GROQ DEVELOPMENT ROLLOUT COMPLETE — PENDING CONTROLLED LIVE ACCEPTANCE.**
+Owner authorized only `ai.0004_groq_governance` on local development after
+these gates. Development PostgreSQL 16.14 `hustlytasker_db`, system ID
+`7671936116369391654`, uses container `hustlytasker_postgres` (`49ef93152944`)
+and volume `docker_postgres_data` at `127.0.0.1:5432`. The exact plan had
+only AI 0004. The reviewed SQL drops and re-adds the three approved CHECKs.
+
+The protected custom archive is at
+`D:\da\HustlyTaskerBackups\HT-AI-MVP-GROQ-ROLLOUT\20261127T113201Z_fe44fa4ef4024acab3d375c2fb4813bd\hustlytasker_development_20261127T113201Z.dump`.
+It contains 170,249 bytes with SHA-256
+`4FBB97C5A5540C8E534D1837C4D71736E02F69FB347999DD2D41D543F7AEED4D`.
+Archive list, full read and actual restore exited 0. The isolated PostgreSQL
+system `7712812604519288878` matched the 34-table inventory. Applying only
+AI 0004 on that restore reached 47 migrations, an empty plan and the exact
+expected CHECK changes, with legacy fingerprints and read-only smoke passing.
+Fresh isolated `apps.ai` regression passed 394/394, exit 0, run
+`11fd4d52900946d2b106077e246ca5f3`, including all 8 migration tests, Groq
+quota and billing guards, and fake Groq and OpenAI flows. Verified removal
+of both rehearsal and regression Docker resources.
+
+The final development preflight matched the original inventory, DDL and
+backup SHA-256. Django applied exactly AI 0004 with exit 0, moving the
+history from 46 to 47 and leaving an empty plan. Catalog matches rehearsal.
+Only `ai_disp_origin_valid`, `ai_disp_usage_mode_valid` and
+`ai_budget_mode_valid` expanded. All 208 constraints remain validated and
+169 indexes remain valid and unchanged. The verified fingerprint of legacy
+rows across 34 tables is
+`c63dd7d53f8ff1613f597bda520530b4d8d68d2f07508ee7858e51dc6912c83f`.
+Five users, three sessions, five Tasks, three Deliverables, three Invitations,
+12 Notifications and 51 AuditLogs were preserved. AI tables remain empty.
+Migration history gained one row and its sequence advanced once.
+
+Django checks, model drift, migration consistency and 45/45 read-only
+GET/OPTIONS assertions passed on development. The smoke invoked routed
+Django handlers with in-memory authentication in a PostgreSQL read-only
+transaction. It verified AI disabled responses and tenant denials.
+
+Evidence is Git-ignored in `.local_backups/HT-AI-MVP-GROQ-ROLLOUT/`.
+Pre-existing source changes are preserved. The configured provider/model are
+Groq/`openai/gpt-oss-120b`, Groq key is missing and live stays off. The root
+`.env` is ignored and untracked, and was not modified. There were no real
+provider calls, SMTP, purge or scheduler operations. SMTP exposure remains
+unresolved. The next gate needs Owner approval for two synthetic calls on a
+fresh isolated environment, private key setup and verified Free tier/quota.
+See [AI_MVP](AI_MVP.md#owner-setup).
+
+## Historical HT-AI-MVP Groq schema and provider integration — 2026-11-27
+
+**HT-AI-MVP — GROQ FREE INTEGRATION COMPLETE — PENDING DEVELOPMENT MIGRATION AND LIVE ACCEPTANCE.** Owner approved the
+implementation of the three-CHECK extension and wiring both features to
+Groq. Rollout to development and any real Groq request remain separate gates.
+The prior external source checkpoint SHA-256 matches its saved receipt.
+
+New migration `ai.0004_groq_governance` passed PostgreSQL 8/8 with legacy rows,
+exact catalog comparison and safe reversal scenarios. Runtime selector and
+adapter 30/30 passed. The launcher passed 17/17. Full frontend passed
+1,308/1,308 and Chromium passed 3/3 with fake Groq and 3/3 with fake OpenAI.
+Isolated API tests proved Groq accounting, 429/timeout, RBAC and controlled
+claim races through actual Django routes. The first focused run identified
+the mixed ORM aggregate types and old fixture assumptions. After correction,
+the focused routes passed 22/22. Final full PostgreSQL regression passed
+1,242/1,242 in 459.064 s, exit 0, run `386bb1ad65fe40288c00b88c926ef46b`.
+Django checks, model drift, TypeScript, Biome and Vite build passed. Vite
+reported its bundle size warning. Owned test DBs were removed and Docker label
+queries found no residual test containers or networks. Browser run IDs
+`a01eb53f9d414fe78618dbe8e58949f1` (Groq) and
+`08230aa21e164941bd877796fbf88c07` (OpenAI) both exited 0.
+
+The current source adds Groq governance, config, transport wiring, API
+projection and React provider wording. Dirty files include these changes,
+new migration/tests and the existing checkpoint documents. Development
+read-only verification passed with PostgreSQL 16.14, system ID
+`7671936116369391654`, 46 applied migrations and only `ai.0004_groq_governance`
+pending. Zero proposals, dispatches and budget buckets. Live and Trash purge
+are off. SMTP exposure remains unresolved. See [AI_MVP](AI_MVP.md#owner-setup)
+for the root `.env` and startup commands.
+
+Next safe step requires Owner approval for the conditional development
+rollout. Repeat read-only preflight, make a protected backup and rehearse on a
+fresh restored PostgreSQL before applying only AI 0004. A separately approved
+controlled acceptance window uses two synthetic requests in an isolated
+environment with Free tier verified in the Console.
+
+## Historical HT-AI-MVP Groq Free offline adapter — 2026-11-27
+
+**PARTIAL — GROQ GOVERNANCE SCHEMA PENDING OWNER APPROVAL.** Owner selected
+Groq Free and `openai/gpt-oss-120b` for the thesis with a USD 0 API budget.
+The OpenAI adapter remains available for future use under separate approval.
+See [AI_MVP](AI_MVP.md#groq-free-provider-integration) for the proposed
+selector, quota, schema, and two-request acceptance design.
+
+Intake `main` at `3c0e92d414c6938f85eb78e4ec8b6950c04a883f` had five modified
+documents (`AI_MVP`, `HANDOVER`, `PROGRESS`, `PROJECT_ROADMAP`, and
+`REQUIREMENT_STATUS`) and no untracked files. Before editing, an ACL-protected
+source checkpoint verified the archive catalog, CRC, individual SHA-256s and
+current working-tree bytes. It contains 581 files, including all five dirty
+documents, plus a manifest. `.env*`, Git history, database files, local artifacts,
+reference materials, and an optional slide generator with an unverified contact
+literal were excluded. The receipt is in the ignored `.local_backups/HT-AI-MVP-GROQ/`.
+
+- Archive `D:\da\HustlyTaskerBackups\SOURCE-CHECKPOINTS\HT-AI-MVP-GROQ_20261127T105315Z_9ba67ecc4fd1498f9e2560216e8f07cf\HustlyTasker_source.zip`
+- Size 2,698,435 bytes, SHA-256 `f6d491591d6b4765ccca05d19534e03e56400b427e58bcd01f508a4e95a44d07`, verification exit 0.
+
+Fresh read-only checks matched PostgreSQL development 16.14
+`hustlytasker_db`, system ID `7671936116369391654`, and 46 applied migrations.
+Django system check, model drift check and empty migration plan passed. Live,
+fixture and Trash purge were off. The schema allows only OpenAI or fixture
+provenance. Three validated CHECK constraints require a narrowly scoped change
+to store Groq with separate usage and budget records. No migration or development
+write was authorized or run. The read-only post-check matched the cluster and
+the migration count. Proposal count, live dispatches and live budget buckets
+remained at zero. The unresolved SMTP exposure remains a known risk.
+
+Added `backend/apps/ai/groq_adapter.py` and `test_groq_adapter.py` for the
+standalone Chat Completions wire path and transport. Adapter unit checks 17/17
+passed (exit 0). The Git-ignored one-shot proof passed 8/8 (exit 0) with exactly
+the two pinned synthetic payloads. This is fake-only evidence for the adapter
+and local guard, pending live binding. Frontend 1,305/1,305 and Chromium
+AI MVP 3/3 with fake OpenAI passed (exit 0), including the edited estimate,
+draft rejection and grounded feedback. Typecheck, lint and build passed. The
+browser's isolated PostgreSQL and Docker resources were removed. The build
+reported a chunk size warning. Focused Groq/OpenAI regression passed 79/79.
+Final full PostgreSQL backend run `2f3cf92a6c9a4a03abe9af812f93acf0` passed
+1,219/1,219 in 426.194 s, including the 17 added tests. Both backend launchers
+exited 0. Their database cleanup completed and Docker label checks confirmed
+no remaining containers or networks from the test runs. `git diff --check`
+passed. Changed files are the two adapter and test files, plus `AI_MVP`,
+`HANDOVER`, `PROGRESS`, `PROJECT_ROADMAP`, `REQUIREMENT_STATUS`, and `CHANGELOG`.
+
+The next schema step needs Owner approval to create a migration and verify it
+on isolated PostgreSQL. Development rollout and any synthetic live request
+each have their own Owner gate. No evaluation batch ran.
+
+## Historical HT-AI-MVP OpenAI controlled live provider preflight — 2026-11-27
+
+**HT-AI-MVP — LIVE PREFLIGHT COMPLETE — AWAITING OWNER API BILLING AND REQUEST APPROVAL.**
+Intake `main` at `3c0e92d` was clean. Fresh read-only Django and SQL checks
+verified PostgreSQL 16.14 `hustlytasker_db`, system ID `7671936116369391654`,
+container `49ef93152944` and volume `docker_postgres_data`. All 46 migrations
+are applied, including Task 0007 and AI 0002/0003. Plan empty, system check
+and model drift PASS. There are 0 live dispatches, 0 live budget buckets and
+0 proposals on development. Development port 5432 is local and app/Vite
+ports 8000/5173 had no listeners. Local settings check reported model
+`gpt-5.4-mini`, timeout 30 seconds, 32,768/2,048 default tokens, shared
+global/profile/user quotas 60/30/20 and caps USD 1.00/0.50/0.25. Live, fixture
+and Trash purge were off. Key status only: NOT_CONFIGURED. No key values
+were extracted or passed to Django.
+
+OpenAI public docs were checked on 2026-11-27 for model availability,
+Responses Structured Outputs and standard rates. The exact Owner-supplied
+synthetic manifest, isolated config and billing/key steps are in [AI_MVP](AI_MVP.md#controlled-live-smoke-proposal--exactly-two-provider-requests).
+The real encoder's local input checks were 3,154 (Generator) and 3,881
+(Analyzer), including 1,024 for framing, under the proposed 4,096 allowance.
+Output ceiling is 1,024. USD 0.01536 is the estimated reservation for two
+dispatches at the checked rates. The proposed USD 0.02 cap is local.
+
+The synchronous transport makes a single POST, without automatic retry or
+fallback. Scoped idempotency and the durable dispatch claim prevent a repeat
+with the same key. `AiDispatch` and budget/reservation rows record settlement
+and usage. The smoke never confirms or rejects a proposal. Business AuditLog
+events for confirm/reject are outside this run. Shared quotas can restrict
+the total to two. Different keys in one feature can still consume both slots.
+An offline fake-only guard proof passed 8/8 (exit 0), testing pinned payloads,
+one durable slot per feature, duplicates, restart/concurrency, timeout, 429,
+refusal and truncated output. The proof has no real transport capability.
+The approved runner still needs an exact isolated live binding and a final
+fake-only regression before opening provider egress.
+
+Schema-only rehearsal `1c85ebd2eadf4da2bd7decd4d6a45147` passed exit 0. The
+internal/tmpfs PostgreSQL system `7712798462246199342` had 34 tables and the
+same 46 `django_migrations` records. The other 33 tables were empty. Django
+plan was empty. Live was off. No migrations ran. Development history matched
+before/after. The disposable database, containers and network were removed.
+Two earlier probe attempts were cleaned after local SQL/PowerShell receipt
+errors. Final sanitized evidence is Git-ignored under
+`.local_backups/HT-AI-MVP-LIVE-PREFLIGHT/`.
+
+No provider request, SMTP, evaluation batch, scheduler or purge ran. `.env`
+was unchanged. SMTP exposure remains unresolved. Current tracked changes
+are documentation only. Next step is explicit Owner confirmation of API
+billing, privately configured key, the two requests and budget. Before live,
+verify the one-shot binding on a fresh isolate with synthetic records, then
+record statuses/usage and prove live stays off at the end.
+
 ## HT-AI-MVP Task estimated hours development rollout — 2026-11-21
 
 **HT-AI-MVP — TASK SCHEMA ROLLOUT COMPLETE — PENDING CONTROLLED LIVE TEST APPROVAL.**

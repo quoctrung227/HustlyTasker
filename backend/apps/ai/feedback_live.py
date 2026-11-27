@@ -91,10 +91,10 @@ def analyze_live_feedback(*, actor, profile_id, workspace_id, task_id, sources,
     if feedback_text is not None:
         result_sources.append({"ref": refs[-1], "kind": "manual", "id": None})
     receipt = execution.receipt
-    if not receipt.generated_by_ai or result.provider != "openai" or result.usage.status != "provider_reported":
+    if not receipt.generated_by_ai or result.provider != receipt.provider or result.usage.status != "provider_reported":
         raise AIError(ErrorCode.INVALID_PROVIDER_RESPONSE)
     response = {
-        "contract_version": "ai.v1", "status": "READY", "mode": "openai_live",
+        "contract_version": "ai.v1", "status": "READY", "mode": receipt.execution_mode.lower(),
         "generated_by_ai": True, "persisted": False, "fixture_version": None,
         "provider": result.provider, "model": result.model,
         "sources": result_sources, "payload": validate(result.raw_json),

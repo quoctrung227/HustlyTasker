@@ -24,7 +24,7 @@ from apps.workspace.services import lock_workspace_mutation_context
 
 from .contracts import TASK_PLAN_VERSION, ValidationLimits
 from .errors import AIError, ErrorCode
-from .live_generator import LIMITS as LIVE_LIMITS, LIVE_MODE, LIVE_SCENARIO, live_request
+from .live_generator import LIMITS as LIVE_LIMITS, LIVE_PROPOSAL_MODES, LIVE_SCENARIOS, live_request
 from .models import AiDispatch, AiOperation, AiProposal
 from .providers import Feature, FixtureAdapter, FixtureScenario, ProviderRequest, RequestControl
 from .validation import parse_task_plan, validate_generator_input
@@ -73,13 +73,14 @@ def fixture_metadata():
 
 
 def generator_metadata():
-    from .live_runtime import availability_reason, live_selected
+    from .live_runtime import availability_reason, live_selected, selected_mode
 
     if not live_selected():
         return fixture_metadata()
     reason = availability_reason()
     return {
-        "contract_version": "ai.v1", "enabled": reason is None, "reason": reason, "mode": LIVE_MODE,
+        "contract_version": "ai.v1", "enabled": reason is None, "reason": reason,
+        "mode": (selected_mode() or "GROQ_LIVE").lower(),
         "generated_by_ai": True, "scenarios": [],
         "limits": {"max_brief_chars": LIVE_LIMITS.max_brief_chars,
                    "max_tasks": LIVE_LIMITS.max_tasks, "max_depth": LIVE_LIMITS.max_depth,
@@ -94,19 +95,21 @@ def _selected_live():
 
 
 def _require_proposal_mode(proposal):
-    if (proposal.scenario_id == LIVE_SCENARIO) != _selected_live():
+    live_proposal = proposal.scenario_id in LIVE_PROPOSAL_MODES
+    if live_proposal != _selected_live():
         raise TenantAccessNotFound()
-    if proposal.scenario_id == LIVE_SCENARIO:
+    if live_proposal:
         proposal._live_dispatch = _live_dispatch(proposal)
 
 
 def _live_dispatch(proposal):
     dispatch = getattr(proposal, "_live_dispatch", None)
     if dispatch is None:
+        mode = LIVE_PROPOSAL_MODES[proposal.scenario_id]
         dispatch = proposal.dispatches.filter(
             actor_id=proposal.actor_id, profile_id=proposal.profile_id, workspace_id=proposal.workspace_id,
-            execution_mode=AiDispatch.ExecutionMode.OPENAI_LIVE, feature=AiDispatch.Feature.TASK_PLAN,
-            provider="openai", status=AiDispatch.Status.SUCCEEDED, usage_status=AiDispatch.UsageStatus.REPORTED,
+            execution_mode=mode, feature=AiDispatch.Feature.TASK_PLAN,
+            status=AiDispatch.Status.SUCCEEDED, usage_status=AiDispatch.UsageStatus.REPORTED,
         ).first()
     if dispatch is None:
         raise AIError(ErrorCode.STALE_PROPOSAL)
@@ -214,7 +217,7 @@ def _audit(*, actor, proposal, action, node_count):
         user=actor, action=action, entity_name="AiProposal", entity_id=proposal.id,
         metadata={"profile_id": str(proposal.profile_id),
                   "workspace_id": str(proposal.workspace_id),
-                  "mode": LIVE_MODE if proposal.scenario_id == LIVE_SCENARIO else "fixture_demo",
+                  "mode": LIVE_PROPOSAL_MODES.get(proposal.scenario_id, "fixture_demo").lower(),
                   "node_count": node_count},
     )
 
@@ -344,7 +347,7 @@ def generate_live_proposal(*, actor, profile_id, workspace_id, idempotency_key,
         # Settlement holds and revalidates the same actor/Profile/Workspace locks.
         row.proposal = AiProposal.objects.create(
             actor_id=row.actor_id, profile_id=row.profile_id, workspace_id=row.workspace_id,
-            scenario_id=LIVE_SCENARIO, payload=request.validate(result.raw_json), created_at=now,
+            scenario_id=LIVE_SCENARIOS[row.execution_mode], payload=request.validate(result.raw_json), created_at=now,
             expires_at=now + timedelta(minutes=30), payload_expires_at=now + timedelta(days=7),
         )
 
@@ -486,10 +489,10 @@ def serialize_proposal(proposal):
         "usage": {"input_tokens": 0, "billable_output_tokens": 0,
                   "cost_usd": "0.000000", "status": "fixture_zero"},
     }
-    if proposal.scenario_id == LIVE_SCENARIO:
+    if proposal.scenario_id in LIVE_PROPOSAL_MODES:
         dispatch = _live_dispatch(proposal)
         result.update(
-            mode=LIVE_MODE, generated_by_ai=True, provider=dispatch.provider, model=dispatch.model,
+            mode=dispatch.execution_mode.lower(), generated_by_ai=True, provider=dispatch.provider, model=dispatch.model,
             usage={"input_tokens": dispatch.input_tokens, "billable_output_tokens": dispatch.output_tokens,
                    "cost_usd": format(dispatch.estimated_cost, ".8f"), "status": "provider_reported"},
         )

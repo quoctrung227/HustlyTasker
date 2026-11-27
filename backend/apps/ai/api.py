@@ -23,6 +23,7 @@ from apps.workspace.views import TenantApiViewMixin
 from . import durable_services
 from .contracts import ValidationLimits
 from .errors import AIError
+from .groq_adapter import GroqRateLimitedError
 from .live_runtime import live_selected
 from .validation import validate_generator_input
 
@@ -189,6 +190,8 @@ class ProposalApiMixin(TenantApiViewMixin):
                 "code": public["code"],
                 "fields": {name: [public["message"]] for name in public["fields"]},
             }, status=code_status.get(code, status.HTTP_400_BAD_REQUEST))
+            if isinstance(exc, GroqRateLimitedError) and exc.retry_after_seconds is not None:
+                response["Retry-After"] = str(exc.retry_after_seconds)
             return response
         return super().handle_exception(exc)
 

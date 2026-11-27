@@ -8,7 +8,7 @@ import { useAuth } from '../features/auth/AuthProvider'
 import { useWorkContext } from '../features/workspaces/useWorkContext'
 import { formatLocalDeadline, parseLocalDeadline } from '../features/tasks/TaskForms'
 import { formatEstimatedHours, parseEstimatedHoursInput } from '../features/tasks/estimated-hours'
-import { aiApi, aiKeys, aiPriorities, aiUnavailableMessage, validateAiBrief, validateAiPlan } from '../services/api/ai'
+import { aiApi, aiKeys, aiPriorities, aiProviderLabel, aiUnavailableMessage, isLiveAiMode, validateAiBrief, validateAiPlan } from '../services/api/ai'
 import type { AiConfirmInput, AiGenerateInput, AiProposal, AiScenarioId, AiTaskNode, AiTaskPlan } from '../services/api/ai'
 import { isApiError } from '../services/api/client'
 import { workApi, workKeys } from '../services/api/work-management'
@@ -49,7 +49,8 @@ function ScopedGenerator({ userId, profileId, workspaceId }: { userId: string; p
   const availability = useQuery({ queryKey: aiKeys.availability(userId, profileId, workspaceId),
     queryFn: ({ signal }) => aiApi.availability(profileId, workspaceId, signal), enabled: canManage && !!userId, retry: false })
   const [unavailable, setUnavailable] = useState<string | null>(null)
-  const live = availability.data?.mode === 'openai_live'
+  const live = isLiveAiMode(availability.data?.mode)
+  const providerLabel = aiProviderLabel(availability.data?.mode)
   const enabled = canManage && availability.isSuccess && availability.data.enabled && !unavailable
   const restored = useQuery({ queryKey: aiKeys.proposal(userId, profileId, workspaceId, proposalId),
     queryFn: ({ signal }) => aiApi.proposal(profileId, workspaceId, proposalId, signal),
@@ -143,13 +144,13 @@ function ScopedGenerator({ userId, profileId, workspaceId }: { userId: string; p
       : api?.code === 'RECOVERY_EXPIRED' ? 'Đã hết thời hạn khôi phục kết quả. Hãy kiểm tra danh sách công việc.'
       : api?.code === 'IDEMPOTENCY_CONFLICT' ? 'Yêu cầu đã thay đổi so với lần gửi trước. Hãy kiểm tra trạng thái đề xuất.'
       : api?.code === 'STALE_PROPOSAL' || api?.code === 'ALREADY_CONFIRMED' ? 'Trạng thái đề xuất đã thay đổi. Hãy kiểm tra lại kết quả trên máy chủ.'
-      : api?.code === 'BUDGET_EXCEEDED' ? 'Đã đạt giới hạn ngân sách AI.'
-      : api?.status === 429 ? 'Đã đạt giới hạn đề xuất. Vui lòng chờ trước khi thử lại.'
-      : api?.code === 'PROVIDER_TIMEOUT' ? 'OpenAI chưa trả kết quả trong thời gian cho phép.'
-      : api?.code === 'AI_REFUSED' ? 'OpenAI từ chối xử lý yêu cầu. Hãy xem lại mô tả.'
+      : api?.code === 'BUDGET_EXCEEDED' ? 'Đã đạt hạn mức sử dụng AI.'
+      : api?.status === 429 ? `Đã đạt giới hạn đề xuất. Vui lòng chờ${api.retryAfterSeconds ? ` ${api.retryAfterSeconds} giây` : ''} trước khi thử lại.`
+      : api?.code === 'PROVIDER_TIMEOUT' ? `${providerLabel} chưa trả kết quả trong thời gian cho phép.`
+      : api?.code === 'AI_REFUSED' ? `${providerLabel} từ chối xử lý yêu cầu. Hãy xem lại mô tả.`
       : api?.code === 'ALREADY_DISPATCHED' ? 'Yêu cầu này đã được gửi. Hãy kiểm tra kết quả trước khi tạo đề xuất mới.'
-      : api?.code === 'INVALID_PROVIDER_RESPONSE' ? 'Kết quả từ OpenAI không hợp lệ.'
-      : api?.code === 'PROVIDER_UNAVAILABLE' ? 'Hiện chưa thể kết nối OpenAI.'
+      : api?.code === 'INVALID_PROVIDER_RESPONSE' ? `Kết quả từ ${providerLabel} không hợp lệ.`
+      : api?.code === 'PROVIDER_UNAVAILABLE' ? `Hiện chưa thể kết nối ${providerLabel}.`
       : api?.message || 'Chưa thể hoàn thành yêu cầu. Vui lòng kiểm tra lại kết nối.'
     return { message, fields: api?.kind === 'validation' ? { ...api.fieldErrors } : undefined }
   }
@@ -196,7 +197,7 @@ function ScopedGenerator({ userId, profileId, workspaceId }: { userId: string; p
       if (!safeText(node.description, 2000)) fields[`${index}-description`] = 'Mô tả tối đa 2.000 ký tự hợp lệ.'
       let deadline: string | null = null
       try { deadline = parseLocalDeadline(draft.deadlines[index] || '') } catch { fields[`${index}-deadline`] = 'Nhập thời hạn hợp lệ theo múi giờ thiết bị, trong khoảng năm 0001–9999.' }
-      if (proposal.mode === 'openai_live') {
+      if (isLiveAiMode(proposal.mode)) {
         const estimate = parseEstimatedHoursInput(draft.hours[index] ?? '')
         if (estimate === undefined) fields[`${index}-hours`] = hoursError
         return [{ ...node, proposed_deadline: deadline, estimated_hours: estimate }]
@@ -241,7 +242,7 @@ function ScopedGenerator({ userId, profileId, workspaceId }: { userId: string; p
   }
 
   async function reject() {
-    if (request.current || !enabled || expired || proposal?.status !== 'AVAILABLE' || proposal.mode !== 'openai_live' || proposal.proposal_id !== routeProposal.current) return
+    if (request.current || !enabled || expired || proposal?.status !== 'AVAILABLE' || !isLiveAiMode(proposal.mode) || proposal.proposal_id !== routeProposal.current) return
     const controller = new AbortController()
     request.current = controller; setPending('reject'); setFailure(null)
     try {
@@ -298,12 +299,14 @@ function ScopedGenerator({ userId, profileId, workspaceId }: { userId: string; p
   if (proposalId && !uuid(proposalId)) return <>{header}<Alert kind="error">Mã đề xuất không hợp lệ.</Alert><Link className="button button--secondary" to={base}>Về danh sách công việc</Link></>
   if (restored.isError) return <>{header}<ErrorState error={restored.error} /><Link className="button button--secondary" to={base}>Về danh sách công việc</Link></>
   const fieldError = (key: string) => failure?.fields?.[key]
-  const liveProposal = proposal?.mode === 'openai_live'
+  const liveProposal = isLiveAiMode(proposal?.mode)
   const liveSurface = proposal ? liveProposal : live
   const generationLocked = !!pending || generationUnknown
 
   return <>{header}
-    {liveSurface ? <p className="read-note">{liveProposal ? `Đề xuất từ OpenAI · ${proposal?.model}` : 'Yêu cầu sẽ được gửi đến OpenAI để tạo bản nháp.'} Hãy rà soát đề xuất trước khi lưu công việc.</p>
+    {liveSurface ? <p className="read-note">{proposal && liveProposal
+      ? `Đề xuất từ ${aiProviderLabel(proposal.mode)} · ${proposal.model}.${proposal.usage.cost_usd === null ? '' : ` Chi phí tham chiếu ${proposal.usage.cost_usd} USD.`}`
+      : `Yêu cầu sẽ được gửi đến ${providerLabel} để tạo bản nháp.`} Hãy rà soát đề xuất trước khi lưu công việc.</p>
       : <Alert title="Bản mô phỏng — không phải AI thật">Chỉ nhập dữ liệu giả lập. Kết quả là mẫu cố định, không phân tích mô tả của bạn. Không gửi dữ liệu khách hàng thật. Đề xuất chưa phải công việc; chỉ xác nhận mới tạo công việc thật.</Alert>}
     {failure && <div className="form-summary" tabIndex={-1} ref={summary}><Alert kind="error" title="Cần kiểm tra lại"><p>{failure.message}</p>
       {failure.fields && <ul>{Object.entries(failure.fields).map(([key, message]) => <li key={key}><a href={`#${id}-${key}`} onClick={(event) => { event.preventDefault(); document.getElementById(`${id}-${key}`)?.focus() }}>{message}</a></li>)}</ul>}
@@ -318,7 +321,7 @@ function ScopedGenerator({ userId, profileId, workspaceId }: { userId: string; p
             {availability.data?.scenarios.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select>
           <p className="field__hint">Mẫu quyết định cấu trúc mô phỏng; thay đổi mô tả không làm mẫu trở thành kết quả AI thật.</p></>}
           <label className="field__label" htmlFor={`${id}-brief`}>{live ? 'Mô tả yêu cầu (bắt buộc)' : 'Mô tả yêu cầu giả lập'}</label><textarea id={`${id}-brief`} className="input" value={brief} required={live} disabled={generationLocked} aria-invalid={!!fieldError('brief')} aria-describedby={`${id}-brief-hint${fieldError('brief') ? ` ${id}-brief-error` : ''}`} onChange={(event) => { setBrief(event.target.value); setTouched(true) }} rows={5} />
-          <p className="field__hint" id={`${id}-brief-hint`}>{live ? 'Dùng tiếng Việt hoặc tiếng Anh. Chỉ nhập nội dung được phép chia sẻ với OpenAI.' : 'Không bắt buộc; tối đa 6.000 ký tự. Nội dung thô không được lưu trong đề xuất.'} {Array.from(brief).length}/6.000 ký tự.</p>
+          <p className="field__hint" id={`${id}-brief-hint`}>{live ? `Dùng tiếng Việt hoặc tiếng Anh. Chỉ nhập nội dung được phép chia sẻ với ${providerLabel}.` : 'Không bắt buộc; tối đa 6.000 ký tự. Nội dung thô không được lưu trong đề xuất.'} {Array.from(brief).length}/6.000 ký tự.</p>
           {fieldError('brief') && <p className="field__error" id={`${id}-brief-error`}>{fieldError('brief')}</p>}
           {live && <div className="ai-planning-fields">
             <FormField id={`${id}-task_count`} label="Số công việc mong muốn" hint="Không bắt buộc, từ 1 đến 20." error={fieldError('task_count')}>
@@ -380,7 +383,7 @@ function ScopedGenerator({ userId, profileId, workspaceId }: { userId: string; p
 
 function CreatedTasks({ profileId, workspaceId, base, proposal }: { profileId: string; workspaceId: string; base: string; proposal: AiProposal }) {
   const created = Object.entries(proposal.created_tasks ?? {})
-  const tasks = useQueries({ queries: proposal.mode === 'openai_live' ? created.map(([, taskId]) => ({
+  const tasks = useQueries({ queries: isLiveAiMode(proposal.mode) ? created.map(([, taskId]) => ({
     queryKey: workKeys.task(profileId, workspaceId, taskId),
     queryFn: ({ signal }: { signal: AbortSignal }) => workApi.task(profileId, workspaceId, taskId, signal),
     retry: false,

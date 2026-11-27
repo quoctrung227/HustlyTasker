@@ -18,8 +18,8 @@ from .validation import (
 )
 
 
-LIVE_SCENARIO = "openai-live-v1"
-LIVE_MODE = "openai_live"
+LIVE_SCENARIOS = {"OPENAI_LIVE": "openai-live-v1", "GROQ_LIVE": "groq-live-v1"}
+LIVE_PROPOSAL_MODES = {scenario: mode for mode, scenario in LIVE_SCENARIOS.items()}
 LIMITS = ValidationLimits(max_depth=0)
 _INSTRUCTIONS = (
     "Draft a flat list of concrete HustlyTasker tasks from the work brief. "

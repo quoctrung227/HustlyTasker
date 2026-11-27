@@ -1,9 +1,10 @@
 # HUSTLYTASKER API DOCUMENTATION
 
-## HT-AI-MVP live contracts — development schema applied, live acceptance pending
+## HT-AI-MVP live contracts — Groq development schema applied, live acceptance pending
 
-The live OpenAI path is implemented and exercised with synthetic responses.
-The AI governance and Task estimate migrations are applied on development.
+The shared live path supports Groq and OpenAI with synthetic test transports.
+Development applied `ai.0004_groq_governance` after protected backup and
+restore rehearsal. The live toggle remains off.
 Genuine provider use requires separate
 Owner approval. The server selects mode, checks configuration and verifies migrations.
 An unavailable live configuration returns a safe error without running the fixture.
@@ -16,7 +17,7 @@ Unsafe methods require CSRF. JSON bodies reject extra fields and are limited to
 
 | Method and path | Live request and result |
 |---|---|
-| `OPTIONS ai/task-proposals/` | `ai` metadata advertises `ai.v1`, mode `openai_live`, current readiness, a safe reason if blocked and flat-task limits. |
+| `OPTIONS ai/task-proposals/` | `ai` metadata advertises `ai.v1`, the selected `groq_live` or `openai_live` mode, current readiness, a safe reason if blocked and flat-task limits. |
 | `POST ai/task-proposals/` | UUID `Idempotency-Key`, `brief` (1–6,000 characters), optional integer `task_count` (1–20) and optional offset-aware `target_deadline`. Returns 201 for a new `ai.v1` proposal or 200 for a recoverable replay. Generation writes no Task. |
 | `GET ai/task-proposals/{proposal_id}/` | Current actor and scope only. Returns status, provider/model, usage, active draft or confirmation recovery mapping. Expired and rejected drafts have no payload. |
 | `POST ai/task-proposals/{proposal_id}/confirm/` | UUID `Idempotency-Key`, `proposal_revision`, `confirmed: true` and an edited `ai.task-plan.v1` payload with a nonempty subset of original refs. In live mode each selected Task may supply `estimated_hours` as a decimal string, exact JSON number or `null`. Returns 201 after atomic Task creation and 200 for a matching confirmed replay. |
@@ -28,13 +29,16 @@ copies only the supplied target deadline. Confirmation persists the approved
 nullable estimate with the new Task. Values must be 0.01–1000 with at most
 two decimal places. Task list/detail return a two-place decimal string or `null`.
 Manual Task POST/PATCH input remains unchanged. The
-Analyzer verifies verbatim evidence against the sanitized text sent to OpenAI.
+Analyzer verifies verbatim evidence against the sanitized text sent to the selected provider.
 Its response does not update Review or Task, and is not recoverable from a saved
 result. Both live responses identify usage as `provider_reported`; `cost_usd` is an
-estimate from reported token counts and configured prices.
+reference estimate from reported token counts and published rates. Groq
+`billed_cost` is unknown. Repeating a scoped dispatch key after a provider
+switch returns 409. Recoverable proposals retain their original provider.
 
 503 covers disabled, unconfigured, schema-not-ready or unavailable provider;
-429 covers request and budget limits; 504 covers timeout; 422 covers refusal;
+429 covers request and budget limits, and can include the provider's bounded
+`Retry-After` in seconds. 504 covers timeout and 422 covers refusal.
 502 covers invalid provider output. 409 covers stale revision, prior confirmation,
 concurrent/in-progress dispatch or conflicting idempotency use. Expired proposals
 and expired recovery return 410 on action. The fixture contracts below remain

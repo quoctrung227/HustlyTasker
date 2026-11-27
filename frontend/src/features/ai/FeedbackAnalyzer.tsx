@@ -3,7 +3,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, ErrorState, PageSkeleton, Pagination } from '../../components/ui'
 import { useAuth } from '../auth/AuthProvider'
-import { aiApi, aiKeys, aiUnavailableMessage } from '../../services/api/ai'
+import { aiApi, aiKeys, aiProviderLabel, aiUnavailableMessage, isLiveAiMode } from '../../services/api/ai'
 import { isApiError } from '../../services/api/client'
 import { collaborationApi, collaborationKeys } from '../../services/api/collaboration'
 import type { Deliverable, TaskComment } from '../../services/api/collaboration'
@@ -58,7 +58,9 @@ function ScopedAnalyzer({ userId, profileId, workspaceId, taskId, onDenied }: Pr
   const scope = useMemo(() => collaborationKeys.scope(userId, profileId, workspaceId, taskId), [userId, profileId, workspaceId, taskId])
   const availability = useQuery({ queryKey: aiKeys.availability(userId, profileId, workspaceId),
     queryFn: ({ signal }) => aiApi.availability(profileId, workspaceId, signal), retry: false })
-  const live = availability.data?.mode === 'openai_live'
+  const mode = availability.data?.mode ?? 'fixture_demo'
+  const live = isLiveAiMode(mode)
+  const providerLabel = aiProviderLabel(mode)
   const enabled = availability.isSuccess && availability.data.enabled && !unavailable
   const reviews = useQuery({ queryKey: collaborationKeys.deliverables(userId, profileId, workspaceId, taskId, reviewPage),
     queryFn: ({ signal }) => collaborationApi.deliverables(profileId, workspaceId, taskId, reviewPage, signal), enabled: opened && enabled, retry: false })
@@ -181,9 +183,9 @@ function ScopedAnalyzer({ userId, profileId, workspaceId, taskId, onDenied }: Pr
     const controller = new AbortController(); request.current = controller; setPending(true); setFailure(null); setResult(null)
     try {
       const input = validateFeedbackInput({ sources: snapshot.map(({ kind, id }) => ({ kind, id })),
-        ...(focus === '' ? {} : { focus }), ...(manualChars ? { feedback_text: feedbackText } : {}) }, live ? 'openai_live' : 'fixture_demo')
+        ...(focus === '' ? {} : { focus }), ...(manualChars ? { feedback_text: feedbackText } : {}) }, mode)
       if (!await currentSources(snapshot, controller.signal)) return
-      const value = live ? await feedbackAnalysisApi.analyze(profileId, workspaceId, taskId, input, controller.signal, crypto.randomUUID())
+      const value = live ? await feedbackAnalysisApi.analyze(profileId, workspaceId, taskId, input, controller.signal, crypto.randomUUID(), mode)
         : await feedbackAnalysisApi.analyze(profileId, workspaceId, taskId, input, controller.signal)
       if (controller.signal.aborted) return
       if (!await currentSources(snapshot, controller.signal)) return
@@ -202,13 +204,13 @@ function ScopedAnalyzer({ userId, profileId, workspaceId, taskId, onDenied }: Pr
       }
       setFailure({ message: dispatched ? 'Máy chủ đã nhận yêu cầu này. Chỉ gửi lần phân tích mới nếu bạn muốn dùng thêm hạn mức.'
         : api?.code === 'STALE_CONTEXT' || api?.status === 409 || api?.status === 404 ? 'Nguồn hoặc quyền truy cập đã thay đổi. Hãy tải lại phản hồi và chọn lại.'
-        : api?.code === 'BUDGET_EXCEEDED' ? 'Đã đạt giới hạn ngân sách AI.'
-        : api?.status === 429 ? 'Đã đạt giới hạn phân tích. Hãy chờ trước khi thử lại; mỗi lần gửi lại có thể tính vào hạn mức.'
+        : api?.code === 'BUDGET_EXCEEDED' ? 'Đã đạt hạn mức sử dụng AI.'
+        : api?.status === 429 ? `Đã đạt giới hạn phân tích. Hãy chờ${api.retryAfterSeconds ? ` ${api.retryAfterSeconds} giây` : ''} trước khi thử lại.`
         : api?.status === 403 ? 'Bạn không còn quyền phân tích phản hồi này. Đang kiểm tra lại quyền truy cập.'
-        : api?.code === 'PROVIDER_TIMEOUT' ? 'OpenAI chưa trả kết quả trong thời gian cho phép.'
-        : api?.code === 'AI_REFUSED' ? 'OpenAI từ chối phân tích. Hãy xem lại nội dung phản hồi.'
-        : api?.code === 'INVALID_PROVIDER_RESPONSE' ? 'Kết quả từ OpenAI không hợp lệ.'
-        : api?.code === 'PROVIDER_UNAVAILABLE' ? 'Hiện chưa thể kết nối OpenAI.'
+        : api?.code === 'PROVIDER_TIMEOUT' ? `${providerLabel} chưa trả kết quả trong thời gian cho phép.`
+        : api?.code === 'AI_REFUSED' ? `${providerLabel} từ chối phân tích. Hãy xem lại nội dung phản hồi.`
+        : api?.code === 'INVALID_PROVIDER_RESPONSE' ? `Kết quả từ ${providerLabel} không hợp lệ.`
+        : api?.code === 'PROVIDER_UNAVAILABLE' ? `Hiện chưa thể kết nối ${providerLabel}.`
         : api?.kind === 'network' ? 'Kết nối bị gián đoạn. Kết quả chưa được lưu; bạn có thể chủ động phân tích lại, lần gửi mới sẽ được kiểm tra hạn mức.'
         : api?.message || 'Chưa thể phân tích phản hồi. Hãy kiểm tra kết nối và thử lại.',
         ...(api?.fieldErrors.focus ? { focus: api.fieldErrors.focus } : {}),
@@ -224,7 +226,7 @@ function ScopedAnalyzer({ userId, profileId, workspaceId, taskId, onDenied }: Pr
   if (!enabled) return <section className="collaboration-section" aria-labelledby={`${id}-title`}>{title}<Alert title={live ? 'AI chưa khả dụng' : 'Bản mô phỏng chưa khả dụng'}>{aiUnavailableMessage(unavailable || availability.data.reason)} Bạn vẫn có thể xử lý phản hồi theo quyền hiện tại.</Alert><Button disabled>Phân tích phản hồi</Button></section>
   return <section className="collaboration-section feedback-analyzer" aria-labelledby={`${id}-title`}>
     {title}
-    {live ? <p className="read-note">Chỉ chọn hoặc nhập phản hồi được phép chia sẻ với OpenAI. Kết quả dùng để tham khảo khi xử lý phản hồi.</p>
+    {live ? <p className="read-note">Chỉ chọn hoặc nhập phản hồi được phép chia sẻ với {providerLabel}. Kết quả dùng để tham khảo khi xử lý phản hồi.</p>
       : <Alert title="Bản mô phỏng — không phải AI thật">Đây là kết quả mô phỏng, chưa sử dụng AI thật để hiểu nội dung phản hồi. Kết quả chỉ mang tính minh họa; không tự sửa công việc hoặc quyết định Review.</Alert>}
     {!opened ? <Button variant="secondary" onClick={() => setOpened(true)}>Phân tích phản hồi</Button> : <>
       {sourceError ? <ErrorState error={sourceError} onRetry={() => { void reviews.refetch(); void comments.refetch() }} /> : reviews.isPending || comments.isPending ? <PageSkeleton label="Đang tải nguồn phản hồi…" /> : <form className="work-form" noValidate aria-label="Chọn nguồn phân tích phản hồi" onSubmit={(event) => void analyze(event)}>
@@ -266,7 +268,7 @@ function AnalysisResult({ result, selected, dismiss }: { result: FeedbackAnalysi
   const id = useId()
   const [draftActions, setDraftActions] = useState(() => result.payload.suggested_actions.map((action) => action.action))
   const [copyStatus, setCopyStatus] = useState('')
-  const live = result.mode === 'openai_live'
+  const live = isLiveAiMode(result.mode)
   useEffect(() => { title.current?.focus() }, [])
   function sourceLabel(ref: string) {
     const manifest = result.sources.find((source) => source.ref === ref)
@@ -283,7 +285,7 @@ function AnalysisResult({ result, selected, dismiss }: { result: FeedbackAnalysi
     } catch { setCopyStatus('Không thể truy cập bộ nhớ tạm. Hãy chọn và sao chép nội dung trong ô gợi ý.') }
   }
   return <Card className="feedback-analysis-result"><h3 ref={title} tabIndex={-1}>{live ? 'Kết quả phân tích phản hồi' : 'Kết quả mô phỏng'}</h3>
-    {live ? <p className="read-note">OpenAI · {result.model}</p> : <p>Kết quả chỉ mang tính minh họa. Hệ thống chưa phân tích nội dung bằng mô hình AI thật. Ký hiệu nguồn chỉ liên kết lựa chọn, không chứng minh đã hiểu nội dung.</p>}
+    {live ? <p className="read-note">{aiProviderLabel(result.mode)} · {result.model}.{result.usage.cost_usd !== null && ` Chi phí tham chiếu ${result.usage.cost_usd} USD.`}</p> : <p>Kết quả chỉ mang tính minh họa. Hệ thống chưa phân tích nội dung bằng mô hình AI thật. Ký hiệu nguồn chỉ liên kết lựa chọn, không chứng minh đã hiểu nội dung.</p>}
     <h4>{live ? 'Tóm tắt' : 'Tóm tắt minh họa'}</h4><p className="preserve-text">{result.payload.summary}</p>
     {result.payload.issues.length > 0 && <><h4>{live ? 'Vấn đề chính' : 'Vấn đề trong mẫu'}</h4><ul>{keyed(result.payload.issues).map(({ key, value: issue }) => <li className="feedback-analysis-item" key={key}><strong>{categories[issue.category]}</strong>{issue.severity && <p>Mức độ: {priorities[issue.severity]}</p>}<p className="preserve-text">{issue.description}</p>{citations(issue.source_refs)}
       {issue.evidence && issue.evidence.length > 0 && <ul className="feedback-evidence">{keyed(issue.evidence).map(({ key: quoteKey, value }) => <li key={quoteKey}><blockquote className="preserve-text">{value.quote}</blockquote><p className="field__hint">{sourceLabel(value.source_ref)}</p></li>)}</ul>}

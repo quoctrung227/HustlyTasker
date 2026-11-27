@@ -110,20 +110,33 @@ Run-Test 'Trash purge is not inherited from the terminal' {
     }
 }
 Run-Test 'child environment is isolated and security settings are preserved' {
-    $htNames = @('DJANGO_SETTINGS_MODULE', 'DJANGO_SECRET_KEY', 'PGSERVICE', 'PYTHONPATH', 'OPENAI_API_KEY')
+    $htNames = @('DJANGO_SETTINGS_MODULE', 'DJANGO_SECRET_KEY', 'PGSERVICE', 'PYTHONPATH', 'OPENAI_API_KEY', 'GROQ_API_KEY', 'DJANGO_AI_PROVIDER', 'DJANGO_AI_LIVE_ENABLED')
     $htOriginal = @{}
     foreach ($htName in $htNames) { $htOriginal[$htName] = [Environment]::GetEnvironmentVariable($htName, 'Process') }
     try {
         foreach ($htName in $htNames) { [Environment]::SetEnvironmentVariable($htName, 'synthetic-stale-inherited-value', 'Process') }
         $htValues = New-TestValues; $htValues.DJANGO_SESSION_COOKIE_SECURE='true'
         $htInfo = New-HustlyDevelopmentProcessInfo (Get-Location).Path $htValues 'check'
-        foreach ($htName in @('DJANGO_SETTINGS_MODULE', 'PGSERVICE', 'PYTHONPATH', 'OPENAI_API_KEY')) { Assert-True (-not $htInfo.EnvironmentVariables.ContainsKey($htName)) 'stale override removed' }
+        foreach ($htName in $htNames | Where-Object { $_ -ne 'DJANGO_SECRET_KEY' }) { Assert-True (-not $htInfo.EnvironmentVariables.ContainsKey($htName)) 'stale override removed' }
         Assert-True ($htInfo.EnvironmentVariables['DJANGO_SECRET_KEY'] -ceq $htValues.DJANGO_SECRET_KEY) 'selected stable key'
         Assert-True ($htInfo.EnvironmentVariables['DJANGO_SESSION_COOKIE_SECURE'] -ceq 'true') 'security policy retained'
         foreach ($htName in $htNames) { Assert-True ([Environment]::GetEnvironmentVariable($htName, 'Process') -ceq 'synthetic-stale-inherited-value') 'parent unchanged' }
     } finally {
         foreach ($htName in $htNames) { [Environment]::SetEnvironmentVariable($htName, $htOriginal[$htName], 'Process') }
     }
+}
+
+Run-Test 'selected file can configure Groq with no OpenAI key' {
+    $htValues = Read-HustlyDevelopmentEnvironment @(
+        'DJANGO_AI_LIVE_ENABLED=false', 'DJANGO_AI_PROVIDER=groq', 'DJANGO_AI_MODEL=openai/gpt-oss-120b',
+        'GROQ_API_KEY=synthetic-probe-key', 'DJANGO_AI_GROQ_FREE_TIER_CONFIRMED=false',
+        'DJANGO_AI_CONTROLLED_LIVE=false', 'DJANGO_AI_GROQ_TOKENS_PER_MINUTE=6000'
+    )
+    $htInfo = New-HustlyDevelopmentProcessInfo (Get-Location).Path $htValues 'check'
+    foreach ($htName in $htValues.Keys) {
+        Assert-True ($htInfo.EnvironmentVariables[$htName] -ceq $htValues[$htName]) 'selected Groq value preserved'
+    }
+    Assert-True (-not $htInfo.EnvironmentVariables.ContainsKey('OPENAI_API_KEY')) 'OpenAI key not required or inherited'
 }
 
 Run-Test 'occupied reusable loopback port refuses a second development server' {

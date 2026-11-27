@@ -101,6 +101,7 @@ class AiDispatch(models.Model):
         FIXTURE = "FIXTURE", "Synthetic fixture"
         OPENAI_OFFLINE = "OPENAI_OFFLINE", "Offline OpenAI transport"
         OPENAI_LIVE = "OPENAI_LIVE", "Live OpenAI (not enabled)"
+        GROQ_LIVE = "GROQ_LIVE", "Live Groq"
 
     class Feature(models.TextChoices):
         TASK_PLAN = "task_plan", "Task plan"
@@ -158,13 +159,27 @@ class AiDispatch(models.Model):
             models.UniqueConstraint(fields=("actor", "profile", "workspace", "feature", "execution_mode", "key_digest"), name="ai_disp_identity_unique"),
             models.UniqueConstraint(fields=("proposal",), condition=models.Q(proposal__isnull=False), name="ai_disp_one_per_proposal"),
             models.CheckConstraint(condition=models.Q(feature__in=("task_plan", "feedback_analysis")), name="ai_disp_feature_valid"),
-            models.CheckConstraint(condition=(models.Q(execution_mode="FIXTURE", provider="fixture") | models.Q(execution_mode__in=("OPENAI_OFFLINE", "OPENAI_LIVE"), provider="openai")), name="ai_disp_origin_valid"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(execution_mode="FIXTURE", provider="fixture")
+                    | models.Q(execution_mode__in=("OPENAI_OFFLINE", "OPENAI_LIVE"), provider="openai")
+                    | models.Q(execution_mode="GROQ_LIVE", provider="groq")
+                ),
+                name="ai_disp_origin_valid",
+            ),
             models.CheckConstraint(condition=(~models.Q(model="") & ~models.Q(contract_version="") & ~models.Q(config_version="") & ~models.Q(pricing_version="")), name="ai_disp_versions_nonempty"),
             models.CheckConstraint(condition=models.Q(key_digest__regex=r"^[0-9a-f]{64}$", body_digest__regex=r"^[0-9a-f]{64}$"), name="ai_disp_digests_valid"),
             models.CheckConstraint(condition=models.Q(policy_digest__regex=r"^[0-9a-f]{64}$"), name="ai_disp_policy_digest_valid"),
             models.CheckConstraint(condition=(models.Q(settlement_digest="") | models.Q(settlement_digest__regex=r"^[0-9a-f]{64}$")), name="ai_disp_settle_digest_valid"),
             models.CheckConstraint(condition=models.Q(usage_status__in=("UNKNOWN", "SIMULATED", "REPORTED")), name="ai_disp_usage_valid"),
-            models.CheckConstraint(condition=(models.Q(usage_status="UNKNOWN") | models.Q(execution_mode__in=("FIXTURE", "OPENAI_OFFLINE"), usage_status="SIMULATED") | models.Q(execution_mode="OPENAI_LIVE", usage_status="REPORTED")), name="ai_disp_usage_mode_valid"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(usage_status="UNKNOWN")
+                    | models.Q(execution_mode__in=("FIXTURE", "OPENAI_OFFLINE"), usage_status="SIMULATED")
+                    | models.Q(execution_mode__in=("OPENAI_LIVE", "GROQ_LIVE"), usage_status="REPORTED")
+                ),
+                name="ai_disp_usage_mode_valid",
+            ),
             models.CheckConstraint(condition=(models.Q(execution_mode="OPENAI_LIVE") | models.Q(billed_cost__isnull=True)), name="ai_disp_no_simulated_bill"),
             models.CheckConstraint(condition=models.Q(reserved_amount__gte=0, reserved_amount__lt=1000000000000), name="ai_disp_reservation_bounds"),
             models.CheckConstraint(condition=(models.Q(accounted_amount__isnull=True) | models.Q(accounted_amount__gte=0, accounted_amount__lte=models.F("reserved_amount"))), name="ai_disp_accounted_bounds"),
@@ -228,7 +243,10 @@ class AiBudgetBucket(models.Model):
     class Meta:
         constraints = [
             models.CheckConstraint(condition=(models.Q(scope="GLOBAL", profile__isnull=True, user__isnull=True) | models.Q(scope="PROFILE", profile__isnull=False, user__isnull=True) | models.Q(scope="USER", profile__isnull=True, user__isnull=False)), name="ai_budget_scope_valid"),
-            models.CheckConstraint(condition=models.Q(execution_mode__in=("FIXTURE", "OPENAI_OFFLINE", "OPENAI_LIVE")), name="ai_budget_mode_valid"),
+            models.CheckConstraint(
+                condition=models.Q(execution_mode__in=("FIXTURE", "OPENAI_OFFLINE", "OPENAI_LIVE", "GROQ_LIVE")),
+                name="ai_budget_mode_valid",
+            ),
             models.CheckConstraint(condition=~models.Q(policy_version=""), name="ai_budget_policy_nonempty"),
             models.UniqueConstraint(fields=("execution_mode",), condition=models.Q(scope="GLOBAL"), name="ai_budget_global_unique"),
             models.UniqueConstraint(fields=("profile", "execution_mode"), condition=models.Q(scope="PROFILE"), name="ai_budget_profile_unique"),

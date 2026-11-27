@@ -5,7 +5,12 @@ import { countTasks, login, openTasksFromNavigation, required, scope } from './a
 import { feedbackLogin, feedbackNavigate, feedbackOpen, feedbackScope, feedbackState } from './feedback-helpers'
 
 // Django and PostgreSQL are real. The owned launcher substitutes the outbound
-// HTTPS transport with a deterministic response and makes no OpenAI calls.
+// HTTPS transport with a deterministic response for the selected provider.
+const provider = process.env.HT_FRONTEND_AI_PROVIDER ?? 'openai'
+if (provider !== 'groq' && provider !== 'openai') throw new Error('Invalid isolated AI provider fixture.')
+const providerName = provider === 'groq' ? 'Groq' : 'OpenAI'
+const mode = `${provider}_live`
+const model = provider === 'groq' ? 'openai/gpt-oss-120b' : 'gpt-5.4-mini'
 const viewports = [{ width: 375, height: 812 }, { width: 768, height: 1024 },
   { width: 1440, height: 1000 }, { width: 812, height: 375 }]
 
@@ -17,13 +22,14 @@ async function verifyViewport(page: Page, name: string) {
   await page.screenshot({ path: join(required('HT_FRONTEND_SCREENSHOT_DIR'), `${name}-${size?.width}x${size?.height}.png`), fullPage: true })
 }
 
-test('OpenAI wire flow with fake transport saves the edited estimate for only the chosen flat Task', async ({ page }) => {
+test(`${providerName} wire flow with fake transport saves the edited estimate for only the chosen flat Task`, async ({ page }) => {
   test.setTimeout(120_000)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await login(page, 'ai_manager')
   await openTasksFromNavigation(page)
   expect(await countTasks(page.request)).toBe(0)
   await page.getByRole('link', { name: 'Tạo công việc bằng AI', exact: true }).click()
+  await expect(page.getByText(`Yêu cầu sẽ được gửi đến ${providerName} để tạo bản nháp.`, { exact: false })).toBeVisible()
   const brief = 'Kiểm tra chất lượng phụ đề cho video hướng dẫn tổng hợp.'
   await page.getByLabel('Mô tả yêu cầu (bắt buộc)', { exact: true }).fill(brief)
   await page.getByLabel('Số công việc mong muốn', { exact: true }).fill('2')
@@ -34,7 +40,11 @@ test('OpenAI wire flow with fake transport saves the edited estimate for only th
   expect(reply.request().postDataJSON()).toEqual({ brief, task_count: 2 })
   expect(reply.request().headers()['idempotency-key']).toMatch(/^[\da-f-]{36}$/i)
   const proposal = await reply.json() as { proposal_id: string; mode: string; payload: { tasks: { parent_ref: string | null; proposed_deadline: string | null; estimated_hours: number }[] } }
-  expect(proposal.mode).toBe('openai_live')
+  expect(proposal).toMatchObject({ mode, provider, model, usage: {
+    input_tokens: 150, billable_output_tokens: 75, status: 'provider_reported',
+  } })
+  await expect(page.getByText(`Đề xuất từ ${providerName} · ${model}.`, { exact: false })).toBeVisible()
+  await expect(page.getByText('Chi phí tham chiếu', { exact: false })).toBeVisible()
   expect(proposal.payload.tasks).toHaveLength(2)
   for (const task of proposal.payload.tasks) expect(task).toMatchObject({ parent_ref: null, proposed_deadline: null, estimated_hours: 2 })
   expect(await countTasks(page.request)).toBe(0)
@@ -116,19 +126,20 @@ test('rejects a generated draft and reloads the terminal state without creating 
   await dialog.getByRole('button', { name: 'Xác nhận loại bỏ', exact: true }).press('Enter')
   const rejection = await rejected
   expect(rejection.status()).toBe(200)
-  expect(await rejection.json()).toMatchObject({ status: 'REJECTED', payload: null })
+  expect(await rejection.json()).toMatchObject({ status: 'REJECTED', payload: null, mode, provider, model })
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Đề xuất đã bị loại bỏ', exact: true })).toBeVisible()
   expect(await countTasks(page.request)).toBe(before)
 })
 
-test('fake OpenAI analyzes manual feedback, shows exact evidence and keeps edits out of Review', async ({ page }) => {
+test(`fake ${providerName} analyzes manual feedback, shows exact evidence and keeps edits out of Review`, async ({ page }) => {
   test.setTimeout(120_000)
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await feedbackLogin(page, 'analyzer_manager')
   await feedbackNavigate(page)
   const before = feedbackState() as Record<string, unknown>
   const panel = await feedbackOpen(page)
+  await expect(panel.getByText(`được phép chia sẻ với ${providerName}.`, { exact: false })).toBeVisible()
   const feedback = 'Dòng phụ đề đầu tiên chạy quá nhanh.'
   await panel.getByLabel('Nhập phản hồi bổ sung', { exact: true }).fill(feedback)
   const analyze = panel.getByRole('button', { name: 'Phân tích bằng AI', exact: true })
@@ -141,9 +152,13 @@ test('fake OpenAI analyzes manual feedback, shows exact evidence and keeps edits
   expect(response.status()).toBe(200)
   expect(response.request().postDataJSON()).toEqual({ sources: [], feedback_text: feedback })
   expect(response.request().headers()['idempotency-key']).toMatch(/^[\da-f-]{36}$/i)
+  expect(await response.json()).toMatchObject({ mode, provider, model, usage: {
+    input_tokens: 150, billable_output_tokens: 75, status: 'provider_reported',
+  } })
   await expect(panel.getByRole('heading', { name: 'Kết quả phân tích phản hồi' })).toBeFocused()
   await expect(panel.getByText('Tóm tắt kiểm thử AI', { exact: true })).toBeVisible()
   await expect(panel.locator('blockquote')).toHaveText(feedback)
+  await expect(panel.getByText(`${providerName} · ${model}.`, { exact: false })).toBeVisible()
   const action = panel.getByLabel('Gợi ý 1', { exact: true })
   await action.fill('Điều chỉnh tốc độ phụ đề sau khi xem lại.')
   for (const size of viewports) {

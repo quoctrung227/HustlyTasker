@@ -52,15 +52,19 @@ function scenarioAt(value: AiAvailability, index: number) {
 beforeEach(() => { apiClient.clearCsrf(); apiClient.setForbiddenHandler(null) })
 afterEach(() => { apiClient.clearCsrf(); apiClient.setForbiddenHandler(null); vi.unstubAllGlobals() })
 
-it('keeps unavailable live metadata, flat previews and live usage distinct from fixtures', () => {
-  const metadata = { ...availability(), enabled: false, mode: 'openai_live', generated_by_ai: true,
+it.each([
+  ['openai_live', 'openai-live-v1', 'openai', 'gpt-5.4-mini'],
+  ['groq_live', 'groq-live-v1', 'groq', 'openai/gpt-oss-120b'],
+] as const)('keeps %s metadata, flat previews and live usage distinct from fixtures', (mode, scenarioId, provider, model) => {
+  const metadata = { ...availability(), enabled: false, mode, generated_by_ai: true,
     reason: 'AI_NOT_CONFIGURED', scenarios: [], limits: { ...availability().limits, max_depth: 0 } }
   expect(validateAiAvailability(metadata)).toEqual(metadata)
   expect(() => validateAiAvailability({ ...metadata, enabled: true })).toThrow(ApiError)
-  const flat: AiProposal = { ...proposal(), mode: 'openai_live', generated_by_ai: true, scenario_id: 'openai-live-v1',
-    provider: 'openai', model: 'gpt-5.4-mini', payload: { ...plan(), tasks: plan().tasks.map((task) => ({ ...task, parent_ref: null, estimated_hours: 2.5 })) },
+  const flat: AiProposal = { ...proposal(), mode, generated_by_ai: true, scenario_id: scenarioId,
+    provider, model, payload: { ...plan(), tasks: plan().tasks.map((task) => ({ ...task, parent_ref: null, estimated_hours: 2.5 })) },
     usage: { input_tokens: 150, billable_output_tokens: 75, cost_usd: '0.00009750', status: 'provider_reported' } }
   expect(validateAiProposal(flat)).toEqual(flat)
+  expect(() => validateAiProposal({ ...flat, provider: provider === 'groq' ? 'openai' : 'groq' })).toThrow(ApiError)
   expect(validateAiProposal({ ...flat, status: 'REJECTED', payload: null }).status).toBe('REJECTED')
   expect(() => validateAiProposal({ ...flat, payload: plan() })).toThrow(ApiError)
   expect(() => validateAiProposal({ ...flat, generated_by_ai: false })).toThrow(ApiError)

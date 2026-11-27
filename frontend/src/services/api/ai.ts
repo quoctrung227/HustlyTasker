@@ -6,7 +6,16 @@ import { isEstimatedHours, parseEstimatedHoursInput } from '../../features/tasks
 export const aiPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const
 export const aiScenarioIds = ['subtitle-check-v1', 'task-tree-v1'] as const
 export type AiScenarioId = typeof aiScenarioIds[number]
-export type AiMode = 'fixture_demo' | 'openai_live'
+const liveProviders = {
+  openai_live: { provider: 'openai', scenario: 'openai-live-v1', label: 'OpenAI' },
+  groq_live: { provider: 'groq', scenario: 'groq-live-v1', label: 'Groq' },
+} as const
+export type LiveAiMode = keyof typeof liveProviders
+export type AiMode = 'fixture_demo' | LiveAiMode
+export type AiProvider = typeof liveProviders[LiveAiMode]['provider']
+export const isLiveAiMode = (mode: unknown): mode is LiveAiMode => mode === 'openai_live' || mode === 'groq_live'
+export const aiProvider = (mode: LiveAiMode) => liveProviders[mode].provider
+export const aiProviderLabel = (mode: AiMode | undefined): string => isLiveAiMode(mode) ? liveProviders[mode].label : 'AI'
 export type AiUnavailableReason = 'AI_NOT_CONFIGURED' | 'AI_MIGRATION_REQUIRED' | 'AI_DISABLED' | 'PROVIDER_UNAVAILABLE'
 export type AiUsage = { input_tokens: number | null; billable_output_tokens: number | null; cost_usd: string | null; status: 'fixture_zero' | 'provider_reported' }
 export interface AiTaskNode<Hours = number> {
@@ -29,11 +38,11 @@ export interface AiProposal {
   contract_version: 'ai.v1'
   proposal_id: string
   revision: number
-  scenario_id: AiScenarioId | 'openai-live-v1'
+  scenario_id: AiScenarioId | typeof liveProviders[LiveAiMode]['scenario']
   status: 'AVAILABLE' | 'EXPIRED' | 'CONFIRMED' | 'REJECTED'
   mode: AiMode
   generated_by_ai: boolean
-  provider?: 'openai'
+  provider?: AiProvider
   model?: string
   persisted: true
   created_at: string
@@ -72,7 +81,7 @@ const safeText = (value: unknown, maximum: number, required = false): value is s
 const scenario = (value: unknown): value is AiScenarioId => aiScenarioIds.some((id) => id === value)
 const unavailableReasons = ['AI_NOT_CONFIGURED', 'AI_MIGRATION_REQUIRED', 'AI_DISABLED', 'PROVIDER_UNAVAILABLE'] as const
 export function aiUnavailableMessage(reason: string | null | undefined): string {
-  if (reason === 'AI_NOT_CONFIGURED') return 'AI chưa được cấu hình. Hãy liên hệ quản trị viên để kiểm tra cấu hình OpenAI.'
+  if (reason === 'AI_NOT_CONFIGURED') return 'AI chưa được cấu hình. Hãy liên hệ quản trị viên để kiểm tra nhà cung cấp AI.'
   if (reason === 'AI_MIGRATION_REQUIRED') return 'AI đang chờ cập nhật cơ sở dữ liệu. Hãy liên hệ quản trị viên.'
   if (reason === 'PROVIDER_UNAVAILABLE') return 'Dịch vụ AI đang gián đoạn. Hãy thử lại sau.'
   return 'Chức năng AI đang tắt trong môi trường này.'
@@ -120,13 +129,14 @@ export function validateAiPlan(value: unknown, mode?: AiMode, edited = false): A
       value.contract_version !== 'ai.task-plan.v1' || !Array.isArray(value.tasks) ||
       value.tasks.length < 1 || value.tasks.length > 20 || !strings(value.assumptions) || !strings(value.warnings)) throw invalidResponse()
   const nodes = new Map<string, AiTaskNode<string | number>>()
+  const live = isLiveAiMode(mode)
   for (const item of value.tasks) {
     if (!record(item)) throw invalidResponse()
     const fields = ['local_ref', 'parent_ref', 'title', 'description', 'priority', 'proposed_deadline', 'notes']
-    if (mode === 'openai_live' || (mode !== 'fixture_demo' && Object.hasOwn(item, 'estimated_hours'))) fields.push('estimated_hours')
+    if (live || (mode !== 'fixture_demo' && Object.hasOwn(item, 'estimated_hours'))) fields.push('estimated_hours')
     if (!exact(item, fields) ||
         !ref(item.local_ref) || nodes.has(item.local_ref) || !(item.parent_ref === null || ref(item.parent_ref)) ||
-        (mode === 'openai_live' && item.parent_ref !== null) ||
+        (live && item.parent_ref !== null) ||
         (Object.hasOwn(item, 'estimated_hours') && !validAiEstimate(item.estimated_hours, edited)) ||
         !safeText(item.title, 255, true) || !safeText(item.description, 2000) || !safeText(item.notes, 500) ||
         !aiPriorities.some((priority) => priority === item.priority) || !nullableDate(item.proposed_deadline)) throw invalidResponse()
@@ -158,22 +168,24 @@ function mapping(value: unknown): value is Record<string, string> {
     new Set(values.map((id) => String(id).toLowerCase())).size === values.length
 }
 export function validateAiProposal(value: unknown, expectedId?: string): AiProposal {
-  if (!record(value) || (value.mode !== 'fixture_demo' && value.mode !== 'openai_live')) throw invalidResponse()
-  const live = value.mode === 'openai_live'
+  if (!record(value)) throw invalidResponse()
+  const { mode } = value
+  const live = isLiveAiMode(mode)
+  if (!live && mode !== 'fixture_demo') throw invalidResponse()
   if (!exact(value, ['contract_version', 'proposal_id', 'revision', 'scenario_id', 'status',
       'mode', 'generated_by_ai', 'persisted', 'created_at', 'expires_at', 'payload_expires_at', 'confirmed_at',
       'recovery_expires_at', 'payload', 'created_tasks', 'usage', ...(live ? ['provider', 'model'] : [])]) || !sizeWithin(value, 65536) ||
       value.contract_version !== 'ai.v1' || !uuid(value.proposal_id) ||
       (expectedId !== undefined && value.proposal_id.toLowerCase() !== expectedId.toLowerCase()) ||
       !Number.isSafeInteger(value.revision) || Number(value.revision) < 1 ||
-      (live ? value.scenario_id !== 'openai-live-v1' || value.provider !== 'openai' || !safeText(value.model, 120, true) : !scenario(value.scenario_id)) ||
+      (live ? value.scenario_id !== liveProviders[mode].scenario || value.provider !== aiProvider(mode) || !safeText(value.model, 120, true) : !scenario(value.scenario_id)) ||
       value.generated_by_ai !== live || value.persisted !== true ||
       !isAiDateTime(value.created_at) || !isAiDateTime(value.expires_at) || !isAiDateTime(value.payload_expires_at) ||
       Date.parse(value.expires_at) <= Date.parse(value.created_at) ||
       Date.parse(value.payload_expires_at) < Date.parse(value.expires_at) ||
-      !nullableDate(value.confirmed_at) || !nullableDate(value.recovery_expires_at) || !validAiUsage(value.usage, value.mode)) throw invalidResponse()
+      !nullableDate(value.confirmed_at) || !nullableDate(value.recovery_expires_at) || !validAiUsage(value.usage, mode)) throw invalidResponse()
   if (value.status === 'AVAILABLE') {
-    validateAiPlan(value.payload, value.mode)
+    validateAiPlan(value.payload, mode)
     if (value.created_tasks !== null || value.confirmed_at !== null || value.recovery_expires_at !== null) throw invalidResponse()
   } else if (value.status === 'EXPIRED' || (live && value.status === 'REJECTED')) {
     if (value.payload !== null || value.created_tasks !== null || value.confirmed_at !== null || value.recovery_expires_at !== null) throw invalidResponse()
@@ -185,8 +197,9 @@ export function validateAiProposal(value: unknown, expectedId?: string): AiPropo
   return value as unknown as AiProposal
 }
 export function validateAiAvailability(value: unknown): AiAvailability {
-  if (!record(value) || (value.mode !== 'fixture_demo' && value.mode !== 'openai_live')) throw invalidResponse()
-  const live = value.mode === 'openai_live'
+  if (!record(value)) throw invalidResponse()
+  const live = isLiveAiMode(value.mode)
+  if (!live && value.mode !== 'fixture_demo') throw invalidResponse()
   if (!exact(value, ['contract_version', 'enabled', 'mode', 'generated_by_ai', 'scenarios', 'limits', ...(live ? ['reason'] : [])]) ||
       value.contract_version !== 'ai.v1' || typeof value.enabled !== 'boolean' ||
       value.generated_by_ai !== live || !Array.isArray(value.scenarios) ||
@@ -243,7 +256,7 @@ export const aiApi = {
     const proposal = validateAiProposal(await apiClient.request<unknown>(basePath(profileId, workspaceId), {
       method: 'POST', body, idempotencyKey: key, signal, protected: true,
     }))
-    if (proposal.mode !== (fixture ? 'fixture_demo' : 'openai_live')) throw invalidResponse()
+    if (fixture ? proposal.mode !== 'fixture_demo' : !isLiveAiMode(proposal.mode)) throw invalidResponse()
     return proposal
   },
   async proposal(profileId: string, workspaceId: string, proposalId: string, signal?: AbortSignal): Promise<AiProposal> {
@@ -270,7 +283,7 @@ export const aiApi = {
     const proposal = validateAiProposal(await apiClient.request<unknown>(`${basePath(profileId, workspaceId)}${id}/reject/`, {
       method: 'POST', body: { proposal_revision: revision }, signal, protected: true,
     }), id)
-    if (proposal.status !== 'REJECTED' || proposal.mode !== 'openai_live') throw invalidResponse()
+    if (proposal.status !== 'REJECTED' || !isLiveAiMode(proposal.mode)) throw invalidResponse()
     return proposal
   },
 }

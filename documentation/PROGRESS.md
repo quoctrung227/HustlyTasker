@@ -1,5 +1,34 @@
 # PROJECT PROGRESS
 
+## HT-AI-MVP Groq governance development rollout — 2026-11-27
+
+**DEVELOPMENT ROLLOUT COMPLETE — PENDING CONTROLLED LIVE ACCEPTANCE.**
+Applied only AI 0004 after protected backup, verified restore and isolated
+rehearsal. Development history 46 → 47, plan empty, exactly three CHECK
+definitions expanded and all legacy table fingerprints matched. Isolated AI
+regression passed 394/394. Development read-only GET/OPTIONS passed 45/45.
+Groq key is missing and live is off. See [HANDOVER](HANDOVER.md).
+
+## Historical HT-AI-MVP Groq integration — 2026-11-27
+
+Owner approved the schema and provider wiring. AI 0004 passed isolated legacy
+schema tests. Groq is now connected through the same Django endpoints as
+OpenAI, with its own rolling quota and durable controlled slot per feature.
+Backend 1,242/1,242, frontend 1,308/1,308 and Chromium 3/3 for each fake
+provider passed. Implementation is complete at the Owner review gate.
+Development remains at 46 applied migrations
+with live off and only AI 0004 pending. See [HANDOVER](HANDOVER.md) and
+[AI_MVP](AI_MVP.md#groq-free-provider-integration).
+
+## Historical HT-AI-MVP OpenAI controlled live provider preflight — 2026-11-27
+
+**LIVE PREFLIGHT COMPLETE — AWAITING OWNER API BILLING AND REQUEST APPROVAL.**
+Fresh development checks and empty migration plan passed. Both synthetic
+payloads fit the proposed local encoder bound. A schema-only PostgreSQL
+isolate and fake-only 8/8 one-shot guard proof passed. Live remains off.
+The per-feature gate still needs the reviewed isolated live binding. See
+[HANDOVER](HANDOVER.md) and [AI_MVP](AI_MVP.md).
+
 ## HT-AI-MVP Task schema rollout — 2026-11-21
 
 **TASK SCHEMA ROLLOUT COMPLETE — PENDING CONTROLLED LIVE TEST APPROVAL.**

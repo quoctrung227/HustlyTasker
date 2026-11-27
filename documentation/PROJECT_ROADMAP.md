@@ -1,21 +1,28 @@
 # HUSTLYTASKER DEVELOPMENT ROADMAP
 
-## HT-AI-MVP — 2026-11-21
+## HT-AI-MVP — 2026-11-27
 
-**TASK SCHEMA ROLLOUT COMPLETE — PENDING CONTROLLED LIVE TEST APPROVAL.**
+**GROQ DEVELOPMENT ROLLOUT COMPLETE — PENDING CONTROLLED LIVE ACCEPTANCE.**
 
 Smart Task Generator and Feedback Analyzer reuse the existing Task and Review
 workflows. The code path for OpenAI and its isolated validation are tracked in
-[HANDOVER](HANDOVER.md) and [AI_MVP](AI_MVP.md). Owner gates remain for real
-provider use and formal evaluation. `estimated_hours` is implemented and its
+[HANDOVER](HANDOVER.md) and [AI_MVP](AI_MVP.md). Its controlled live preflight
+is an earlier checkpoint. Owner gates remain for real provider use and
+formal evaluation. `estimated_hours` is implemented and its
 development rollout is verified. Project and Subtask are
 outside the live AI MVP scope.
 
-Last updated: 2026-11-21
+Last updated: 2026-11-27
 
 ## Giai đoạn hiện tại
 
-`PHASE 4 - HT-AI-MVP development schema verified; controlled live test approval pending`
+`PHASE 4 - HT-AI-MVP Groq governance applied on development; live acceptance pending`
+
+The current provider decision targets `openai/gpt-oss-120b` on Groq Free at
+USD 0. OpenAI remains explicitly selectable. The development rollout of
+`ai.0004_groq_governance` is verified. The next gate is separate Owner
+approval for two synthetic Groq requests on isolated PostgreSQL.
+See [AI_MVP](AI_MVP.md#groq-free-provider-integration).
 
 ## Current development rollout — 2026-11-20 — HT-TRASH-V1
 

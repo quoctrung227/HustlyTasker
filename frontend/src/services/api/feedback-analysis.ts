@@ -1,7 +1,7 @@
 /** Advisory analysis. Suggestions cannot confer authority or trigger domain writes. */
 import { ApiError, apiClient, invalidResponse } from './client'
-import { aiPriorities, validAiUsage } from './ai'
-import type { AiMode, AiUsage } from './ai'
+import { aiPriorities, aiProvider, isLiveAiMode, validAiUsage } from './ai'
+import type { AiMode, AiProvider, AiUsage, LiveAiMode } from './ai'
 
 export const feedbackSourceKinds = ['review', 'comment'] as const
 export const feedbackIssueCategories = ['CLARITY', 'TECHNICAL', 'CONTENT', 'PROCESS', 'OTHER'] as const
@@ -23,7 +23,7 @@ export interface FeedbackAnalysisResult {
   generated_by_ai: boolean
   persisted: false
   fixture_version: 'fixture.v1' | null
-  provider?: 'openai'
+  provider?: AiProvider
   model?: string
   sources: ((FeedbackSelection & { ref: string }) | { ref: string; kind: 'manual'; id: null })[]
   payload: FeedbackAnalysisPayload
@@ -63,7 +63,7 @@ export function validateManualFeedback(value: unknown): value is string { return
 
 /** Reject unknown/mutation fields and return a plain immutable-in-flight wire snapshot. */
 export function validateFeedbackInput(value: unknown, mode: AiMode = 'fixture_demo'): FeedbackAnalysisInput {
-  if (!record(value) || Object.keys(value).some((field) => field !== 'sources' && field !== 'focus' && (mode !== 'openai_live' || field !== 'feedback_text'))) {
+  if (!record(value) || Object.keys(value).some((field) => field !== 'sources' && field !== 'focus' && (!isLiveAiMode(mode) || field !== 'feedback_text'))) {
     throw new ApiError(400, 'validation', 'Yêu cầu phân tích không hợp lệ.')
   }
   const manual = value.feedback_text !== undefined
@@ -115,12 +115,12 @@ function payload(value: unknown, allowed: ReadonlySet<string>, live: boolean): v
 
 /** Match the response to the frozen request, rather than trusting model-provided IDs. */
 export function validateFeedbackAnalysis(value: unknown, expectedSources: readonly FeedbackSelection[], mode: AiMode = 'fixture_demo', manual = false): FeedbackAnalysisResult {
-  const live = mode === 'openai_live'
+  const live = isLiveAiMode(mode)
   if (!validSelections(expectedSources, manual) || !record(value) || (manual && !live) ||
       !exact(value, ['contract_version', 'status', 'mode', 'generated_by_ai', 'persisted', 'fixture_version', 'sources', 'payload', 'usage', ...(live ? ['provider', 'model'] : [])]) ||
       !sizeWithin(value, 65536) || value.contract_version !== 'ai.v1' || value.status !== 'READY' ||
       value.mode !== mode || value.generated_by_ai !== live || value.persisted !== false ||
-      (live ? value.fixture_version !== null || value.provider !== 'openai' || !text(value.model, 120, true) : value.fixture_version !== 'fixture.v1') ||
+      (live ? value.fixture_version !== null || value.provider !== aiProvider(mode) || !text(value.model, 120, true) : value.fixture_version !== 'fixture.v1') ||
       !Array.isArray(value.sources) || value.sources.length !== expectedSources.length + Number(manual) || !validAiUsage(value.usage, mode)) throw invalidResponse()
   const allowed = new Set<string>()
   for (const [index, item] of value.sources.entries()) {
@@ -143,8 +143,8 @@ export const feedbackAnalysisKeys = {
     ['feedback-analysis', userId, profileId, workspaceId, taskId] as const,
 }
 export const feedbackAnalysisApi = {
-  async analyze(profileId: string, workspaceId: string, taskId: string, input: FeedbackAnalysisInput, signal?: AbortSignal, liveKey?: string): Promise<FeedbackAnalysisResult> {
-    const mode = liveKey ? 'openai_live' : 'fixture_demo'
+  async analyze(profileId: string, workspaceId: string, taskId: string, input: FeedbackAnalysisInput, signal?: AbortSignal, liveKey?: string, liveMode: LiveAiMode = 'openai_live'): Promise<FeedbackAnalysisResult> {
+    const mode = liveKey ? liveMode : 'fixture_demo'
     const body = validateFeedbackInput(input, mode)
     const path = `v1/profiles/${entityId(profileId)}/workspaces/${entityId(workspaceId)}/tasks/${entityId(taskId)}/ai/feedback-analysis/`
     return validateFeedbackAnalysis(await apiClient.request<unknown>(path, {

@@ -4,8 +4,10 @@
 
 Live AI forms keep the existing teal and neutral tokens, native dialogs, cards,
 inputs and buttons. Ready, disabled, missing configuration and pending migration
-states show distinct text. The live form explains that submitted content goes to
-OpenAI. Fixture previews retain their separate simulation labels.
+states show distinct text. The live form identifies the provider selected by
+the server before users submit content. Results name their original provider and
+model. When available, cost is labeled **Chi phí tham chiếu**. Fixture previews
+retain their separate simulation labels.
 
 Smart Task Generator keeps the brief, count and deadline in a labeled form.
 Flat drafts use native checkboxes with readable labels and a selected count.
@@ -28,8 +30,20 @@ The estimate follow-up used `inline validation decimal form --domain ux` and
 `async fetch cleanup --stack react` for field errors, cancellation and the saved
 state. The browser suite verified the error link focus and both mobile and
 desktop layouts.
-The isolated browser suite exercises existing React screens with fake provider
-transport. See [HANDOVER](../../HANDOVER.md) for the executed test results.
+
+The Groq follow-up used `error clarity feedback --domain ux` for visible,
+announced errors and recovery guidance. The focused `async request state
+cleanup --stack react` search informed preserving caught failures, explicit
+submit and request cleanup. Rate-limit feedback shows the wait time when the
+server supplies it. The two live providers share the same layout, tokens,
+native dialogs and focus behavior.
+
+The isolated browser suite exercises the existing screens with fake Groq and
+fake OpenAI on separate PostgreSQL test databases. Both passed viewport and
+axe checks at 375, 768, 1440 and 812 × 375 landscape. The inspected mobile
+Analyzer and desktop confirmation screenshots use the same hierarchy and
+show the correct provider and reference cost. See [HANDOVER](../../HANDOVER.md)
+for run details.
 
 ## Trash V1 — existing system extension
 

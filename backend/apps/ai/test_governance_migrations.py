@@ -21,6 +21,8 @@ from apps.workspace.services import create_profile_with_owner
 
 OLD = ("ai", "0001_initial")
 NEW = ("ai", "0002_dispatch_governance")
+PRE_GROQ = ("ai", "0003_proposal_rejection")
+GROQ = ("ai", "0004_groq_governance")
 TABLES = ("ai_aidispatch", "ai_aibudgetbucket", "ai_aidispatchreservation")
 
 
@@ -210,3 +212,112 @@ class AIGovernanceMigrationTests(TransactionTestCase):
             self.assertIs(cursor.fetchone()[0], True)
             cursor.execute("SELECT bool_and(indisvalid AND indisready) FROM pg_index WHERE indrelid = ANY(%s::regclass[])", [list(TABLES)])
             self.assertIs(cursor.fetchone()[0], True)
+
+    def test_groq_upgrade_and_empty_lane_reversal_preserve_legacy_data_and_catalog(self):
+        actor, profile, workspace, task = self.fixture()
+        apps = self.migrate(PRE_GROQ)
+        Dispatch = apps.get_model("ai", "AiDispatch")
+        Bucket = apps.get_model("ai", "AiBudgetBucket")
+        Reservation = apps.get_model("ai", "AiDispatchReservation")
+
+        now = timezone.now()
+        baseline_modes = (
+            dict(execution_mode="FIXTURE", provider="fixture", model="deterministic-fixture-v1",
+                 usage_status="SIMULATED"),
+            dict(execution_mode="OPENAI_OFFLINE", provider="openai", model="gpt-5.4-mini",
+                 usage_status="SIMULATED"),
+            dict(execution_mode="OPENAI_LIVE", provider="openai", model="gpt-5.4-mini",
+                 usage_status="REPORTED", billed_cost=Decimal("0.2")),
+        )
+        for mode in baseline_modes:
+            dispatch = Dispatch.objects.create(**self.dispatch_values(
+                actor, profile, workspace, **mode,
+                status="SUCCEEDED", claim_id=uuid4(), dispatched_at=now, completed_at=now,
+                created_at=now, accounted_amount=Decimal("0.2"), input_tokens=5, output_tokens=5,
+            ))
+            bucket = Bucket.objects.create(**self.bucket_values(execution_mode=dispatch.execution_mode))
+            Reservation.objects.create(dispatch_id=dispatch.pk, bucket_id=bucket.pk, amount=Decimal("1"))
+
+        def snapshot(state):
+            return {
+                name: list(state.get_model("ai", name).objects.order_by("pk").values())
+                for name in ("AiDispatch", "AiBudgetBucket", "AiDispatchReservation")
+            }
+
+        def catalog():
+            with connection.cursor() as cursor:
+                columns = {table: connection.introspection.get_table_description(cursor, table) for table in TABLES}
+                cursor.execute(
+                    "SELECT conname, pg_get_constraintdef(oid), convalidated FROM pg_constraint "
+                    "WHERE conrelid = ANY(%s::regclass[])", [list(TABLES)],
+                )
+                checks = {name: (definition, valid) for name, definition, valid in cursor.fetchall()}
+                cursor.execute(
+                    "SELECT indexrelid::regclass::text, pg_get_indexdef(indexrelid), indisvalid, indisready "
+                    "FROM pg_index WHERE indrelid = ANY(%s::regclass[])", [list(TABLES)],
+                )
+                return columns, checks, sorted(cursor.fetchall())
+
+        before_data = snapshot(apps)
+        before_columns, before_constraints, before_indexes = catalog()
+        upgraded = self.migrate(GROQ)
+        self.assertEqual(snapshot(upgraded), before_data)
+        after_columns, after_constraints, after_indexes = catalog()
+        self.assertEqual(after_columns, before_columns)
+        self.assertEqual(after_indexes, before_indexes)
+        self.assertEqual(after_constraints.keys(), before_constraints.keys())
+        self.assertEqual(
+            {name for name in before_constraints if after_constraints[name] != before_constraints[name]},
+            {"ai_disp_origin_valid", "ai_disp_usage_mode_valid", "ai_budget_mode_valid"},
+        )
+        self.assertTrue(all(valid for _, valid in after_constraints.values()))
+        self.assertTrue(Task.objects.filter(pk=task.pk).exists())
+        reverted = self.migrate(PRE_GROQ)
+        self.assertEqual(snapshot(reverted), before_data)
+        self.assertEqual(catalog(), (before_columns, before_constraints, before_indexes))
+
+    def test_groq_lane_constraints_and_safe_reversal_failure(self):
+        actor, profile, workspace, _ = self.fixture()
+        now = timezone.now()
+        live = self.dispatch_values(
+            actor, profile, workspace, execution_mode="GROQ_LIVE", provider="groq",
+            model="openai/gpt-oss-120b", status="SUCCEEDED", claim_id=uuid4(),
+            created_at=now, dispatched_at=now, completed_at=now, accounted_amount=Decimal("0"),
+            usage_status="REPORTED", input_tokens=17, output_tokens=4,
+        )
+        groq_bucket = self.bucket_values(
+            execution_mode="GROQ_LIVE", cost_limit=Decimal("0"), reserved_amount=Decimal("0"),
+        )
+
+        legacy = self.migrate(PRE_GROQ)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            legacy.get_model("ai", "AiDispatch").objects.create(**live)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            legacy.get_model("ai", "AiBudgetBucket").objects.create(**groq_bucket)
+
+        upgraded = self.migrate(GROQ)
+        Dispatch = upgraded.get_model("ai", "AiDispatch")
+        Bucket = upgraded.get_model("ai", "AiBudgetBucket")
+        for fields, constraint in (
+            ({"provider": "openai"}, "ai_disp_origin_valid"),
+            ({"execution_mode": "OPENAI_LIVE"}, "ai_disp_origin_valid"),
+            ({"usage_status": "SIMULATED"}, "ai_disp_usage_mode_valid"),
+            ({"billed_cost": Decimal("1")}, "ai_disp_no_simulated_bill"),
+            ({"billed_cost": Decimal("0")}, "ai_disp_no_simulated_bill"),
+        ):
+            with self.subTest(fields=fields), self.assertRaises(IntegrityError) as error, transaction.atomic():
+                Dispatch.objects.create(**(live | fields))
+            self.assertEqual(error.exception.__cause__.diag.constraint_name, constraint)
+
+        dispatch = Dispatch.objects.create(**live)
+        bucket = Bucket.objects.create(**groq_bucket)
+        Bucket.objects.create(**self.bucket_values(execution_mode="OPENAI_LIVE"))
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Bucket.objects.create(**groq_bucket)
+        with self.assertRaises(IntegrityError):
+            self.migrate(PRE_GROQ)
+        self.assertIn(GROQ, MigrationExecutor(connection).loader.applied_migrations)
+        dispatch.refresh_from_db()
+        self.assertIsNone(dispatch.billed_cost)
+        self.assertEqual(dispatch.usage_status, "REPORTED")
+        self.assertTrue(Bucket.objects.filter(pk=bucket.pk).exists())

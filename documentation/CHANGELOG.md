@@ -1,5 +1,25 @@
 # CHANGELOG
 
+## Unreleased — 2026-11-27 — HT-AI-MVP Groq development rollout
+
+- Applied only `ai.0004_groq_governance` on development after verified backup
+  and isolated restore. Exactly three CHECKs expanded. Legacy rows remained
+  intact and live stayed disabled.
+
+## Unreleased — 2026-11-27 — HT-AI-MVP Groq integration
+
+- Added a fail-closed server selector, Django dispatch and React metadata for
+  Groq. OpenAI remains explicitly selectable with the existing USD budget.
+- Added `ai.0004_groq_governance` and provider-specific rolling token and
+  request quotas. The optional isolated acceptance setting pins the synthetic
+  inputs and allows at most one durable provider attempt per feature.
+
+## Unreleased — 2026-11-27 — HT-AI-MVP Groq adapter
+
+- Added a standalone Groq Chat Completions adapter, verified with fake
+  transport and the current Generator and Analyzer validators. Durable provider
+  selection needs Owner approval for three governance constraints.
+
 ## Unreleased — 2026-11-21 — HT-AI-MVP Task schema rollout
 
 Applied only `tasks.0007_task_estimated_hours` to development after protected

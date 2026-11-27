@@ -28,11 +28,16 @@ function Read-HustlyDevelopmentEnvironment([string[]]$Lines) {
         'DJANGO_SMTP_HOST', 'DJANGO_SMTP_PORT', 'DJANGO_SMTP_USERNAME',
         'DJANGO_SMTP_PASSWORD', 'DJANGO_SMTP_USE_TLS', 'DJANGO_SMTP_USE_SSL',
         'DJANGO_SMTP_TIMEOUT', 'DJANGO_DEFAULT_FROM_EMAIL', 'DJANGO_SERVER_EMAIL',
-        'DJANGO_TRASH_PURGE_ENABLED', 'DJANGO_AI_LIVE_ENABLED', 'OPENAI_API_KEY',
+        'DJANGO_TRASH_PURGE_ENABLED', 'DJANGO_AI_LIVE_ENABLED', 'OPENAI_API_KEY', 'GROQ_API_KEY',
+        'DJANGO_AI_PROVIDER', 'DJANGO_AI_MODEL', 'DJANGO_AI_CONTROLLED_LIVE',
         'DJANGO_AI_OPENAI_MODEL', 'DJANGO_AI_OPENAI_TIMEOUT_SECONDS',
         'DJANGO_AI_MAX_INPUT_TOKENS', 'DJANGO_AI_MAX_OUTPUT_TOKENS',
         'DJANGO_AI_GLOBAL_BUDGET_USD', 'DJANGO_AI_PROFILE_BUDGET_USD', 'DJANGO_AI_USER_BUDGET_USD',
-        'DJANGO_AI_GLOBAL_REQUEST_LIMIT', 'DJANGO_AI_PROFILE_REQUEST_LIMIT', 'DJANGO_AI_USER_REQUEST_LIMIT'
+        'DJANGO_AI_GLOBAL_REQUEST_LIMIT', 'DJANGO_AI_PROFILE_REQUEST_LIMIT', 'DJANGO_AI_USER_REQUEST_LIMIT',
+        'DJANGO_AI_GROQ_FREE_TIER_CONFIRMED', 'DJANGO_AI_GROQ_TIMEOUT_SECONDS',
+        'DJANGO_AI_GROQ_MAX_INPUT_TOKENS', 'DJANGO_AI_GROQ_MAX_OUTPUT_TOKENS',
+        'DJANGO_AI_GROQ_REQUESTS_PER_MINUTE', 'DJANGO_AI_GROQ_REQUESTS_PER_DAY',
+        'DJANGO_AI_GROQ_TOKENS_PER_MINUTE', 'DJANGO_AI_GROQ_TOKENS_PER_DAY'
     )
     $htLineNumber = 0
     foreach ($htLine in $Lines) {
@@ -80,7 +85,7 @@ function New-HustlyDevelopmentProcessInfo([string]$Repository, [hashtable]$Value
     # The selected file is authoritative. Stale deployment/Python/libpq settings
     # in the terminal cannot change settings module, import path or DB endpoint.
     foreach ($htName in @($htInfo.EnvironmentVariables.Keys)) {
-        if ($htName -match '^(DJANGO_|POSTGRES_|DRF_|PG|PYTHON|TRASH_|OPENAI_)' -or $htName -eq 'DATABASE_URL') {
+        if ($htName -match '^(DJANGO_|POSTGRES_|DRF_|PG|PYTHON|TRASH_|OPENAI_|GROQ_)' -or $htName -eq 'DATABASE_URL') {
             $htInfo.EnvironmentVariables.Remove($htName)
         }
     }

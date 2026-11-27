@@ -64,7 +64,8 @@ class SyntheticResponsesTransport:
         }).encode("utf-8"))
 
 
-@override_settings(ENVIRONMENT="development", IS_PRODUCTION=False, AI_FIXTURE_ENABLED=False)
+@override_settings(ENVIRONMENT="development", IS_PRODUCTION=False, AI_FIXTURE_ENABLED=False,
+                   AI_LIVE_ENABLED=True, AI_PROVIDER="openai")
 class LiveFeedbackApiTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
@@ -96,7 +97,6 @@ class LiveFeedbackApiTests(APITestCase):
         adapter = LiveOpenAIResponsesAdapter(config=OpenAIConfig(enabled=True, max_output_tokens=1200),
                                              transport=self.transport, max_input_tokens=16000)
         for target, value in (
-            ("apps.ai.feedback_api.live_selected", True),
             ("apps.ai.live_runtime.availability_reason", None),
             ("apps.ai.feedback_live.live_runtime", (policy, adapter)),
         ):

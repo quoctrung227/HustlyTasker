@@ -824,7 +824,7 @@ def seed_trash_fixtures(run_id):
 
 
 def run(mode, arguments=()):
-    if mode not in ("serve", "serve-ai", "serve-ai-mvp", "serve-invitation-delivery-failure", "serve-invitation-v2", "serve-invitation-regression", "serve-workspace-members", "serve-trash", "expire-sessions", "consume-test-mail", "feedback-state"):
+    if mode not in ("serve", "serve-ai", "serve-ai-mvp", "serve-ai-mvp-groq", "serve-invitation-delivery-failure", "serve-invitation-v2", "serve-invitation-regression", "serve-workspace-members", "serve-trash", "expire-sessions", "consume-test-mail", "feedback-state"):
         raise ValueError("Unknown integration operation.")
     if mode != "consume-test-mail" and arguments:
         raise ValueError("Unexpected integration arguments.")
@@ -922,14 +922,25 @@ def run(mode, arguments=()):
             if settings.SETTINGS_MODULE != "config.test_settings":
                 raise RuntimeError("AI fixtures require owned test settings.")
             settings.AI_FIXTURE_ENABLED = True
-        elif mode == "serve-ai-mvp":
+        elif mode in ("serve-ai-mvp", "serve-ai-mvp-groq"):
             from django.conf import settings
             from apps.ai import live_runtime
-            from ai_mvp_test_transport import BrowserFakeTransport
+            from ai_mvp_test_transport import BrowserFakeTransport, groq_browser_post, unexpected_ai_transport
             if settings.SETTINGS_MODULE != "config.test_settings":
                 raise RuntimeError("AI browser test requires owned test settings.")
-            live_runtime.OpenAIHttpsTransport = BrowserFakeTransport
-            os.environ["OPENAI_API_KEY"] = "synthetic-browser-test-key-not-a-credential"
+            if mode == "serve-ai-mvp-groq":
+                settings.AI_PROVIDER = "groq"
+                settings.AI_MODEL = live_runtime.GROQ_MODEL
+                settings.AI_GROQ_FREE_TIER_CONFIRMED = True
+                live_runtime._groq_api_key = lambda: "synthetic-browser-test-key-not-a-credential"
+                live_runtime.GroqHttpsTransport.post = groq_browser_post
+                live_runtime.OpenAIHttpsTransport.post = unexpected_ai_transport
+            else:
+                settings.AI_PROVIDER = "openai"
+                settings.AI_MODEL = "gpt-5.4-mini"
+                live_runtime.OpenAIHttpsTransport = BrowserFakeTransport
+                live_runtime.GroqHttpsTransport.post = unexpected_ai_transport
+                os.environ["OPENAI_API_KEY"] = "synthetic-browser-test-key-not-a-credential"
             settings.AI_LIVE_ENABLED = True
         seed_fixtures(os.environ["HT_TEST_RUN_ID"])
         mailbox_cleanup = install_test_mailbox(

@@ -2,6 +2,30 @@
 
 # HustlyTasker Database Design
 
+## HT-AI-MVP Groq governance — development rollout complete
+
+`ai.0004_groq_governance` depends on `ai.0003_proposal_rejection`. It was
+applied on 2026-11-27 as the sole migration. Development history went from
+46 to 47 and its plan is empty.
+
+| CHECK | Before 0004 | After 0004 |
+|---|---|---|
+| `ai_disp_origin_valid` | Fixture and OpenAI pairs | Adds `GROQ_LIVE` / `groq` |
+| `ai_disp_usage_mode_valid` | `REPORTED` only in `OPENAI_LIVE` | Adds `GROQ_LIVE` to reported usage |
+| `ai_budget_mode_valid` | Fixture and OpenAI modes | Adds `GROQ_LIVE` |
+
+The Django fields have additional choices. PostgreSQL changes only the three
+CHECK definitions. Catalog and legacy tests verified the other constraints,
+columns, indexes, and existing rows are preserved. The unchanged
+`ai_disp_no_simulated_bill` continues to require `NULL` for Groq
+`billed_cost`. Groq budget buckets hold zero USD allocation while dispatches
+retain published-rate estimates separately. Groq slots and quotas reuse the
+existing locks, timestamps, limits and usage fields. Reversing 0004 with
+Groq rows fails atomically under the old constraints. The rollout used a new
+protected backup and actual isolated restore. Development matched that catalog,
+and all legacy table fingerprints matched their pre-migration values. See
+[HANDOVER](HANDOVER.md) for the archive and verification receipts.
+
 ## HT-AI-MVP Task estimated hours — development migration applied
 
 Owner approved `tasks.0007_task_estimated_hours` for implementation. It depends
@@ -11,8 +35,8 @@ There is no default or backfill. Existing Tasks and Tasks created manually
 have NULL. Confirmation saves the selected decimal value in the Task creation
 transaction. No changes to `actual_hours`, compensation, Review or assignments.
 Reversing the column after rollout would discard recorded estimates and needs
-a separate recovery decision. Development has 46 migration records and five
-legacy NULL estimates. The new catalog matches the isolated rehearsal. See
+a separate recovery decision. The Task 0007 rollout ended at 46 migration
+records and five legacy NULL estimates. Its catalog matched the isolated rehearsal. See
 [HANDOVER](HANDOVER.md) for the protected backup and verification receipts.
 
 ## HT-AI-MVP development schema — APPLIED 2026-11-21

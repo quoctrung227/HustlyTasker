@@ -16,6 +16,8 @@ from uuid import UUID, uuid4
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Count, F, IntegerField, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.views.decorators.debug import sensitive_variables
@@ -26,6 +28,8 @@ from .contracts import Scope, ValidationLimits
 from .durable_services import _enabled as _fixture_enabled, _key_digest, _manager
 from .errors import AIError, ErrorCode
 from .feedback_services import _SelectedFeedbackAccess, _focus_text, _scope_id, _selected_sources
+from .groq_adapter import GROQ_MODEL, GroqChatCompletionsAdapter
+from .live_generator import LIVE_SCENARIOS
 from .models import AiBudgetBucket, AiDispatch, AiDispatchReservation
 from .openai_adapter import LiveOpenAIResponsesAdapter, OpenAIResponsesAdapter, ReportedProviderError
 from .providers import Feature, ProviderRequest, ProviderResult, RequestControl, UsageMetadata
@@ -41,6 +45,15 @@ _POLICY_PURPOSE = "hustlytasker.ai.governance.policy.v1"
 _VERSION = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}\Z")
 _MODEL = re.compile(r"[a-z0-9][a-z0-9._-]{0,99}\Z")
 _LIMITS = ValidationLimits()
+_GROQ_MODE = AiDispatch.ExecutionMode.GROQ_LIVE
+_SMOKE_BRIEF = (
+    "Tạo một công việc dựng video giới thiệu sản phẩm dài 60 giây, yêu cầu cắt ghép cảnh quay, "
+    "thêm phụ đề tiếng Việt và nhạc nền không vi phạm bản quyền."
+)
+_SMOKE_FEEDBACK = (
+    "Video có phụ đề xuất hiện chậm ở giây 12–18, nhạc nền quá lớn từ giây 25 và logo cuối video bị mờ. "
+    "Hãy phân tích các vấn đề và đề xuất chỉnh sửa."
+)
 
 
 def _fail(code=ErrorCode.VALIDATION_ERROR):
@@ -91,6 +104,11 @@ class GovernancePolicy:
     budget_version: str = "offline-budget-v1"
     max_input_tokens: int = 65536
     max_output_tokens: int = 4096
+    controlled_live: bool = False
+    groq_requests_per_minute: int = 0
+    groq_requests_per_day: int = 0
+    groq_tokens_per_minute: int = 0
+    groq_tokens_per_day: int = 0
     input_rate_per_million: Decimal = Decimal("1")
     output_rate_per_million: Decimal = Decimal("1")
     lease_seconds: int = 300
@@ -99,13 +117,23 @@ class GovernancePolicy:
     user_limits: BudgetLimits = field(default_factory=BudgetLimits)
 
     def __post_init__(self):
-        if (type(self.enabled) is not bool or self.provider != "openai"
-                or type(self.model) is not str or not _MODEL.fullmatch(self.model)):
+        if type(self.enabled) is not bool or type(self.controlled_live) is not bool:
             _fail()
         for value in (self.config_version, self.pricing_version, self.budget_version):
             if type(value) is not str or not _VERSION.fullmatch(value):
                 _fail()
         if type(self.execution_mode) is not str:
+            _fail()
+        if self.execution_mode == _GROQ_MODE:
+            if self.provider != "groq" or self.model != GROQ_MODEL:
+                _fail()
+            for value, maximum in (
+                (self.groq_requests_per_minute, 30), (self.groq_requests_per_day, 1000),
+                (self.groq_tokens_per_minute, 8000), (self.groq_tokens_per_day, 200000),
+            ):
+                _count(value, maximum)
+        elif (self.controlled_live or self.provider != "openai"
+              or type(self.model) is not str or not _MODEL.fullmatch(self.model)):
             _fail()
         for value in (self.max_input_tokens, self.max_output_tokens):
             if not _count(value, 1000000):
@@ -114,8 +142,10 @@ class GovernancePolicy:
             _fail()
         for name in ("input_rate_per_million", "output_rate_per_million"):
             object.__setattr__(self, name, _amount(getattr(self, name)))
-        if any(type(value) is not BudgetLimits for value in (
-                self.global_limits, self.profile_limits, self.user_limits)):
+        budgets = (self.global_limits, self.profile_limits, self.user_limits)
+        if any(type(value) is not BudgetLimits for value in budgets):
+            _fail()
+        if self.execution_mode == _GROQ_MODE and any(budget.cost_limit for budget in budgets):
             _fail()
 
 
@@ -148,10 +178,14 @@ class DispatchExecution:
 def _gate(policy):
     if type(policy) is not GovernancePolicy or policy.enabled is not True:
         _fail(ErrorCode.AI_DISABLED)
-    if policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE:
-        from .live_runtime import availability_reason
+    if policy.execution_mode in LIVE_SCENARIOS:
+        from .live_runtime import availability_reason, selected_mode
         if reason := availability_reason():
             _fail(ErrorCode(reason))
+        if policy.execution_mode != selected_mode():
+            _fail(ErrorCode.AI_DISABLED)
+        if policy.execution_mode == _GROQ_MODE and policy.controlled_live != settings.AI_CONTROLLED_LIVE:
+            _fail(ErrorCode.AI_DISABLED)
         return
     if (getattr(settings, "AI_GOVERNANCE_ENABLED", False) is not True
             or policy.execution_mode != AiDispatch.ExecutionMode.OPENAI_OFFLINE):
@@ -209,14 +243,58 @@ def _cost(policy, inputs, outputs):
 
 
 def _policy_canonical(policy):
-    return _canonical({
+    document = {
         "contract_version": "ai.governance.v1", "provider": policy.provider,
         "model": policy.model, "execution_mode": policy.execution_mode,
         "config_version": policy.config_version, "pricing_version": policy.pricing_version,
         "max_input_tokens": policy.max_input_tokens, "max_output_tokens": policy.max_output_tokens,
         "input_rate": str(policy.input_rate_per_million),
         "output_rate": str(policy.output_rate_per_million),
-    })
+    }
+    if policy.execution_mode == _GROQ_MODE:
+        document.update(controlled_live=policy.controlled_live,
+                        groq_requests_per_minute=policy.groq_requests_per_minute,
+                        groq_requests_per_day=policy.groq_requests_per_day,
+                        groq_tokens_per_minute=policy.groq_tokens_per_minute,
+                        groq_tokens_per_day=policy.groq_tokens_per_day)
+    return _canonical(document)
+
+
+def _accounted_cost(policy, reference_cost):
+    # Free is an operator assertion. Reserve no USD, retain the separate
+    # published-rate estimate, and never infer the provider invoice amount.
+    return Decimal("0") if policy.execution_mode == _GROQ_MODE else reference_cost
+
+
+def _check_groq_quota(policy, now):
+    """Evaluate under the Groq GLOBAL bucket lock before claiming a send."""
+    minute = Q(dispatched_at__gt=now - timedelta(minutes=1))
+    tokens = Coalesce(F("input_tokens") + F("output_tokens"),
+                      F("input_token_limit") + F("output_token_limit"), output_field=IntegerField())
+    usage = AiDispatch.objects.filter(
+        execution_mode=_GROQ_MODE, dispatched_at__gt=now - timedelta(days=1),
+    ).aggregate(minute_requests=Count("pk", filter=minute),
+                minute_tokens=Sum(tokens, filter=minute, default=0),
+                day_requests=Count("pk"), day_tokens=Sum(tokens, default=0))
+    next_tokens = policy.max_input_tokens + policy.max_output_tokens
+    if (usage["minute_requests"] >= policy.groq_requests_per_minute
+            or usage["day_requests"] >= policy.groq_requests_per_day
+            or usage["minute_tokens"] + next_tokens > policy.groq_tokens_per_minute
+            or usage["day_tokens"] + next_tokens > policy.groq_tokens_per_day):
+        _fail(ErrorCode.RATE_LIMITED)
+
+
+@sensitive_variables()
+def _require_controlled_input(request, canonical_input):
+    if request.feature is Feature.TASK_PLAN:
+        allowed = (request.data == {"brief": _SMOKE_BRIEF, "task_count": 1, "target_deadline": None}
+                   and canonical_input.get("brief") == _SMOKE_BRIEF)
+    else:
+        allowed = (request.data == {"sources": [{"ref": "S1", "text": _SMOKE_FEEDBACK}], "focus": ""}
+                   and canonical_input.get("manual_feedback") == _SMOKE_FEEDBACK
+                   and canonical_input.get("sources") == [] and canonical_input.get("focus") == "")
+    if not allowed:
+        _fail()
 
 
 def _bucket_specs(actor, workspace, policy):
@@ -262,7 +340,8 @@ def _row(actor, workspace, dispatch_id, policy):
             or value.input_token_limit != policy.max_input_tokens
             or value.output_token_limit != policy.max_output_tokens
             or not _matches(value.policy_digest, _policy_canonical(policy), _POLICY_PURPOSE)
-            or value.reserved_amount != _cost(policy, policy.max_input_tokens, policy.max_output_tokens)):
+            or value.reserved_amount != _accounted_cost(
+                policy, _cost(policy, policy.max_input_tokens, policy.max_output_tokens))):
         _fail(ErrorCode.STALE_CONTEXT)
     return value
 
@@ -276,7 +355,7 @@ def _receipt(row, *, created=False, claimed=False):
         input_tokens=row.input_tokens, output_tokens=row.output_tokens,
         proposal_id=row.proposal_id,
         created=created, claimed=claimed,
-        generated_by_ai=(row.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE
+        generated_by_ai=(row.execution_mode in LIVE_SCENARIOS
                          and row.status == AiDispatch.Status.SUCCEEDED),
     )
 
@@ -307,7 +386,7 @@ def reserve_dispatch(*, actor, profile_id, workspace_id, feature, idempotency_ke
         "input_rate": str(policy.input_rate_per_million),
         "output_rate": str(policy.output_rate_per_million), "input": canonical_input,
     }
-    reservation = _cost(policy, policy.max_input_tokens, policy.max_output_tokens)
+    reservation = _accounted_cost(policy, _cost(policy, policy.max_input_tokens, policy.max_output_tokens))
     with transaction.atomic():
         workspace = _workspace(actor, profile_id, workspace_id)
         canonical = _canonical(body | {"scope": {
@@ -315,20 +394,26 @@ def reserve_dispatch(*, actor, profile_id, workspace_id, feature, idempotency_ke
             "workspace_id": str(workspace.pk),
         }})
         buckets = _buckets(actor, workspace, policy)
+        replay_modes = LIVE_SCENARIOS if policy.execution_mode in LIVE_SCENARIOS else (policy.execution_mode,)
         row = AiDispatch.objects.select_for_update().filter(
             actor=actor, profile_id=workspace.profile_id, workspace=workspace,
-            feature=feature.value, execution_mode=policy.execution_mode, key_digest=key_digest,
+            feature=feature.value, execution_mode__in=replay_modes, key_digest=key_digest,
         ).first()
         if row:
-            if not _matches(row.body_digest, canonical):
+            if row.execution_mode != policy.execution_mode or not _matches(row.body_digest, canonical):
                 _fail(ErrorCode.IDEMPOTENCY_CONFLICT)
             return _receipt(row)
+        now = timezone.now()
+        if policy.execution_mode == _GROQ_MODE:
+            if policy.controlled_live and AiDispatch.objects.filter(
+                    execution_mode=_GROQ_MODE, feature=feature.value).exists():
+                _fail(ErrorCode.RATE_LIMITED)
+            _check_groq_quota(policy, now)
         for bucket in buckets:
             if (bucket.request_count >= bucket.request_limit
                     or bucket.active_count >= bucket.concurrency_limit
                     or bucket.reserved_amount + bucket.accounted_amount + reservation > bucket.cost_limit):
                 _fail(ErrorCode.BUDGET_EXCEEDED)
-        now = timezone.now()
         row = AiDispatch.objects.create(
             actor=actor, profile_id=workspace.profile_id, workspace=workspace,
             feature=feature.value, provider=policy.provider, model=policy.model,
@@ -362,10 +447,13 @@ def begin_dispatch(*, actor, profile_id, workspace_id, dispatch_id, policy):
         row, _ = _locked(actor, profile_id, workspace_id, dispatch_id, policy)
         if row.status != AiDispatch.Status.RESERVED:
             return _receipt(row)
-        if row.lease_expires_at <= timezone.now():
+        now = timezone.now()
+        if row.lease_expires_at <= now:
             _fail(ErrorCode.EXPIRED)
+        if policy.execution_mode == _GROQ_MODE:
+            _check_groq_quota(policy, now)
         row.status = AiDispatch.Status.DISPATCHING
-        row.dispatched_at = timezone.now()
+        row.dispatched_at = now
         row.claim_id = uuid4()
         row.save(update_fields=("status", "dispatched_at", "claim_id"))
         return _receipt(row, claimed=True)
@@ -432,8 +520,8 @@ def _usage(policy, result):
     accepted_models = {policy.model}
     if policy.model == "gpt-5.4-mini":
         accepted_models.add("gpt-5.4-mini-2026-03-17")
-    live = policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE
-    if (type(result) is not ProviderResult or result.provider != ("openai" if live else "openai_offline")
+    live = policy.execution_mode in LIVE_SCENARIOS
+    if (type(result) is not ProviderResult or result.provider != (policy.provider if live else "openai_offline")
             or result.model not in accepted_models
             or type(result.usage) is not UsageMetadata
             or result.usage.status != ("provider_reported" if live else "offline_simulated")
@@ -453,11 +541,12 @@ def _settle_success(*, actor, profile_id, workspace_id, dispatch_id, policy, res
     _gate(policy)
     _outside_business_transaction()
     inputs, outputs, cost = _usage(policy, result)
+    accounted = _accounted_cost(policy, cost)
     with transaction.atomic():
         row, buckets = _locked(actor, profile_id, workspace_id, dispatch_id, policy)
-        if row.status != AiDispatch.Status.DISPATCHING or cost > row.reserved_amount:
+        if row.status != AiDispatch.Status.DISPATCHING or accounted > row.reserved_amount:
             _fail(ErrorCode.STALE_CONTEXT)
-        _finish_reservations(row, buckets, cost)
+        _finish_reservations(row, buckets, accounted)
         if persist is not None:
             persist(row, result)
         row.status = AiDispatch.Status.SUCCEEDED
@@ -471,10 +560,10 @@ def _settle_success(*, actor, profile_id, workspace_id, dispatch_id, policy, res
             row.settlement_digest = _hmac(f"{row.pk}:{row.error_code}", purpose=_EVIDENCE_PURPOSE)
             fields.extend(("reconciled_at", "error_code", "settlement_digest"))
         row.usage_status = (AiDispatch.UsageStatus.REPORTED
-                            if policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE
+                            if policy.execution_mode in LIVE_SCENARIOS
                             else AiDispatch.UsageStatus.SIMULATED)
         row.input_tokens, row.output_tokens = inputs, outputs
-        row.estimated_cost = row.accounted_amount = cost
+        row.estimated_cost, row.accounted_amount = cost, accounted
         row.save(update_fields=fields)
         return _receipt(row)
 
@@ -522,14 +611,17 @@ def reconcile_dispatch(*, actor, profile_id, workspace_id, dispatch_id, policy,
 
 
 def _adapter(adapter, policy):
-    live = policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE
-    adapter_type = LiveOpenAIResponsesAdapter if live else OpenAIResponsesAdapter
+    adapter_type = {
+        _GROQ_MODE: GroqChatCompletionsAdapter,
+        AiDispatch.ExecutionMode.OPENAI_LIVE: LiveOpenAIResponsesAdapter,
+        AiDispatch.ExecutionMode.OPENAI_OFFLINE: OpenAIResponsesAdapter,
+    }[policy.execution_mode]
     if (type(adapter) is not adapter_type or not adapter._config.enabled
             or adapter._config.model != policy.model
             or adapter._config.max_output_tokens > policy.max_output_tokens
             or adapter._transport is None
             or not adapter._transport_allowed()
-            or (live and adapter.max_input_tokens != policy.max_input_tokens)):
+            or (policy.execution_mode in LIVE_SCENARIOS and adapter.max_input_tokens != policy.max_input_tokens)):
         _fail(ErrorCode.AI_DISABLED)
 
 
@@ -544,7 +636,7 @@ def _unknown_safely(context, code):
 
 @sensitive_variables("result")
 def _account_failure(context, code, result=None):
-    if result is not None and context["policy"].execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE:
+    if result is not None and context["policy"].execution_mode in LIVE_SCENARIOS:
         try:
             _settle_success(**context, result=result, error_code=code)
             return
@@ -563,8 +655,10 @@ def _execute(*, actor, profile_id, workspace_id, idempotency_key, policy,
     if type(control) is not RequestControl:
         _fail()
     control.check()
-    if policy.execution_mode == AiDispatch.ExecutionMode.OPENAI_LIVE:
+    if policy.execution_mode in LIVE_SCENARIOS:
         adapter._encode(request)
+    if policy.controlled_live:
+        _require_controlled_input(request, canonical_input)
     reserved = reserve_dispatch(actor=actor, profile_id=profile_id, workspace_id=workspace_id,
                                 idempotency_key=idempotency_key, feature=request.feature,
                                 canonical_input=canonical_input, policy=policy)
@@ -576,13 +670,13 @@ def _execute(*, actor, profile_id, workspace_id, idempotency_key, policy,
         control.check()
         if revalidate is not None:
             revalidate()
+        claimed = begin_dispatch(**context)
     except Exception:
         try:
             fail_before_dispatch(**context)
         except Exception:
             pass  # RESERVED is retained; no call can occur without begin_dispatch.
         raise
-    claimed = begin_dispatch(**context)
     if not claimed.claimed:
         return DispatchExecution(claimed)
     result = None
@@ -594,7 +688,7 @@ def _execute(*, actor, profile_id, workspace_id, idempotency_key, policy,
         settled = _settle_success(**context, result=result, persist=persist)
         return DispatchExecution(settled, result)
     except ReportedProviderError as error:
-        _account_failure(context, error.code, ProviderResult("", error.usage, "openai", error.model))
+        _account_failure(context, error.code, ProviderResult("", error.usage, policy.provider, error.model))
         raise AIError(error.code) from None
     except AIError as error:
         _account_failure(context, error.code, result)

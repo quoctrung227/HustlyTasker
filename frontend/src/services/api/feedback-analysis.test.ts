@@ -46,19 +46,23 @@ function at<T>(values: T[], index = 0): T {
 beforeEach(() => { apiClient.clearCsrf(); apiClient.setForbiddenHandler(null) })
 afterEach(() => { apiClient.clearCsrf(); apiClient.setForbiddenHandler(null); vi.unstubAllGlobals() })
 
-it('checks live manual provenance and evidence source bindings on the wire', () => {
+it.each([
+  ['openai_live', 'openai', 'gpt-5.4-mini'],
+  ['groq_live', 'groq', 'openai/gpt-oss-120b'],
+] as const)('checks %s manual provenance and evidence source bindings on the wire', (mode, provider, model) => {
   const input = { sources: [], feedback_text: 'Giảm tốc độ phụ đề.' }
-  expect(validateFeedbackInput(input, 'openai_live')).toEqual(input)
+  expect(validateFeedbackInput(input, mode)).toEqual(input)
   expect(() => validateFeedbackInput(input)).toThrow(ApiError)
-  const live: FeedbackAnalysisResult = { ...result([]), mode: 'openai_live', generated_by_ai: true, fixture_version: null,
-    provider: 'openai', model: 'gpt-5.4-mini', sources: [{ kind: 'manual', id: null, ref: 'S1' }],
+  const live: FeedbackAnalysisResult = { ...result([]), mode, generated_by_ai: true, fixture_version: null,
+    provider, model, sources: [{ kind: 'manual', id: null, ref: 'S1' }],
     usage: { input_tokens: 150, billable_output_tokens: 75, cost_usd: '0.00009750', status: 'provider_reported' },
     payload: { ...result([]).payload, contract_version: 'ai.feedback.v2', issues: [{ category: 'CLARITY', description: 'Phụ đề chạy nhanh.',
       severity: 'MEDIUM', source_refs: ['S1'], evidence: [{ source_ref: 'S1', quote: 'Giảm tốc độ phụ đề.' }] }] } }
-  expect(validateFeedbackAnalysis(live, [], 'openai_live', true)).toEqual(live)
-  expect(() => validateFeedbackAnalysis(live, [], 'openai_live')).toThrow(ApiError)
+  expect(validateFeedbackAnalysis(live, [], mode, true)).toEqual(live)
+  expect(() => validateFeedbackAnalysis(live, [], mode)).toThrow(ApiError)
+  expect(() => validateFeedbackAnalysis({ ...live, provider: provider === 'groq' ? 'openai' : 'groq' }, [], mode, true)).toThrow(ApiError)
   firstIssue(live).evidence = [{ source_ref: 'S2', quote: 'Giảm tốc độ phụ đề.' }]
-  expect(() => validateFeedbackAnalysis(live, [], 'openai_live', true)).toThrow(ApiError)
+  expect(() => validateFeedbackAnalysis(live, [], mode, true)).toThrow(ApiError)
 })
 
 describe('stateless Feedback Analyzer strict contracts', () => {
